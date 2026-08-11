@@ -1,15 +1,20 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import {
+  type ArtifactRef,
+  type FormalRunCommand,
   type M3ArtifactRef,
   type RevisionCommand,
   type RevisionCreatePayload,
   type StrategyVariantCreateCommand,
+  type WorkspaceMergeCreateCommand,
   type WorkspaceRevisionCreateChildCommand,
   type WorkspaceRevisionCreateCommand,
   type WorkspaceRevisionCreateRootCommand,
   type WorkspaceRevisionPromoteCommand,
+  validateFormalRunCommand,
   validateStrategyVariantCreateCommand,
+  validateWorkspaceMergeCreateCommand,
   validateWorkspaceRevisionCreateCommand,
   validateWorkspaceRevisionPromoteCommand,
 } from "@open-quant-studio/contracts";
@@ -40,7 +45,7 @@ export type RevisionFetchImplementation = (
 
 export type RevisionSessionClient = Pick<
   QuantDomainSessionClient,
-  "baseUrl" | "stageText" | "postCommand"
+  "baseUrl" | "stageJson" | "stageText" | "postCommand"
 >;
 
 export interface RevisionClientOptions {
@@ -73,7 +78,38 @@ export interface RevisionPromoteRequest extends RevisionCommandContext {
   expectedRevisionId: string;
   variantId: string;
   candidateRevisionId: string;
+  validationId: string;
   baseRevisionId?: string;
+}
+
+export interface MergeCreateRequest extends RevisionCommandContext {
+  expectedRevisionId: string;
+  variantId: string;
+  baseRevisionId: string;
+  message: string;
+  files: RevisionFileInput[];
+  candidateRevisionId?: string;
+}
+
+export interface FormalRunRequest extends RevisionCommandContext {
+  candidateRevisionId: string;
+  variantId: string;
+  engineInputJson: string;
+  dataSnapshotId: string;
+  dataSnapshotSha256: string;
+  strategyTreeOid: string;
+  parametersSha256: string;
+  costModelSha256: string;
+  environmentLockSha256: string;
+  priceBasis: "raw" | "qfq" | "hfq";
+  cutoff: string;
+  timezone: string;
+  sampleStart: string;
+  sampleEnd: string;
+  randomSeed: number;
+  runSpecId?: string;
+  runId?: string;
+  validationId?: string;
 }
 
 export interface RevisionDetail {
@@ -141,6 +177,16 @@ interface PreparedRevisionFile {
 interface PreparedRevision {
   command: WorkspaceRevisionCreateCommand;
   files: PreparedRevisionFile[];
+}
+
+interface PreparedMerge {
+  command: WorkspaceMergeCreateCommand;
+  files: PreparedRevisionFile[];
+}
+
+interface PreparedFormalRun {
+  command: FormalRunCommand;
+  engineInput: ArtifactRef;
 }
 
 /**
@@ -230,6 +276,14 @@ export class FetchQuantDomainRevisionClient {
     );
   }
 
+  buildMergeCreateCommand(request: MergeCreateRequest): WorkspaceMergeCreateCommand {
+    return this.#prepareMerge(request).command;
+  }
+
+  buildFormalRunCommand(request: FormalRunRequest): FormalRunCommand {
+    return this.#prepareFormalRun(request).command;
+  }
+
   buildRevisionPromoteCommand(
     request: RevisionPromoteRequest,
   ): WorkspaceRevisionPromoteCommand {
@@ -250,6 +304,7 @@ export class FetchQuantDomainRevisionClient {
       payload: {
         variant_id: request.variantId,
         candidate_revision_id: request.candidateRevisionId,
+        validation_id: request.validationId,
       },
     };
     return assertValidCommand(
@@ -289,6 +344,19 @@ export class FetchQuantDomainRevisionClient {
     );
   }
 
+  async createMergeCandidate(request: MergeCreateRequest): Promise<CommandReceipt> {
+    const prepared = this.#prepareMerge(request);
+    await this.#stageFiles(prepared.files);
+    return this.#sessionClient.postCommand(prepared.command);
+  }
+
+  async requestFormalRun(request: FormalRunRequest): Promise<CommandReceipt> {
+    const prepared = this.#prepareFormalRun(request);
+    const staged = await this.#sessionClient.stageJson(request.engineInputJson);
+    assertStagedJsonIdentity(staged, prepared.engineInput);
+    return this.#sessionClient.postCommand(prepared.command);
+  }
+
   async promoteRevision(request: RevisionPromoteRequest): Promise<CommandReceipt> {
     return this.#sessionClient.postCommand(
       this.buildRevisionPromoteCommand(request),
@@ -299,6 +367,8 @@ export class FetchQuantDomainRevisionClient {
   createRootRevision = this.createRevisionRoot.bind(this);
   createChildRevision = this.createRevisionChild.bind(this);
   createVariant = this.createStrategyVariant.bind(this);
+  createMerge = this.createMergeCandidate.bind(this);
+  runFormal = this.requestFormalRun.bind(this);
   promote = this.promoteRevision.bind(this);
 
   async getRevision(projectId: string, revisionId: string): Promise<RevisionDetail> {
@@ -395,6 +465,88 @@ export class FetchQuantDomainRevisionClient {
     return { command: validated, files };
   }
 
+  #prepareMerge(request: MergeCreateRequest): PreparedMerge {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const candidateRevisionId = request.candidateRevisionId ??
+      stableIdentityUuid(`${commandId}:merge-candidate`);
+    const files = prepareFiles(request.files);
+    const command: WorkspaceMergeCreateCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "workspace.merge_create",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: request.expectedRevisionId,
+      variant_id: request.variantId,
+      base_revision_id: request.baseRevisionId,
+      payload: {
+        candidate_revision_id: candidateRevisionId,
+        message: request.message,
+        files: files.map(({ path, artifact }) => ({ path, artifact })),
+      },
+    };
+    return {
+      command: assertValidCommand(
+        validateWorkspaceMergeCreateCommand(command),
+        "workspace.merge_create",
+      ),
+      files,
+    };
+  }
+
+  #prepareFormalRun(request: FormalRunRequest): PreparedFormalRun {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const engineInput = canonicalJsonArtifactRef(request.engineInputJson);
+    const command: FormalRunCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "formal.run_request",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: request.candidateRevisionId,
+      variant_id: request.variantId,
+      base_revision_id: request.candidateRevisionId,
+      payload: {
+        run_spec_id: request.runSpecId ?? stableIdentityUuid(`${commandId}:run-spec`),
+        run_id: request.runId ?? stableIdentityUuid(`${commandId}:run`),
+        validation_id: request.validationId ??
+          stableIdentityUuid(`${commandId}:validation`),
+        candidate_revision_id: request.candidateRevisionId,
+        engine_input: engineInput,
+        data_snapshot_id: request.dataSnapshotId,
+        data_snapshot_sha256: request.dataSnapshotSha256,
+        strategy_tree_oid: request.strategyTreeOid,
+        parameters_sha256: request.parametersSha256,
+        cost_model_sha256: request.costModelSha256,
+        environment_lock_sha256: request.environmentLockSha256,
+        engine_version: "oqs-quant-engine/0.1.0",
+        price_basis: request.priceBasis,
+        cutoff: request.cutoff,
+        timezone: request.timezone,
+        sample_start: request.sampleStart,
+        sample_end: request.sampleEnd,
+        random_seed: request.randomSeed,
+        output_schema_version: 1,
+        gate_policy_version: "m3-v1",
+      },
+    };
+    return {
+      command: assertFormalRunCommand(
+        validateFormalRunCommand(command),
+        "formal.run_request",
+      ),
+      engineInput,
+    };
+  }
+
   async #stageFiles(files: PreparedRevisionFile[]): Promise<void> {
     for (const file of files) {
       const staged = await this.#sessionClient.stageText(file.body);
@@ -454,10 +606,57 @@ function assertStagedIdentity(staged: ArtifactBlobReceipt, artifact: M3ArtifactR
   }
 }
 
+function assertStagedJsonIdentity(
+  staged: ArtifactBlobReceipt,
+  artifact: ArtifactRef,
+): void {
+  if (
+    staged.sha256 !== artifact.sha256 ||
+    staged.byte_size !== artifact.byte_size ||
+    staged.storage_uri !== artifact.storage_uri
+  ) {
+    throw new Error("staged formal engine input identity changed before command submission");
+  }
+}
+
+function canonicalJsonArtifactRef(body: string): ArtifactRef {
+  const bytes = new TextEncoder().encode(body);
+  if (bytes.byteLength < 2 || bytes.byteLength > 5 * 1024 * 1024) {
+    throw new Error("formal engine input must contain between 2 and 5242880 UTF-8 bytes");
+  }
+  JSON.parse(body);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  return {
+    artifact_id: stableIdentityUuid(`${sha256}:formal-engine-input-artifact`),
+    sha256,
+    media_type: "application/json",
+    byte_size: bytes.byteLength,
+    storage_uri: `cas://sha256/${sha256}`,
+    producing_revision_id: null,
+    producing_run_id: null,
+    provenance: {
+      origin_kind: "service_generated",
+      source_ref: stableIdentityUuid(`${sha256}:formal-engine-input-provenance`),
+    },
+  };
+}
+
 function assertValidCommand<T extends RevisionCommand>(
   result: { valid: true; value: T } | { valid: false; errors: string[] },
   commandType: string,
 ): T {
+  if (!result.valid) {
+    throw new Error(`${commandType} command contract violation: ${result.errors.join("; ")}`);
+  }
+  return result.value;
+}
+
+function assertFormalRunCommand(
+  result:
+    | { valid: true; value: FormalRunCommand }
+    | { valid: false; errors: string[] },
+  commandType: string,
+): FormalRunCommand {
   if (!result.valid) {
     throw new Error(`${commandType} command contract violation: ${result.errors.join("; ")}`);
   }

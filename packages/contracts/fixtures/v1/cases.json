@@ -91,6 +91,18 @@
       "valid": true
     },
     {
+      "name": "valid two-parent merge command",
+      "kind": "revision_command",
+      "fixture": "command.merge-create.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run request command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-request.valid.json",
+      "valid": true
+    },
+    {
       "name": "revision create rejects unsafe file paths",
       "kind": "revision_command",
       "fixture": "command.revision-create.invalid-path.json",
@@ -209,6 +221,42 @@
       "kind": "revision_event",
       "fixture": "event.revision-promoted.valid.json",
       "valid": true
+    },
+    {
+      "name": "valid merge candidate created event",
+      "kind": "revision_event",
+      "fixture": "event.merge-candidate-created.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run queued event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-queued.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run started event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-started.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run succeeded event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-succeeded.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run failed event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-failed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "Formal Run calculation hash follows the engine result artifact",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed.invalid-calculation-hash.json",
+      "valid": false
     },
     {
       "name": "revision created event parent follows the base revision",

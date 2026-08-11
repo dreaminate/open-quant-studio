@@ -59,6 +59,48 @@ class GitWorkspaceStore:
     ) -> GitRevisionIdentity:
         if len(parent_commit_oids) > 1:
             raise GitWorkspaceError("git workspace supports zero or one parent")
+        return self._create_commit(
+            project_id=project_id,
+            revision_id=revision_id,
+            files=files,
+            parent_commit_oids=parent_commit_oids,
+            message=message,
+            recorded_at=recorded_at,
+        )
+
+    def create_merge_commit(
+        self,
+        *,
+        project_id: str,
+        revision_id: str,
+        files: dict[str, bytes],
+        project_parent_commit_oid: str,
+        variant_parent_commit_oid: str,
+        message: str,
+        recorded_at: str,
+    ) -> GitRevisionIdentity:
+        return self._create_commit(
+            project_id=project_id,
+            revision_id=revision_id,
+            files=files,
+            parent_commit_oids=[
+                project_parent_commit_oid,
+                variant_parent_commit_oid,
+            ],
+            message=message,
+            recorded_at=recorded_at,
+        )
+
+    def _create_commit(
+        self,
+        *,
+        project_id: str,
+        revision_id: str,
+        files: dict[str, bytes],
+        parent_commit_oids: list[str],
+        message: str,
+        recorded_at: str,
+    ) -> GitRevisionIdentity:
         self._validate_file_paths(files)
 
         repository = self._ensure_repository(project_id)
@@ -75,8 +117,8 @@ class GitWorkspaceStore:
         tree_oid = self._build_tree(repository, tree_root)
 
         commit_arguments = ["commit-tree", tree_oid]
-        if parent_commit_oids:
-            commit_arguments.extend(("-p", parent_commit_oids[0]))
+        for parent_commit_oid in parent_commit_oids:
+            commit_arguments.extend(("-p", parent_commit_oid))
         commit_message = (
             f"revision_id: {revision_id}\n\n{message[:_CALLER_MESSAGE_LIMIT]}\n"
         ).encode("utf-8")

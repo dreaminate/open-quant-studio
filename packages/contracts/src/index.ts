@@ -8,6 +8,8 @@ import contextCaptureCommandSchemaDocument from "../schemas/v1/context-capture-c
 import contextCapturedEventSchemaDocument from "../schemas/v1/context-captured-event.schema.json" with { type: "json" };
 import diagnosticLogSchemaDocument from "../schemas/v1/diagnostic-log.schema.json" with { type: "json" };
 import eventEnvelopeSchemaDocument from "../schemas/v1/event-envelope.schema.json" with { type: "json" };
+import formalRunCommandSchemaDocument from "../schemas/v1/formal-run-command.schema.json" with { type: "json" };
+import formalRunEventSchemaDocument from "../schemas/v1/formal-run-event.schema.json" with { type: "json" };
 import revisionCommandSchemaDocument from "../schemas/v1/revision-command.schema.json" with { type: "json" };
 import revisionEventSchemaDocument from "../schemas/v1/revision-event.schema.json" with { type: "json" };
 import sessionCommandSchemaDocument from "../schemas/v1/session-command.schema.json" with { type: "json" };
@@ -26,6 +28,10 @@ export const diagnosticLogSchema: Record<string, unknown> =
   diagnosticLogSchemaDocument;
 export const eventEnvelopeSchema: Record<string, unknown> =
   eventEnvelopeSchemaDocument;
+export const formalRunCommandSchema: Record<string, unknown> =
+  formalRunCommandSchemaDocument;
+export const formalRunEventSchema: Record<string, unknown> =
+  formalRunEventSchemaDocument;
 export const revisionCommandSchema: Record<string, unknown> =
   revisionCommandSchemaDocument;
 export const revisionEventSchema: Record<string, unknown> = revisionEventSchemaDocument;
@@ -367,6 +373,7 @@ export type StrategyVariantCreateCommand =
 export interface RevisionPromotePayload extends Record<string, unknown> {
   variant_id: string;
   candidate_revision_id: string;
+  validation_id: string;
 }
 
 export type WorkspaceRevisionPromoteCommand =
@@ -380,7 +387,21 @@ export type WorkspaceRevisionPromoteCommand =
 export type RevisionCommand =
   | WorkspaceRevisionCreateCommand
   | StrategyVariantCreateCommand
+  | WorkspaceMergeCreateCommand
   | WorkspaceRevisionPromoteCommand;
+
+export interface MergeCreatePayload extends Record<string, unknown> {
+  candidate_revision_id: string;
+  message: string;
+  files: RevisionFile[];
+}
+
+export type WorkspaceMergeCreateCommand = CommandEnvelope<MergeCreatePayload> & {
+  command_type: "workspace.merge_create";
+  expected_revision_id: string;
+  variant_id: string;
+  base_revision_id: string;
+};
 
 export interface RevisionCreatedPayload extends Record<string, unknown> {
   revision_id: string;
@@ -424,6 +445,7 @@ export interface RevisionPromotedPayload extends Record<string, unknown> {
   variant_id: string;
   previous_revision_id: string;
   promoted_revision_id: string;
+  validation_id: string;
   git_commit_oid: string;
   git_tree_oid: string;
 }
@@ -438,18 +460,119 @@ export type WorkspaceRevisionPromotedEvent =
 export type RevisionEvent =
   | WorkspaceRevisionCreatedEvent
   | StrategyVariantCreatedEvent
+  | WorkspaceMergeCandidateCreatedEvent
   | WorkspaceRevisionPromotedEvent;
 
-export const M3_COMMAND_TYPES = new Set([
+export interface MergeCandidateCreatedPayload extends Record<string, unknown> {
+  candidate_revision_id: string;
+  project_parent_revision_id: string;
+  variant_parent_revision_id: string;
+  git_commit_oid: string;
+  git_tree_oid: string;
+  file_count: number;
+}
+
+export type WorkspaceMergeCandidateCreatedEvent =
+  EventEnvelope<MergeCandidateCreatedPayload> & {
+    event_type: "workspace.merge_candidate_created";
+    variant_id: string;
+    base_revision_id: string;
+  };
+
+export interface FormalRunRequestPayload extends Record<string, unknown> {
+  run_spec_id: string;
+  run_id: string;
+  validation_id: string;
+  candidate_revision_id: string;
+  engine_input: ArtifactRef;
+  data_snapshot_id: string;
+  data_snapshot_sha256: string;
+  strategy_tree_oid: string;
+  parameters_sha256: string;
+  cost_model_sha256: string;
+  environment_lock_sha256: string;
+  engine_version: "oqs-quant-engine/0.1.0";
+  price_basis: "raw" | "qfq" | "hfq";
+  cutoff: string;
+  timezone: string;
+  sample_start: string;
+  sample_end: string;
+  random_seed: number;
+  output_schema_version: 1;
+  gate_policy_version: "m3-v1";
+}
+
+export type FormalRunCommand = CommandEnvelope<FormalRunRequestPayload> & {
+  command_type: "formal.run_request";
+  expected_revision_id: string;
+  variant_id: string;
+  base_revision_id: string;
+};
+
+export interface FormalRunActivePayload extends Record<string, unknown> {
+  job_id: string;
+  run_spec_id: string;
+  run_id: string;
+  validation_id: string;
+  candidate_revision_id: string;
+  run_spec_hash: string;
+}
+
+export interface FormalRunCompletedPayload extends FormalRunActivePayload {
+  status: "succeeded" | "failed";
+  gates: {
+    contract: "passed" | "failed";
+    strategy_import: "passed" | "failed";
+    smoke_run: "passed" | "failed";
+  };
+  engine_result_artifact_id: string | null;
+  engine_result_sha256: string | null;
+  manifest_artifact_id: string | null;
+  manifest_sha256: string | null;
+  calculation_hash: string | null;
+  error_code: string | null;
+}
+
+export type FormalRunEvent =
+  | (EventEnvelope<FormalRunActivePayload> & {
+      event_type: "formal.run_queued" | "formal.run_started";
+      variant_id: string;
+      base_revision_id: string;
+    })
+  | (EventEnvelope<FormalRunCompletedPayload> & {
+      event_type: "formal.run_completed";
+      variant_id: string;
+      base_revision_id: string;
+    });
+
+export const REVISION_COMMAND_TYPES = new Set([
   "workspace.revision_create",
   "strategy.variant_create",
+  "workspace.merge_create",
   "workspace.revision_promote",
 ]);
 
-export const M3_EVENT_TYPES = new Set([
+export const REVISION_EVENT_TYPES = new Set([
   "workspace.revision_created",
   "strategy.variant_created",
+  "workspace.merge_candidate_created",
   "workspace.revision_promoted",
+]);
+
+export const FORMAL_RUN_COMMAND_TYPES = new Set(["formal.run_request"]);
+export const FORMAL_RUN_EVENT_TYPES = new Set([
+  "formal.run_queued",
+  "formal.run_started",
+  "formal.run_completed",
+]);
+
+export const M3_COMMAND_TYPES = new Set([
+  ...REVISION_COMMAND_TYPES,
+  ...FORMAL_RUN_COMMAND_TYPES,
+]);
+export const M3_EVENT_TYPES = new Set([
+  ...REVISION_EVENT_TYPES,
+  ...FORMAL_RUN_EVENT_TYPES,
 ]);
 
 
@@ -477,7 +600,8 @@ export type DomainEvent =
   | ContextCapturedEvent
   | ArtifactVerificationEvent
   | SessionEvent
-  | RevisionEvent;
+  | RevisionEvent
+  | FormalRunEvent;
 
 export interface DiagnosticLog {
   timestamp: string;
@@ -525,6 +649,12 @@ const validateRevisionCommandSchema = validator.compile<RevisionCommand>(
 const validateRevisionEventSchema = validator.compile<RevisionEvent>(
   revisionEventSchemaDocument,
 );
+const validateFormalRunCommandSchema = validator.compile<FormalRunCommand>(
+  formalRunCommandSchemaDocument,
+);
+const validateFormalRunEventSchema = validator.compile<FormalRunEvent>(
+  formalRunEventSchemaDocument,
+);
 const validateLog = validator.compile<DiagnosticLog>(diagnosticLogSchema);
 
 function validationErrors(errors: ErrorObject[] | null | undefined): string[] {
@@ -554,8 +684,11 @@ export function validateCommandEnvelope(
   if (SESSION_COMMAND_TYPES.has(commandType)) {
     return validateSessionCommand(value) as unknown as ContractValidation<CommandEnvelope>;
   }
-  if (M3_COMMAND_TYPES.has(commandType)) {
+  if (REVISION_COMMAND_TYPES.has(commandType)) {
     return validateRevisionCommand(value) as unknown as ContractValidation<CommandEnvelope>;
+  }
+  if (FORMAL_RUN_COMMAND_TYPES.has(commandType)) {
+    return validateFormalRunCommand(value) as unknown as ContractValidation<CommandEnvelope>;
   }
   return { valid: true, value };
 }
@@ -574,8 +707,11 @@ export function validateEventEnvelope(
   if (SESSION_EVENT_TYPES.has(eventType)) {
     return validateSessionEvent(value) as unknown as ContractValidation<EventEnvelope>;
   }
-  if (M3_EVENT_TYPES.has(eventType)) {
+  if (REVISION_EVENT_TYPES.has(eventType)) {
     return validateRevisionEvent(value) as unknown as ContractValidation<EventEnvelope>;
+  }
+  if (FORMAL_RUN_EVENT_TYPES.has(eventType)) {
+    return validateFormalRunEvent(value) as unknown as ContractValidation<EventEnvelope>;
   }
   return { valid: true, value };
 }
@@ -593,8 +729,11 @@ export function validateTypedCommandEnvelope(
   if (SESSION_COMMAND_TYPES.has(commandType)) {
     return validateSessionCommand(value) as unknown as ContractValidation<CommandEnvelope>;
   }
-  if (M3_COMMAND_TYPES.has(commandType)) {
+  if (REVISION_COMMAND_TYPES.has(commandType)) {
     return validateRevisionCommand(value) as unknown as ContractValidation<CommandEnvelope>;
+  }
+  if (FORMAL_RUN_COMMAND_TYPES.has(commandType)) {
+    return validateFormalRunCommand(value) as unknown as ContractValidation<CommandEnvelope>;
   }
   return { valid: false, errors: [`unsupported command type ${commandType}`] };
 }
@@ -612,8 +751,11 @@ export function validateTypedEventEnvelope(
   if (SESSION_EVENT_TYPES.has(eventType)) {
     return validateSessionEvent(value) as unknown as ContractValidation<EventEnvelope>;
   }
-  if (M3_EVENT_TYPES.has(eventType)) {
+  if (REVISION_EVENT_TYPES.has(eventType)) {
     return validateRevisionEvent(value) as unknown as ContractValidation<EventEnvelope>;
+  }
+  if (FORMAL_RUN_EVENT_TYPES.has(eventType)) {
+    return validateFormalRunEvent(value) as unknown as ContractValidation<EventEnvelope>;
   }
   return { valid: false, errors: [`unsupported event type ${eventType}`] };
 }
@@ -806,7 +948,10 @@ export function validateSessionEvent(
 }
 
 function revisionCommandSemanticErrors(value: RevisionCommand): string[] {
-  if (value.command_type === "workspace.revision_create") {
+  if (
+    value.command_type === "workspace.revision_create" ||
+    value.command_type === "workspace.merge_create"
+  ) {
     const errors: string[] = [];
     const paths = new Set<string>();
     for (const [index, file] of value.payload.files.entries()) {
@@ -832,10 +977,17 @@ function revisionCommandSemanticErrors(value: RevisionCommand): string[] {
       );
     }
     if (
+      value.command_type === "workspace.revision_create" &&
       value.expected_revision_id !== null &&
       value.expected_revision_id !== value.base_revision_id
     ) {
       errors.push("/expected_revision_id must match /base_revision_id");
+    }
+    if (
+      value.command_type === "workspace.merge_create" &&
+      value.expected_revision_id === value.base_revision_id
+    ) {
+      errors.push("merge project and variant parents must be distinct revisions");
     }
     return errors;
   }
@@ -906,6 +1058,15 @@ export function validateStrategyVariantCreateCommand(
   ) as ContractValidation<StrategyVariantCreateCommand>;
 }
 
+export function validateWorkspaceMergeCreateCommand(
+  value: unknown,
+): ContractValidation<WorkspaceMergeCreateCommand> {
+  return validateRevisionCommandType(
+    value,
+    "workspace.merge_create",
+  ) as ContractValidation<WorkspaceMergeCreateCommand>;
+}
+
 export function validateWorkspaceRevisionPromoteCommand(
   value: unknown,
 ): ContractValidation<WorkspaceRevisionPromoteCommand> {
@@ -935,6 +1096,22 @@ function revisionEventSemanticErrors(value: RevisionEvent): string[] {
     }
     if (value.payload.revision_id !== value.base_revision_id) {
       errors.push("/payload/revision_id must match /base_revision_id");
+    }
+    return errors;
+  }
+
+  if (value.event_type === "workspace.merge_candidate_created") {
+    const errors: string[] = [];
+    if (value.payload.variant_parent_revision_id !== value.base_revision_id) {
+      errors.push(
+        "/payload/variant_parent_revision_id must match /base_revision_id",
+      );
+    }
+    if (
+      value.payload.project_parent_revision_id ===
+      value.payload.variant_parent_revision_id
+    ) {
+      errors.push("merge parent revisions must be distinct");
     }
     return errors;
   }
@@ -994,6 +1171,15 @@ export function validateStrategyVariantCreatedEvent(
   ) as ContractValidation<StrategyVariantCreatedEvent>;
 }
 
+export function validateWorkspaceMergeCandidateCreatedEvent(
+  value: unknown,
+): ContractValidation<WorkspaceMergeCandidateCreatedEvent> {
+  return validateRevisionEventType(
+    value,
+    "workspace.merge_candidate_created",
+  ) as ContractValidation<WorkspaceMergeCandidateCreatedEvent>;
+}
+
 export function validateWorkspaceRevisionPromotedEvent(
   value: unknown,
 ): ContractValidation<WorkspaceRevisionPromotedEvent> {
@@ -1001,6 +1187,50 @@ export function validateWorkspaceRevisionPromotedEvent(
     value,
     "workspace.revision_promoted",
   ) as ContractValidation<WorkspaceRevisionPromotedEvent>;
+}
+
+export function validateFormalRunCommand(
+  value: unknown,
+): ContractValidation<FormalRunCommand> {
+  if (!validateFormalRunCommandSchema(value)) {
+    return {
+      valid: false,
+      errors: validationErrors(validateFormalRunCommandSchema.errors),
+    };
+  }
+  const errors = artifactIdentityErrors(value.payload.engine_input);
+  if (value.expected_revision_id !== value.base_revision_id) {
+    errors.push("/expected_revision_id must match /base_revision_id");
+  }
+  if (value.payload.candidate_revision_id !== value.base_revision_id) {
+    errors.push("/payload/candidate_revision_id must match /base_revision_id");
+  }
+  return errors.length > 0 ? { valid: false, errors } : { valid: true, value };
+}
+
+export function validateFormalRunEvent(
+  value: unknown,
+): ContractValidation<FormalRunEvent> {
+  if (!validateFormalRunEventSchema(value)) {
+    return {
+      valid: false,
+      errors: validationErrors(validateFormalRunEventSchema.errors),
+    };
+  }
+  const errors: string[] = [];
+  if (value.payload.candidate_revision_id !== value.base_revision_id) {
+    errors.push("/payload/candidate_revision_id must match /base_revision_id");
+  }
+  if (
+    value.event_type === "formal.run_completed" &&
+    value.payload.status === "succeeded" &&
+    value.payload.calculation_hash !== value.payload.engine_result_sha256
+  ) {
+    errors.push(
+      "/payload/calculation_hash must match /payload/engine_result_sha256",
+    );
+  }
+  return errors.length > 0 ? { valid: false, errors } : { valid: true, value };
 }
 
 export function validateDiagnosticLog(
@@ -1033,8 +1263,11 @@ export function validateDomainEvent(
   if (SESSION_EVENT_TYPES.has(envelope.value.event_type)) {
     return validateSessionEvent(value);
   }
-  if (M3_EVENT_TYPES.has(envelope.value.event_type)) {
+  if (REVISION_EVENT_TYPES.has(envelope.value.event_type)) {
     return validateRevisionEvent(value);
+  }
+  if (FORMAL_RUN_EVENT_TYPES.has(envelope.value.event_type)) {
+    return validateFormalRunEvent(value);
   }
   return {
     valid: false,

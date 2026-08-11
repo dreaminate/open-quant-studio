@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin==1.14.1"]
+build-backend = "maturin"
+
+[project]
+name = "oqs-quant-engine"
+version = "0.1.0"
+requires-python = ">=3.13"
+license = "MIT"
+
+[tool.maturin]
+features = ["python"]
+module-name = "oqs_quant_engine"

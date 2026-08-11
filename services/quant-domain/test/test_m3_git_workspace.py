@@ -186,6 +186,51 @@ class M3GitWorkspaceTest(unittest.TestCase):
                 recorded_at=RECORDED_AT,
             )
 
+    def test_merge_commit_preserves_the_ordered_project_and_variant_parents(self) -> None:
+        project_parent = self.store.create_commit(
+            project_id=PROJECT_ID,
+            revision_id=ROOT_REVISION_ID,
+            files={"strategy.py": b"signal = 1\n"},
+            parent_commit_oids=[],
+            message="project parent",
+            recorded_at=RECORDED_AT,
+        )
+        variant_parent = self.store.create_commit(
+            project_id=PROJECT_ID,
+            revision_id=CHILD_REVISION_ID,
+            files={"strategy.py": b"signal = 2\n"},
+            parent_commit_oids=[project_parent.commit_oid],
+            message="variant parent",
+            recorded_at=RECORDED_AT,
+        )
+
+        merge = self.store.create_merge_commit(
+            project_id=PROJECT_ID,
+            revision_id="44444444-4444-4444-8444-444444444444",
+            files={"strategy.py": b"signal = 3\n"},
+            project_parent_commit_oid=project_parent.commit_oid,
+            variant_parent_commit_oid=variant_parent.commit_oid,
+            message="validated merge candidate",
+            recorded_at=RECORDED_AT,
+        )
+
+        commit_text = self.run_git(
+            self.store.repository_path(PROJECT_ID),
+            "cat-file",
+            "-p",
+            merge.commit_oid,
+        ).decode()
+        parent_lines = [
+            line for line in commit_text.splitlines() if line.startswith("parent ")
+        ]
+        self.assertEqual(
+            parent_lines,
+            [
+                f"parent {project_parent.commit_oid}",
+                f"parent {variant_parent.commit_oid}",
+            ],
+        )
+
     def test_git_failure_has_bounded_message_without_command_output_or_file_bytes(self) -> None:
         secret = b"do-not-leak-this-file-content"
         with self.assertRaises(GitWorkspaceError) as raised:

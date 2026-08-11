@@ -2,6 +2,7 @@
   "name": "open-quant-studio",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Local-first agent-native quantitative research studio",
   "packageManager": "pnpm@11.21.0",
   "engines": {
@@ -12,16 +13,20 @@
     "build": "pnpm --filter @open-quant-studio/contracts build && pnpm --filter @open-quant-studio/control-plane build",
     "check:bootstrap": "node scripts/check-bootstrap.mjs",
     "check:data-root": "node scripts/check-data-root.mjs",
-    "test": "pnpm run validate:m3-revisions",
+    "test": "pnpm run validate:m3",
     "test:control-plane": "pnpm --filter @open-quant-studio/control-plane test",
     "test:contracts": "pnpm --filter @open-quant-studio/contracts test",
     "test:domain": "PYTHONPATH=services/quant-domain/src uv run --project services/quant-domain --frozen python -W error::ResourceWarning -m unittest discover -s services/quant-domain/test -p 'test_*.py' -v",
+    "test:domain:base": "PYTHONPATH=services/quant-domain/src uv run --project services/quant-domain --frozen python -W error::ResourceWarning -m unittest discover -s services/quant-domain/test -p 'test_m[12]*.py' -v",
+    "test:engine": "cargo test --manifest-path crates/quant-engine/Cargo.toml --locked --offline && cargo fmt --manifest-path crates/quant-engine/Cargo.toml --check && cargo clippy --manifest-path crates/quant-engine/Cargo.toml --locked --offline --all-targets -- -D warnings",
+    "test:engine-pyo3": "uv run --project services/quant-domain --frozen maturin develop --manifest-path crates/quant-engine/Cargo.toml --features python && PYTHONPATH=services/quant-domain/src uv run --project services/quant-domain --frozen python -W error -m unittest discover -s crates/quant-engine/tests -p 'test_python_binding.py' -v",
     "test:golden": "uv run --project services/quant-domain --frozen python scripts/verify-golden-backtest.py fixtures/backtests/m0-long-short-v1.json",
-    "test:m3-revisions": "pnpm --filter @open-quant-studio/contracts build && node --test packages/contracts/test/m3_revision_contracts.test.mjs && pnpm --filter @open-quant-studio/control-plane build && node --test apps/control-plane/test/m3-revision-tools.test.mjs && PYTHONPATH=services/quant-domain/src:services/quant-domain/test uv run --project services/quant-domain --frozen python -W error -m unittest test_m3_git_workspace test_m3_revisions test_m3_http",
+    "test:m3-revisions": "pnpm --filter @open-quant-studio/contracts build && node --test packages/contracts/test/m3_revision_contracts.test.mjs && pnpm --filter @open-quant-studio/control-plane build && node --test apps/control-plane/test/m3-revision-tools.test.mjs && PYTHONPATH=services/quant-domain/src:services/quant-domain/test uv run --project services/quant-domain --frozen python -W error -m unittest test_m3_git_workspace test_m3_revisions test_m3_http test_m3_formal_runs",
     "validate:m0": "pnpm run check:bootstrap && pnpm run check:data-root && pnpm run test:contracts && pnpm run test:golden",
-    "validate:m1": "pnpm run validate:m0 && pnpm run test:control-plane && pnpm run test:domain",
+    "validate:m1": "pnpm run validate:m0 && pnpm run test:control-plane && pnpm run test:domain:base",
     "validate:m2": "pnpm run validate:m1",
-    "validate:m3-revisions": "pnpm run validate:m2 && pnpm run test:m3-revisions"
+    "validate:m3-revisions": "pnpm run validate:m2 && pnpm run test:m3-revisions",
+    "validate:m3": "pnpm run validate:m2 && pnpm run test:engine && pnpm run test:engine-pyo3 && pnpm run test:domain && pnpm run test:m3-revisions"
   },
   "devDependencies": {
     "typescript": "7.0.2"

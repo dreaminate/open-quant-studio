@@ -1,6 +1,6 @@
 # packages/research-ui
 
-M0 defines only the package boundary for provenance-safe workbench components.
-No QuantBT file is present: its live worktree is dirty and its committed UI tree
-has no verified reuse license. Any future slice still requires an exact source
-snapshot, license, attribution, changed-file list, and behavior oracle.
+This package owns OQS cleanroom workbench components shared by the single SPA.
+No QuantBT file is present: its reviewed UI source has no verified reuse
+license. QuantBT may be cited only as a behavior/test oracle unless a future
+per-file provenance decision explicitly changes that boundary.

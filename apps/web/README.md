@@ -1,4 +1,6 @@
 # apps/web
 
-M0 defines only the package boundary for the future unified React/Vite SPA. No
-React, Vite, iframe, donor UI, or frontend runtime is installed or implemented.
+This package owns the single OQS React/Vite SPA. The planned canvas uses React
+Flow and the UI consumes Python-owned durable state and Rust-owned formal Run
+artifacts. No iframe, microfrontend, donor UI source, or frontend runtime is
+implemented at checkpoint `146024d`.

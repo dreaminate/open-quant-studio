@@ -26,10 +26,11 @@ Every durable mutation is submitted to the Python service with:
 M1 implements one concrete mutation, `context.capture`. Its payload contains a
 `context_item_id`, title, the fixed `raw_evidence` trust state, and one complete
 immutable Artifact reference. The service hashes the canonical full envelope.
-Because M3 does not yet own revisions, variants, or formal Runs, M1 requires
+As a command-specific historical constraint, M1 `context.capture` requires
 `expected_revision_id`, `variant_id`, `base_revision_id`,
 `producing_revision_id`, and `producing_run_id` to be explicitly null for this
-command and its event.
+command and its event. Later revision/variant commands own those identities;
+Formal Run commands use their own concrete contracts.
 An exact duplicate returns the original stored event with disposition
 `replayed`; the same `command_id` with any changed envelope field returns
 `command_id_conflict` and writes nothing.
@@ -88,3 +89,24 @@ outbox row; M1 does not yet implement an outbox dispatcher.
 ## Formal RunSpec
 
 A Formal Run freezes at least data snapshot, universe, sample window, timezone, strategy revision, parameters, random seed, fee/slippage model, engine version, environment lock identity, and output schema version. A started Run is never edited; another attempt receives another `run_id`.
+
+The strategy-to-engine boundary contains only ordered bars, market metadata, a frozen RunSpec, and structured OrderIntents. The engine returns a typed immutable result containing orders, trades, signed positions, cash ledger, equity/drawdown curves, metrics, costs, logs, provenance, and gate outcomes. Large series live in CAS; command/event envelopes carry bounded identities and hashes.
+
+M3 implements `workspace.merge_create`, `formal.run_request`, and
+`workspace.revision_promote`. Their durable lifecycle events are
+`workspace.merge_candidate_created`, `formal.run_queued`,
+`formal.run_started`, `formal.run_completed`, and
+`workspace.revision_promoted`. Promote requires the exact passed
+`validation_id` for the candidate and compare-and-set identities for both the
+project and variant heads.
+
+The candidate subprocess receives only ordered bars, not the expected intent
+tape. It returns raw callback batches; the trusted Python parent assigns
+`known_at`, validates the exact three-field shape of a strategy-requested
+future-open `effective_at` (or defaults it to the next bar), persists the
+resulting intent tape in CAS, and requires exact equality with the immutable
+Rust input. Rust/PyO3 rejects unknown formal-input fields, consumes those exact
+bytes, and remains the only authority for fills, ledgers, costs, equity,
+drawdown, and metrics. A succeeded completion event requires
+`calculation_hash == engine_result_sha256`; failed completions carry no result
+or manifest identity.

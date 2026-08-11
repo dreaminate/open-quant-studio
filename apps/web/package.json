@@ -2,6 +2,7 @@
   "name": "@open-quant-studio/web",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Unified React/Vite SPA boundary; UI implementation begins after the domain core"
 }

@@ -38,6 +38,11 @@ REVISION_COMMAND_VALIDATOR = Draft202012Validator(
     registry=REGISTRY,
     format_checker=FormatChecker(),
 )
+FORMAL_RUN_COMMAND_VALIDATOR = Draft202012Validator(
+    SCHEMAS["formal-run-command"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
 EVENT_ENVELOPE_VALIDATOR = Draft202012Validator(
     SCHEMAS["event-envelope"],
     registry=REGISTRY,
@@ -53,6 +58,11 @@ REVISION_EVENT_VALIDATOR = Draft202012Validator(
     registry=REGISTRY,
     format_checker=FormatChecker(),
 )
+FORMAL_RUN_EVENT_VALIDATOR = Draft202012Validator(
+    SCHEMAS["formal-run-event"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
 COMMAND_VALIDATORS = {
     "context.capture": CONTEXT_CAPTURE_VALIDATOR,
     "session.register": SESSION_COMMAND_VALIDATOR,
@@ -64,7 +74,9 @@ COMMAND_VALIDATORS = {
     "session.message_acknowledge": SESSION_COMMAND_VALIDATOR,
     "workspace.revision_create": REVISION_COMMAND_VALIDATOR,
     "strategy.variant_create": REVISION_COMMAND_VALIDATOR,
+    "workspace.merge_create": REVISION_COMMAND_VALIDATOR,
     "workspace.revision_promote": REVISION_COMMAND_VALIDATOR,
+    "formal.run_request": FORMAL_RUN_COMMAND_VALIDATOR,
 }
 DOMAIN_EVENT_VALIDATORS = {
     "context.captured": Draft202012Validator(
@@ -95,7 +107,11 @@ DOMAIN_EVENT_VALIDATORS = {
     "session.message_acknowledged": SESSION_EVENT_VALIDATOR,
     "workspace.revision_created": REVISION_EVENT_VALIDATOR,
     "strategy.variant_created": REVISION_EVENT_VALIDATOR,
+    "workspace.merge_candidate_created": REVISION_EVENT_VALIDATOR,
     "workspace.revision_promoted": REVISION_EVENT_VALIDATOR,
+    "formal.run_queued": FORMAL_RUN_EVENT_VALIDATOR,
+    "formal.run_started": FORMAL_RUN_EVENT_VALIDATOR,
+    "formal.run_completed": FORMAL_RUN_EVENT_VALIDATOR,
 }
 
 
@@ -166,7 +182,7 @@ def revision_command_errors(command: Any) -> list[str]:
         return messages
 
     command_type = command["command_type"]
-    if command_type == "workspace.revision_create":
+    if command_type in {"workspace.revision_create", "workspace.merge_create"}:
         paths: set[str] = set()
         for index, file in enumerate(command["payload"]["files"]):
             if file["path"] in paths:
@@ -195,10 +211,17 @@ def revision_command_errors(command: Any) -> list[str]:
                     f"/payload/files/{index}/artifact/storage_uri must match artifact sha256"
                 )
         if (
+            command_type == "workspace.revision_create"
+            and
             command["expected_revision_id"] is not None
             and command["expected_revision_id"] != command["base_revision_id"]
         ):
             messages.append("/expected_revision_id must match /base_revision_id")
+        if (
+            command_type == "workspace.merge_create"
+            and command["expected_revision_id"] == command["base_revision_id"]
+        ):
+            messages.append("merge project and variant parents must be distinct revisions")
         return messages
 
     payload = command["payload"]
@@ -216,6 +239,28 @@ def revision_command_errors(command: Any) -> list[str]:
     return messages
 
 
+def formal_run_command_errors(command: Any) -> list[str]:
+    errors = sorted(
+        FORMAL_RUN_COMMAND_VALIDATOR.iter_errors(command),
+        key=lambda error: list(error.absolute_path),
+    )
+    messages = [
+        f"/{'/'.join(str(part) for part in error.absolute_path)} violates {error.validator}"
+        for error in errors
+    ]
+    if messages:
+        return messages
+    payload = command["payload"]
+    artifact = payload["engine_input"]
+    if artifact["storage_uri"] != f"cas://sha256/{artifact['sha256']}":
+        messages.append("/payload/engine_input/storage_uri must match artifact sha256")
+    if command["expected_revision_id"] != command["base_revision_id"]:
+        messages.append("/expected_revision_id must match /base_revision_id")
+    if payload["candidate_revision_id"] != command["base_revision_id"]:
+        messages.append("/payload/candidate_revision_id must match /base_revision_id")
+    return messages
+
+
 def command_errors(command: Any) -> list[str]:
     if not isinstance(command, dict):
         return ["/ violates type"]
@@ -227,9 +272,12 @@ def command_errors(command: Any) -> list[str]:
     if command_type in {
         "workspace.revision_create",
         "strategy.variant_create",
+        "workspace.merge_create",
         "workspace.revision_promote",
     }:
         return revision_command_errors(command)
+    if command_type == "formal.run_request":
+        return formal_run_command_errors(command)
     validator = COMMAND_VALIDATORS[command_type]
     errors = sorted(
         validator.iter_errors(command), key=lambda error: list(error.absolute_path)
@@ -273,6 +321,14 @@ def domain_event_errors(event: dict[str, Any]) -> list[str]:
             errors.append("/payload/variant_id must match /variant_id")
         if event["payload"]["revision_id"] != event["base_revision_id"]:
             errors.append("/payload/revision_id must match /base_revision_id")
+    if not errors and event_type == "workspace.merge_candidate_created":
+        payload = event["payload"]
+        if payload["variant_parent_revision_id"] != event["base_revision_id"]:
+            errors.append(
+                "/payload/variant_parent_revision_id must match /base_revision_id"
+            )
+        if payload["project_parent_revision_id"] == payload["variant_parent_revision_id"]:
+            errors.append("merge parent revisions must be distinct")
     if not errors and event_type == "workspace.revision_promoted":
         if event["payload"]["variant_id"] != event["variant_id"]:
             errors.append("/payload/variant_id must match /variant_id")
@@ -280,4 +336,17 @@ def domain_event_errors(event: dict[str, Any]) -> list[str]:
             errors.append(
                 "/payload/previous_revision_id must match /base_revision_id"
             )
+    if not errors and event_type.startswith("formal.run_"):
+        if event["payload"]["candidate_revision_id"] != event["base_revision_id"]:
+            errors.append("/payload/candidate_revision_id must match /base_revision_id")
+    if (
+        not errors
+        and event_type == "formal.run_completed"
+        and event["payload"]["status"] == "succeeded"
+        and event["payload"]["calculation_hash"]
+        != event["payload"]["engine_result_sha256"]
+    ):
+        errors.append(
+            "/payload/calculation_hash must match /payload/engine_result_sha256"
+        )
     return errors

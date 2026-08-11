@@ -13,6 +13,7 @@
           "enum": [
             "workspace.revision_created",
             "strategy.variant_created",
+            "workspace.merge_candidate_created",
             "workspace.revision_promoted"
           ]
         }
@@ -20,6 +21,15 @@
     },
     {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "workspace.merge_candidate_created" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/mergeCandidateCreatedPayload" }
+          }
+        },
         {
           "type": "object",
           "properties": {
@@ -114,6 +124,7 @@
         "variant_id",
         "previous_revision_id",
         "promoted_revision_id",
+        "validation_id",
         "git_commit_oid",
         "git_tree_oid"
       ],
@@ -121,8 +132,29 @@
         "variant_id": { "$ref": "#/$defs/uuid" },
         "previous_revision_id": { "$ref": "#/$defs/uuid" },
         "promoted_revision_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
         "git_commit_oid": { "$ref": "#/$defs/gitOid" },
         "git_tree_oid": { "$ref": "#/$defs/gitOid" }
+      }
+    },
+    "mergeCandidateCreatedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_revision_id",
+        "project_parent_revision_id",
+        "variant_parent_revision_id",
+        "git_commit_oid",
+        "git_tree_oid",
+        "file_count"
+      ],
+      "properties": {
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "project_parent_revision_id": { "$ref": "#/$defs/uuid" },
+        "variant_parent_revision_id": { "$ref": "#/$defs/uuid" },
+        "git_commit_oid": { "$ref": "#/$defs/gitOid" },
+        "git_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "file_count": { "type": "integer", "minimum": 1, "maximum": 32 }
       }
     }
   }

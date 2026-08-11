@@ -2,6 +2,11 @@
 
 No donor source is imported at repository bootstrap.
 
+Open Quant Studio's own source is released under the root MIT `LICENSE`. That
+license does not change any donor boundary. Exact third-party notices remain
+under this directory and are shipped with distributions that include the
+corresponding dependency.
+
 Before adding a migrated file or vendored dependency, record:
 
 - upstream name and canonical URL
@@ -20,5 +25,9 @@ recorded in `M1_DEPENDENCY_DECISIONS.md`.
 
 M2's exact Pi release identity, registry integrities, retained MIT notice, and
 resolved-license audit are recorded in `M2_DEPENDENCY_DECISIONS.md`.
+
+M3 uses an OQS-owned cleanroom engine. Its exact Rust/PyO3 dependencies,
+build-only Maturin boundary, license evidence, behavior oracles, and independent
+Decimal reconciliation are recorded in `M3_DEPENDENCY_DECISIONS.md`.
 
 PSM/byteowlz material may not be copied from the reviewed unlicensed snapshots. MCP Agent Mail may not be copied, run, tested, or integrated because of its restrictive license rider. See `docs/06_MIGRATION_MAP.md`.

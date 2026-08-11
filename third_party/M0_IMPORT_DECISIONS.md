@@ -26,3 +26,13 @@ were written cleanroom in this repository. They do not contain donor code.
 
 `pnpm-lock.yaml` and `services/quant-domain/uv.lock` freeze the full transitive
 dependency sets. No package source is vendored under `third_party/`.
+
+## 2026-08-12 project-license and cleanroom refresh
+
+- Open Quant Studio's own source uses the root MIT `LICENSE`.
+- The project license does not license donor code. The live donor/remote refresh
+  in `docs/06_MIGRATION_MAP.md` preserves every no-copy decision above.
+- The approved formal engine and SPA paths are OQS-owned cleanroom
+  implementations. No QuantBT or quant-assistant source migration is planned.
+- The M0 dependency graph is unchanged; the frozen install and license-group
+  audit passed on the refreshed authority tree.

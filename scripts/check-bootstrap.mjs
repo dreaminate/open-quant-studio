@@ -2,10 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 
 const requiredFiles = [
   ".env.example",
+  "LICENSE",
   "README.md",
   "AGENTS.md",
   "apps/control-plane/package.json",
   "apps/web/package.json",
+  "crates/quant-engine/README.md",
   "docs/00_PROJECT_CHARTER.md",
   "docs/01_ARCHITECTURE.md",
   "docs/02_DOMAIN_MODEL.md",

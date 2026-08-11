@@ -1,0 +1,150 @@
+{
+  "spec_id": "oqs.m3.a-share-long-short.v1",
+  "schema_version": 1,
+  "status": "formal_engine_contract",
+  "provenance": {
+    "kind": "synthetic",
+    "created_for": "Open Quant Studio M3",
+    "external_source": null,
+    "description": "Four invented daily bars for deterministic A-share long and labelled research-short accounting."
+  },
+  "input": {
+    "schema_version": 1,
+    "account": {
+      "model": "a_share_cash",
+      "symbol": "SYNTH.XSHG",
+      "price_scale": 100,
+      "cash_scale": 100,
+      "rate_scale": 1000000,
+      "starting_balance_atoms": "1000000",
+      "lot_size": 100,
+      "allow_research_short": true,
+      "commission_rate_atoms": "600",
+      "stamp_duty_rate_atoms": "1000",
+      "maker_fee_rate_atoms": "0",
+      "taker_fee_rate_atoms": "0",
+      "slippage_atoms": "10"
+    },
+    "bars": [
+      {
+        "session_seq": 1,
+        "timestamp": "2026-01-02T07:00:00Z",
+        "open_atoms": "1000",
+        "high_atoms": "1120",
+        "low_atoms": "990",
+        "close_atoms": "1100",
+        "can_buy": true,
+        "can_sell": true
+      },
+      {
+        "session_seq": 2,
+        "timestamp": "2026-01-05T07:00:00Z",
+        "open_atoms": "1200",
+        "high_atoms": "1210",
+        "low_atoms": "1180",
+        "close_atoms": "1200",
+        "can_buy": true,
+        "can_sell": true
+      },
+      {
+        "session_seq": 3,
+        "timestamp": "2026-01-06T07:00:00Z",
+        "open_atoms": "1000",
+        "high_atoms": "1020",
+        "low_atoms": "980",
+        "close_atoms": "1000",
+        "can_buy": true,
+        "can_sell": true
+      },
+      {
+        "session_seq": 4,
+        "timestamp": "2026-01-07T07:00:00Z",
+        "open_atoms": "900",
+        "high_atoms": "920",
+        "low_atoms": "880",
+        "close_atoms": "900",
+        "can_buy": true,
+        "can_sell": true
+      }
+    ],
+    "funding_events": [],
+    "intents": [
+      {
+        "intent_id": "long-entry",
+        "intent_seq": 1,
+        "symbol": "SYNTH.XSHG",
+        "side": "buy",
+        "position_effect": "open",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": { "session_seq": 0, "phase": "close", "stable_seq": 1 },
+        "effective_at": { "session_seq": 1, "phase": "open", "stable_seq": 1 },
+        "limit_price_atoms": null,
+        "stop_price_atoms": null,
+        "time_in_force": "day",
+        "oco_group": null
+      },
+      {
+        "intent_id": "long-exit",
+        "intent_seq": 2,
+        "symbol": "SYNTH.XSHG",
+        "side": "sell",
+        "position_effect": "close",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": { "session_seq": 1, "phase": "close", "stable_seq": 2 },
+        "effective_at": { "session_seq": 2, "phase": "open", "stable_seq": 2 },
+        "limit_price_atoms": null,
+        "stop_price_atoms": null,
+        "time_in_force": "day",
+        "oco_group": null
+      },
+      {
+        "intent_id": "research-short-entry",
+        "intent_seq": 3,
+        "symbol": "SYNTH.XSHG",
+        "side": "sell",
+        "position_effect": "open",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": { "session_seq": 2, "phase": "close", "stable_seq": 3 },
+        "effective_at": { "session_seq": 3, "phase": "open", "stable_seq": 3 },
+        "limit_price_atoms": null,
+        "stop_price_atoms": null,
+        "time_in_force": "day",
+        "oco_group": null
+      },
+      {
+        "intent_id": "research-short-cover",
+        "intent_seq": 4,
+        "symbol": "SYNTH.XSHG",
+        "side": "buy",
+        "position_effect": "close",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": { "session_seq": 3, "phase": "close", "stable_seq": 4 },
+        "effective_at": { "session_seq": 4, "phase": "open", "stable_seq": 4 },
+        "limit_price_atoms": null,
+        "stop_price_atoms": null,
+        "time_in_force": "day",
+        "oco_group": null
+      }
+    ]
+  },
+  "expected": {
+    "fill_prices_atoms": ["1010", "1190", "990", "910"],
+    "fees_atoms": ["61", "72", "60", "55"],
+    "stamp_duty_atoms": ["0", "119", "99", "0"],
+    "slippage_atoms": ["1000", "1000", "1000", "1000"],
+    "signed_quantities": ["100", "0", "-100", "0"],
+    "equity_atoms": ["1008939", "1017748", "1016589", "1025534"],
+    "ending_equity_atoms": "1025534",
+    "net_pnl_atoms": "25534",
+    "total_fees_atoms": "248",
+    "total_stamp_duty_atoms": "218",
+    "total_slippage_atoms": "4000",
+    "fill_count": 4,
+    "closed_trade_count": 2,
+    "open_position_count": 0
+  }
+}

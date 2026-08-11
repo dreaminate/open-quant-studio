@@ -5,10 +5,8 @@ import hashlib
 import sqlite3
 import subprocess
 import tempfile
-import threading
 import unittest
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 
@@ -112,6 +110,7 @@ def promote_command(
     variant_id: str,
     candidate_revision_id: str,
     expected_revision_id: str = ROOT_REVISION_ID,
+    validation_id: str = "71717171-7171-4171-8171-717171717171",
 ) -> dict[str, object]:
     return revision_command(
         "workspace.revision_promote",
@@ -122,6 +121,7 @@ def promote_command(
         payload={
             "variant_id": variant_id,
             "candidate_revision_id": candidate_revision_id,
+            "validation_id": validation_id,
         },
     )
 
@@ -325,7 +325,7 @@ class M3RevisionDomainTest(unittest.TestCase):
             ),
         )
 
-    def test_two_candidate_promote_race_has_one_winner_and_one_explicit_conflict(self) -> None:
+    def test_raw_variant_heads_cannot_bypass_merge_validation(self) -> None:
         self.create_variants_and_children()
         commands = [
             promote_command(
@@ -339,49 +339,24 @@ class M3RevisionDomainTest(unittest.TestCase):
                 candidate_revision_id=REVISION_B_ID,
             ),
         ]
-        barrier = threading.Barrier(2)
-
-        def promote(command: dict[str, object]) -> tuple[str, object]:
-            barrier.wait()
-            try:
-                return "accepted", self.domain.submit_command(command)
-            except PromotionConflict as error:
-                return "conflict", error.code
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            outcomes = list(executor.map(promote, commands))
-        self.assertEqual([kind for kind, _ in outcomes].count("accepted"), 1)
-        self.assertEqual([kind for kind, _ in outcomes].count("conflict"), 1)
-        winner_index = next(
-            index for index, (kind, _) in enumerate(outcomes) if kind == "accepted"
-        )
-        winner_revision = (
-            REVISION_A_ID if winner_index == 0 else REVISION_B_ID
-        )
-        self.assertEqual(self.domain.project_head(PROJECT_ID), winner_revision)
+        for command in commands:
+            with self.assertRaises(PromotionConflict):
+                self.domain.submit_command(command)
+        self.assertEqual(self.domain.project_head(PROJECT_ID), ROOT_REVISION_ID)
         promoted_events = [
             event
             for event in self.domain.events(PROJECT_ID, after_stream_seq=0)
             if event["event_type"] == "workspace.revision_promoted"
         ]
-        self.assertEqual(len(promoted_events), 1)
-        self.assertEqual(
-            promoted_events[0]["payload"]["promoted_revision_id"], winner_revision
-        )
-        winner_receipt = outcomes[winner_index][1]
-        replayed = self.domain.submit_command(commands[winner_index])
-        self.assertEqual(replayed["disposition"], "replayed")
-        self.assertEqual(replayed["event"], winner_receipt["event"])
-
-        loser_index = 1 - winner_index
+        self.assertEqual(promoted_events, [])
         with closing(sqlite3.connect(self.domain.database_path)) as connection:
-            loser_receipt = connection.execute(
-                "SELECT 1 FROM command_receipts WHERE command_id = ?",
-                (commands[loser_index]["command_id"],),
-            ).fetchone()
-        self.assertIsNone(loser_receipt)
+            receipts = connection.execute(
+                "SELECT command_id FROM command_receipts WHERE command_id IN (?, ?)",
+                (commands[0]["command_id"], commands[1]["command_id"]),
+            ).fetchall()
+        self.assertEqual(receipts, [])
 
-    def test_project_head_cannot_revisit_an_old_revision_and_enable_aba(self) -> None:
+    def test_unvalidated_revision_cannot_enter_project_history_or_enable_aba(self) -> None:
         self.create_variants_and_children()
         self.domain.submit_command(
             create_variant_command(
@@ -389,22 +364,22 @@ class M3RevisionDomainTest(unittest.TestCase):
                 variant_id=VARIANT_C_ID,
             )
         )
-        self.domain.submit_command(
-            promote_command(
-                command_id="79797979-7979-4979-8979-797979797979",
-                variant_id=VARIANT_A_ID,
-                candidate_revision_id=REVISION_A_ID,
-            )
+        first = promote_command(
+            command_id="79797979-7979-4979-8979-797979797979",
+            variant_id=VARIANT_A_ID,
+            candidate_revision_id=REVISION_A_ID,
         )
+        with self.assertRaises(PromotionConflict):
+            self.domain.submit_command(first)
         revert = promote_command(
             command_id="80808080-8080-4080-8080-808080808080",
             variant_id=VARIANT_C_ID,
             candidate_revision_id=ROOT_REVISION_ID,
-            expected_revision_id=REVISION_A_ID,
+            expected_revision_id=ROOT_REVISION_ID,
         )
         with self.assertRaises(PromotionConflict):
             self.domain.submit_command(revert)
-        self.assertEqual(self.domain.project_head(PROJECT_ID), REVISION_A_ID)
+        self.assertEqual(self.domain.project_head(PROJECT_ID), ROOT_REVISION_ID)
         with closing(sqlite3.connect(self.domain.database_path)) as connection:
             history = connection.execute(
                 """
@@ -419,7 +394,7 @@ class M3RevisionDomainTest(unittest.TestCase):
                 "SELECT 1 FROM command_receipts WHERE command_id = ?",
                 (revert["command_id"],),
             ).fetchone()
-        self.assertEqual(history, [(ROOT_REVISION_ID, 0), (REVISION_A_ID, 1)])
+        self.assertEqual(history, [(ROOT_REVISION_ID, 0)])
         self.assertIsNone(receipt)
 
     def test_duplicate_revision_id_fails_before_writing_more_git_objects(self) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -110,6 +111,7 @@ class M1DomainTest(unittest.TestCase):
                 ("002_m1_immutability",),
                 ("003_m2_session_fabric",),
                 ("004_m3_revision_graph",),
+                ("005_m3_formal_runs",),
             ],
         )
 
@@ -137,6 +139,105 @@ class M1DomainTest(unittest.TestCase):
 
         self.assertEqual([tuple(row) for row in values], [("once",)])
         self.assertEqual([tuple(row) for row in migrations], [("001_once",)])
+
+    def test_m3_jobs_migration_preserves_an_existing_m1_verification_job(self) -> None:
+        source_migrations = (
+            Path(__file__).parents[1] / "src" / "quant_domain" / "migrations"
+        )
+        staged_migrations = self.data_root / "staged-migrations"
+        staged_migrations.mkdir()
+        for migration in sorted(source_migrations.glob("00[1-4]_*.sql")):
+            shutil.copyfile(migration, staged_migrations / migration.name)
+        database_path = self.data_root / "upgrade.sqlite3"
+        legacy = Database(database_path, migrations_dir=staged_migrations)
+        recorded_at = "2026-08-12T00:00:00Z"
+        artifact_id = "99999999-9999-4999-8999-999999999999"
+        command_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        event_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        job_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        with legacy.connect() as connection:
+            connection.execute(
+                "INSERT INTO research_projects(project_id, created_at) VALUES (?, ?)",
+                (PROJECT_ID, recorded_at),
+            )
+            connection.execute(
+                "INSERT INTO activities(activity_id, project_id, created_at) VALUES (?, ?, ?)",
+                (ACTIVITY_ID, PROJECT_ID, recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO artifacts(
+                    artifact_id, sha256, media_type, byte_size, storage_uri,
+                    producing_revision_id, producing_run_id, origin_kind,
+                    source_ref, created_at
+                ) VALUES (?, ?, 'text/plain', 0, ?, NULL, NULL, 'fixture', ?, ?)
+                """,
+                (
+                    artifact_id,
+                    "0" * 64,
+                    f"cas://sha256/{'0' * 64}",
+                    artifact_id,
+                    recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO domain_events(
+                    event_id, schema_version, event_type, project_id, activity_id,
+                    session_id, workbench_id, correlation_id, causation_id,
+                    recorded_at, variant_id, base_revision_id, payload_json
+                ) VALUES (?, 1, 'artifact.verification_started', ?, ?, NULL, NULL,
+                          ?, ?, ?, NULL, NULL, '{}')
+                """,
+                (event_id, PROJECT_ID, ACTIVITY_ID, CORRELATION_ID, job_id, recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO command_receipts(
+                    command_id, command_hash, event_id, receipt_json, recorded_at
+                ) VALUES (?, ?, ?, '{}', ?)
+                """,
+                (command_id, "1" * 64, event_id, recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO jobs(
+                    job_id, command_id, job_type, project_id, activity_id,
+                    session_id, workbench_id, correlation_id, artifact_id,
+                    status, attempts, created_at
+                ) VALUES (?, ?, 'artifact.verify_sha256', ?, ?, NULL, NULL, ?, ?,
+                          'pending', 0, ?)
+                """,
+                (
+                    job_id,
+                    command_id,
+                    PROJECT_ID,
+                    ACTIVITY_ID,
+                    CORRELATION_ID,
+                    artifact_id,
+                    recorded_at,
+                ),
+            )
+
+        migration_005 = source_migrations / "005_m3_formal_runs.sql"
+        shutil.copyfile(migration_005, staged_migrations / migration_005.name)
+        upgraded = Database(database_path, migrations_dir=staged_migrations)
+        with upgraded.connect() as connection:
+            job = connection.execute(
+                """
+                SELECT job_id, job_type, status, attempts,
+                       run_spec_id, run_id, validation_id, candidate_revision_id
+                FROM jobs WHERE job_id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+            foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+
+        self.assertEqual(
+            tuple(job),
+            (job_id, "artifact.verify_sha256", "pending", 0, None, None, None, None),
+        )
+        self.assertEqual(foreign_key_errors, [])
 
     def test_context_capture_is_atomic_idempotent_and_immutable(self) -> None:
         command = context_capture_command()

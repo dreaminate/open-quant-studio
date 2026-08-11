@@ -89,3 +89,32 @@ its typed `.default` export resolved it. The final full gate above passed.
 - No React/Vite application or donor UI is present.
 - No formal Run, CI success, deployment, production state, or user acceptance
   is claimed.
+
+## 2026-08-12 M0-M10 decision refresh
+
+This refresh updates the authority and licensing surface without rewriting the
+historical validation above.
+
+- The user selected an OQS-owned cleanroom Rust/PyO3 formal engine, an
+  OQS-owned React/Vite SPA, the MIT project license, and the M0-M10 milestone
+  plan. Donor repositories remain read-only and no donor file was copied.
+- Root `LICENSE` is MIT with SHA-256
+  `875271587863cc1d7a4d8542d129f9014edd26e5252fa982885ca53653a53b8d`.
+- Live donor/remotes were refreshed in `06_MIGRATION_MAP.md`. QuantBT remains
+  dirty without a candidate UI license; quant-assistant remains dirty without
+  root/Rust rights or reliable product lineage; VibeTrading is clean but local
+  `main` is behind remote; Pi remains pinned to `0.84.1` while mutable upstream
+  `main` has advanced.
+- `pnpm install --frozen-lockfile`: exit `0`; five workspace projects were up
+  to date. `uv lock --project services/quant-domain --check`: exit `0`.
+- `pnpm validate:m0`: exit `0`; 46 required files, writable data root, ten
+  contracts/parity tests, and the non-formal golden oracle passed.
+- `pnpm licenses list --json`: exit `0`; groups were MIT 60, Apache-2.0 48,
+  BSD-3-Clause 14, BlueOak-1.0.0 5, ISC 8, and 0BSD 1.
+- `git diff --check`: exit `0` after removing two prompt EOF whitespace errors.
+
+Delivery state for this refresh: local checkout implemented on
+`codex/oqs-m0-m10-minimal` after checkpoint `146024d`; local M0 tests passed;
+the authority refresh is not yet pushed or represented by a PR; GitHub CI has
+no workflow/run evidence; production was not deployed; user acceptance remains
+pending.

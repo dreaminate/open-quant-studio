@@ -185,10 +185,8 @@ class M3HttpTest(HttpTestCase):
                 candidate_revision_id=REVISION_A_ID,
             )
         )
-        self.assertEqual(status, 201, body)
-        self.assertEqual(
-            json.loads(body)["event"]["payload"]["promoted_revision_id"], REVISION_A_ID
-        )
+        self.assertEqual(status, 409, body)
+        self.assertEqual(json.loads(body)["error"], "promotion_conflict")
 
         status, body = self.post_command(
             promote_command(
@@ -205,7 +203,7 @@ class M3HttpTest(HttpTestCase):
             "GET", f"/v1/projects/{PROJECT_ID}/revision-head"
         )
         self.assertEqual(status, 200, body)
-        self.assertEqual(json.loads(body)["head_revision_id"], REVISION_A_ID)
+        self.assertEqual(json.loads(body)["head_revision_id"], ROOT_REVISION_ID)
 
     def test_revision_read_query_validation_and_missing_resources(self) -> None:
         status, _, body = self.request(

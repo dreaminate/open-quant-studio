@@ -1,0 +1,23 @@
+{
+  "event_id": "26262626-2626-4262-8262-262626262626",
+  "stream_seq": 7,
+  "schema_version": 1,
+  "event_type": "formal.run_started",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m3-run",
+  "workbench_id": "run-detail",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "25252525-2525-4252-8252-252525252525",
+  "recorded_at": "2026-08-12T01:02:00+08:00",
+  "variant_id": "55555555-5555-4555-8555-555555555555",
+  "base_revision_id": "77777777-7777-4777-8777-777777777777",
+  "payload": {
+    "job_id": "25252525-2525-4252-8252-252525252525",
+    "run_spec_id": "17171717-1717-4171-8171-171717171717",
+    "run_id": "18181818-1818-4181-8181-181818181818",
+    "validation_id": "19191919-1919-4191-8191-191919191919",
+    "candidate_revision_id": "77777777-7777-4777-8777-777777777777",
+    "run_spec_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-run-event.schema.json",
+  "title": "Open Quant Studio Formal Run lifecycle events v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "enum": ["formal.run_queued", "formal.run_started", "formal.run_completed"]
+        },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "base_revision_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "enum": ["formal.run_queued", "formal.run_started"] },
+            "payload": { "$ref": "#/$defs/activePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "formal.run_completed" },
+            "payload": { "$ref": "#/$defs/completedPayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "activePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "run_spec_id",
+        "run_id",
+        "validation_id",
+        "candidate_revision_id",
+        "run_spec_hash"
+      ],
+      "properties": {
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "gateOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "enum": ["passed", "failed"] },
+        "strategy_import": { "enum": ["passed", "failed"] },
+        "smoke_run": { "enum": ["passed", "failed"] }
+      }
+    },
+    "completedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "succeeded" },
+                "gates": {
+                  "type": "object",
+                  "properties": {
+                    "contract": { "const": "passed" },
+                    "strategy_import": { "const": "passed" },
+                    "smoke_run": { "const": "passed" }
+                  }
+                },
+                "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+                "engine_result_sha256": { "$ref": "#/$defs/sha256" },
+                "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+                "manifest_sha256": { "$ref": "#/$defs/sha256" },
+                "calculation_hash": { "$ref": "#/$defs/sha256" },
+                "error_code": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "failed" },
+                "engine_result_artifact_id": { "type": "null" },
+                "engine_result_sha256": { "type": "null" },
+                "manifest_artifact_id": { "type": "null" },
+                "manifest_sha256": { "type": "null" },
+                "calculation_hash": { "type": "null" },
+                "error_code": {
+                  "enum": [
+                    "contract_gate_failed",
+                    "strategy_import_failed",
+                    "engine_input_missing",
+                    "engine_input_integrity_mismatch",
+                    "smoke_run_failed",
+                    "engine_result_contract_failed"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "required": [
+        "job_id",
+        "run_spec_id",
+        "run_id",
+        "validation_id",
+        "candidate_revision_id",
+        "run_spec_hash",
+        "status",
+        "gates",
+        "engine_result_artifact_id",
+        "engine_result_sha256",
+        "manifest_artifact_id",
+        "manifest_sha256",
+        "calculation_hash",
+        "error_code"
+      ],
+      "properties": {
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "gates": { "$ref": "#/$defs/gateOutcomes" },
+        "engine_result_artifact_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "engine_result_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "manifest_artifact_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "manifest_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "calculation_hash": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "error_code": {
+          "oneOf": [
+            {
+              "enum": [
+                "contract_gate_failed",
+                "strategy_import_failed",
+                "engine_input_missing",
+                "engine_input_integrity_mismatch",
+                "smoke_run_failed",
+                "engine_result_contract_failed"
+              ]
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

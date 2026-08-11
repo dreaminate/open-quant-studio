@@ -8,7 +8,7 @@ flowchart LR
   CP -->|"Pi SDK"| PI["Pi AgentSession"]
   CP -->|"versioned HTTP commands"| PY["Python quant-domain service"]
   PY -->|"SSE domain events"| CP
-  PY -->|"PyO3"| RS["Rust quant engine"]
+  PY -->|"PyO3"| RS["OQS cleanroom Rust engine"]
   PY --> DB["SQLite WAL"]
   PY --> CAS["Content-addressed artifacts"]
   CP --> PJ["Pi session JSONL"]
@@ -22,7 +22,7 @@ flowchart LR
 | LLM turn, branch, compaction, steer/follow-up | Pi through the TypeScript adapter |
 | Active sessions, workbench binding, live routing | TypeScript control plane |
 | Project, task, context, inbox/outbox, revision, variant, run metadata | Python domain service |
-| Formal backtest calculations | Rust/PyO3 quant engine |
+| Formal backtest calculations | OQS-owned cleanroom Rust/PyO3 engine |
 | Relationship and lineage truth | Research Project Graph in the domain service |
 | Visual projection and interaction | One React/Vite SPA |
 | Raw conversation tree | Pi JSONL |
@@ -35,6 +35,10 @@ flowchart LR
 - No second workflow executor inside the infinite canvas.
 - Active live routing is in-process. Durable coordination is persisted through the Python service.
 - Large payloads cross process boundaries by artifact reference.
+- Python invokes the formal engine and durably records its typed result; neither TypeScript nor the SPA writes formal business state.
+- Pi built-in shell/filesystem/edit/write are disabled by default. Trusted Local Mode is an explicit opt-in projection limited to the active OQS project workspace and `imports/`/`exports/`; it never mounts all of HOME.
+- Shell output is diagnostic until a typed domain command validates and registers it. It cannot become a Run, metric, or Canonical Context by itself.
+- The POC runs at most one Formal Run concurrently and proves at most two active Pi sessions; no distributed scheduler is part of this architecture.
 
 ## Recovery
 

@@ -2,13 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   type CommandEnvelope,
+  type DomainEvent,
   type M2ArtifactRef,
   type SessionCommand,
   type SessionMessagePayload,
   type SessionReceiptPayload,
   type SessionSourceRef,
   validateTypedCommandEnvelope,
-  validateTypedEventEnvelope,
+  validateDomainEvent,
 } from "@open-quant-studio/contracts";
 export type { SessionSourceRef } from "@open-quant-studio/contracts";
 
@@ -87,7 +88,7 @@ export interface DurableMessage extends InboxMessage {
 export interface CommandReceipt {
   command_id: string;
   disposition: "accepted" | "replayed";
-  event: unknown;
+  event: DomainEvent;
 }
 
 export interface SessionCommandContext {
@@ -141,6 +142,7 @@ export interface MessageRequest {
 export interface QuantDomainSessionClient {
   readonly baseUrl: string;
   stageText(body: string): Promise<ArtifactBlobReceipt>;
+  stageJson(body: string): Promise<ArtifactBlobReceipt>;
   stageSourceEntry(canonicalEntry: string): Promise<ArtifactBlobReceipt>;
   postCommand(command: unknown): Promise<CommandReceipt>;
   registerSession(request: RegisterSessionRequest): Promise<CommandReceipt>;
@@ -174,6 +176,15 @@ export class FetchQuantDomainSessionClient implements QuantDomainSessionClient {
     return this.#stageBytes(bytes);
   }
 
+  async stageJson(body: string): Promise<ArtifactBlobReceipt> {
+    const bytes = new TextEncoder().encode(body);
+    if (bytes.byteLength < 2 || bytes.byteLength > 5 * 1024 * 1024) {
+      throw new Error("formal engine input must contain between 2 and 5242880 UTF-8 bytes");
+    }
+    JSON.parse(body);
+    return this.#stageBytes(bytes, "application/json");
+  }
+
   async stageSourceEntry(canonicalEntry: string): Promise<ArtifactBlobReceipt> {
     const bytes = new TextEncoder().encode(canonicalEntry);
     if (bytes.byteLength > MAX_SOURCE_ENTRY_BYTES) {
@@ -182,13 +193,16 @@ export class FetchQuantDomainSessionClient implements QuantDomainSessionClient {
     return this.#stageBytes(bytes);
   }
 
-  async #stageBytes(bytes: Uint8Array<ArrayBuffer>): Promise<ArtifactBlobReceipt> {
+  async #stageBytes(
+    bytes: Uint8Array<ArrayBuffer>,
+    mediaType = "text/plain; charset=utf-8",
+  ): Promise<ArtifactBlobReceipt> {
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const response = await this.#fetch(
       `${this.#baseUrl}/v1/artifact-blobs/${sha256}`,
       {
         method: "PUT",
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        headers: { "Content-Type": mediaType },
         body: bytes,
       },
     );
@@ -466,18 +480,22 @@ function assertCommandReceipt(value: unknown): CommandReceipt {
   if (record.event === undefined) {
     throw new Error("quant-domain command response omitted its durable event");
   }
-  const validation = validateTypedEventEnvelope(record.event);
+  const validation = validateDomainEvent(record.event);
   if (!validation.valid) {
     throw new Error(`quant-domain command response event is invalid: ${validation.errors.join("; ")}`);
   }
-  return value as CommandReceipt;
+  return {
+    command_id: record.command_id,
+    disposition: record.disposition,
+    event: validation.value,
+  };
 }
 
 function assertReceiptBinding(
   receipt: CommandReceipt,
   command: CommandEnvelope,
 ): void {
-  const event = receipt.event as Record<string, unknown>;
+  const event = receipt.event as unknown as Record<string, unknown>;
   const eventTypeByCommand: Record<string, string> = {
     "session.register": "session.registered",
     "session.workbench_bind": "session.workbench_bound",
@@ -488,7 +506,9 @@ function assertReceiptBinding(
     "session.message_acknowledge": "session.message_acknowledged",
     "workspace.revision_create": "workspace.revision_created",
     "strategy.variant_create": "strategy.variant_created",
+    "workspace.merge_create": "workspace.merge_candidate_created",
     "workspace.revision_promote": "workspace.revision_promoted",
+    "formal.run_request": "formal.run_queued",
   };
   if (
     receipt.command_id !== command.command_id ||
@@ -500,7 +520,9 @@ function assertReceiptBinding(
     event.workbench_id !== command.workbench_id ||
     event.correlation_id !== command.correlation_id ||
     (command.command_type.startsWith("workspace.revision") ||
-      command.command_type === "strategy.variant_create") &&
+      command.command_type === "strategy.variant_create" ||
+      command.command_type === "workspace.merge_create" ||
+      command.command_type === "formal.run_request") &&
       (event.variant_id !== command.variant_id ||
         event.base_revision_id !== command.base_revision_id)
   ) {
@@ -521,10 +543,26 @@ function assertReceiptBinding(
     throw new Error("quant-domain command response event did not preserve revision identity");
   }
   if (
+    command.command_type === "workspace.merge_create" &&
+    payload.candidate_revision_id !== commandPayload.candidate_revision_id
+  ) {
+    throw new Error("quant-domain command response event did not preserve merge candidate identity");
+  }
+  if (
     command.command_type === "workspace.revision_promote" &&
-    payload.promoted_revision_id !== commandPayload.candidate_revision_id
+    (payload.promoted_revision_id !== commandPayload.candidate_revision_id ||
+      payload.validation_id !== commandPayload.validation_id)
   ) {
     throw new Error("quant-domain command response event did not preserve revision identity");
+  }
+  if (
+    command.command_type === "formal.run_request" &&
+    (payload.run_spec_id !== commandPayload.run_spec_id ||
+      payload.run_id !== commandPayload.run_id ||
+      payload.validation_id !== commandPayload.validation_id ||
+      payload.candidate_revision_id !== commandPayload.candidate_revision_id)
+  ) {
+    throw new Error("quant-domain command response event did not preserve formal Run identity");
   }
   if (
     command.command_type.startsWith("session.") &&

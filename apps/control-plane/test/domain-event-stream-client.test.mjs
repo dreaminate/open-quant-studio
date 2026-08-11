@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import { FetchDomainEventStreamClient } from "../dist/domain-event-stream-client.js";
 
 
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
+const CONTRACT_FIXTURES = resolve(
+  import.meta.dirname,
+  "../../../packages/contracts/fixtures/v1",
+);
 const ARTIFACT = {
   artifact_id: "99999999-9999-4999-8999-999999999999",
   sha256: "5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
@@ -66,6 +72,10 @@ function sse(...events) {
     status: 200,
     headers: { "Content-Type": "text/event-stream; charset=utf-8" },
   });
+}
+
+function contractFixture(name) {
+  return JSON.parse(readFileSync(resolve(CONTRACT_FIXTURES, name), "utf8"));
 }
 
 test("fetch SSE reader advances only after ordered callbacks acknowledge events", async () => {
@@ -169,5 +179,50 @@ test("known event types must satisfy their concrete payload contract", async () 
       onEvent: async () => undefined,
     }),
     /domain event contract violation/,
+  );
+});
+
+test("SSE accepts the ordered Formal Run lifecycle through gated promotion", async () => {
+  const lifecycle = [
+    contractFixture("event.formal-run-queued.valid.json"),
+    contractFixture("event.formal-run-started.valid.json"),
+    contractFixture("event.formal-run-completed-succeeded.valid.json"),
+    contractFixture("event.revision-promoted.valid.json"),
+  ];
+  lifecycle.forEach((domainEvent, index) => {
+    domainEvent.stream_seq = index + 1;
+  });
+  const candidateRevisionId = lifecycle[2].payload.candidate_revision_id;
+  lifecycle[3].payload.promoted_revision_id = candidateRevisionId;
+  const client = new FetchDomainEventStreamClient(
+    "http://127.0.0.1:8777",
+    async () => sse(...lifecycle),
+  );
+  const received = [];
+
+  const acknowledged = await client.read({
+    projectId: PROJECT_ID,
+    lastAcknowledgedStreamSeq: 0,
+    signal: new AbortController().signal,
+    onEvent: async (domainEvent) => received.push(domainEvent),
+  });
+
+  assert.equal(acknowledged, 4);
+  assert.deepEqual(
+    received.map((domainEvent) => domainEvent.event_type),
+    [
+      "formal.run_queued",
+      "formal.run_started",
+      "formal.run_completed",
+      "workspace.revision_promoted",
+    ],
+  );
+  assert.deepEqual(
+    new Set(received.map((domainEvent) => domainEvent.payload.validation_id)),
+    new Set(["19191919-1919-4191-8191-191919191919"]),
+  );
+  assert.equal(
+    received[2].payload.candidate_revision_id,
+    received[3].payload.promoted_revision_id,
   );
 });

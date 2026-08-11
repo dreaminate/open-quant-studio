@@ -31,6 +31,7 @@ const VARIANT_A_ID = "20202020-2020-4020-8020-202020202020";
 const VARIANT_B_ID = "30303030-3030-4030-8030-303030303030";
 const REVISION_A_ID = "40404040-4040-4040-8040-404040404040";
 const REVISION_B_ID = "50505050-5050-4050-8050-505050505050";
+const VALIDATION_ID = "71717171-7171-4171-8171-717171717171";
 const REPO_ROOT = resolve(import.meta.dirname, "../../..");
 
 async function freePort() {
@@ -77,11 +78,30 @@ function receipt(command, eventType = "workspace.revision_created") {
       base_revision_id: command.base_revision_id,
       payload: eventType === "strategy.variant_created"
         ? { variant_id: command.variant_id, revision_id: command.base_revision_id }
+        : eventType === "workspace.merge_candidate_created"
+          ? {
+              candidate_revision_id: command.payload.candidate_revision_id,
+              project_parent_revision_id: command.expected_revision_id,
+              variant_parent_revision_id: command.base_revision_id,
+              git_commit_oid: "a".repeat(40),
+              git_tree_oid: "b".repeat(40),
+              file_count: command.payload.files.length,
+            }
+        : eventType === "formal.run_queued"
+          ? {
+              job_id: "72727272-7272-4272-8272-727272727272",
+              run_spec_id: command.payload.run_spec_id,
+              run_id: command.payload.run_id,
+              validation_id: command.payload.validation_id,
+              candidate_revision_id: command.payload.candidate_revision_id,
+              run_spec_hash: "c".repeat(64),
+            }
         : eventType === "workspace.revision_promoted"
           ? {
               variant_id: command.variant_id,
               previous_revision_id: command.expected_revision_id,
               promoted_revision_id: command.payload.candidate_revision_id,
+              validation_id: command.payload.validation_id,
               git_commit_oid: "a".repeat(40),
               git_tree_oid: "b".repeat(40),
             }
@@ -99,6 +119,7 @@ function receipt(command, eventType = "workspace.revision_created") {
 function fakeClient() {
   const commands = [];
   const staged = [];
+  const stagedJson = [];
   const client = {
     baseUrl: "http://quant-domain.test",
     async stageText(body) {
@@ -107,16 +128,26 @@ function fakeClient() {
       staged.push(body);
       return { sha256: hash, byte_size: bytes.byteLength, storage_uri: `cas://sha256/${hash}` };
     },
+    async stageJson(body) {
+      const bytes = new TextEncoder().encode(body);
+      const hash = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
+      stagedJson.push(body);
+      return { sha256: hash, byte_size: bytes.byteLength, storage_uri: `cas://sha256/${hash}` };
+    },
     async postCommand(command) {
       commands.push(structuredClone(command));
       return receipt(command, command.command_type === "strategy.variant_create"
         ? "strategy.variant_created"
+        : command.command_type === "workspace.merge_create"
+          ? "workspace.merge_candidate_created"
+        : command.command_type === "formal.run_request"
+          ? "formal.run_queued"
         : command.command_type === "workspace.revision_promote"
           ? "workspace.revision_promoted"
           : "workspace.revision_created");
     },
   };
-  return { client, commands, staged };
+  return { client, commands, staged, stagedJson };
 }
 
 const actor = {
@@ -126,7 +157,7 @@ const actor = {
   workbenchId: "code",
 };
 
-test("revision tools expose exactly five actor-bound bounded tools", () => {
+test("revision tools expose exactly seven actor-bound bounded tools", () => {
   const { client } = fakeClient();
   const revisionClient = new FetchQuantDomainRevisionClient(client, async () => {
     throw new Error("reads are not used");
@@ -137,6 +168,8 @@ test("revision tools expose exactly five actor-bound bounded tools", () => {
     "strategy_variant_create",
     "revision_create_child",
     "revision_compare",
+    "merge_candidate_create",
+    "formal_run_request",
     "revision_promote",
   ]);
   for (const tool of tools) {
@@ -224,6 +257,66 @@ test("same command retry preserves deterministic revision/artifact/provenance id
   assert.deepEqual(commands[1], commands[0]);
 });
 
+test("merge, Formal Run, and Promote commands preserve one typed gate lineage", async () => {
+  const { client, commands, staged, stagedJson } = fakeClient();
+  const revisionClient = new FetchQuantDomainRevisionClient(client, async () => {
+    throw new Error("reads are not used");
+  });
+  const merge = await revisionClient.createMergeCandidate({
+    ...actor,
+    commandId: "68686868-6868-4868-8868-686868686868",
+    expectedRevisionId: ROOT_REVISION_ID,
+    variantId: VARIANT_A_ID,
+    baseRevisionId: REVISION_A_ID,
+    candidateRevisionId: REVISION_B_ID,
+    message: "resolved merge",
+    files: [{ path: "strategy.py", body: "def on_bar(bar):\n    return []\n" }],
+  });
+  const engineInputJson = "{}";
+  const engineInputHash = (await import("node:crypto"))
+    .createHash("sha256").update(engineInputJson).digest("hex");
+  const formal = await revisionClient.requestFormalRun({
+    ...actor,
+    commandId: "69696969-6969-4969-8969-696969696969",
+    candidateRevisionId: REVISION_B_ID,
+    variantId: VARIANT_A_ID,
+    engineInputJson,
+    dataSnapshotId: "70707070-7070-4070-8070-707070707070",
+    dataSnapshotSha256: engineInputHash,
+    strategyTreeOid: "a".repeat(40),
+    parametersSha256: "b".repeat(64),
+    costModelSha256: "c".repeat(64),
+    environmentLockSha256: "d".repeat(64),
+    priceBasis: "raw",
+    cutoff: "2026-01-01T00:00:00Z",
+    timezone: "Asia/Shanghai",
+    sampleStart: "2026-01-02T00:00:00Z",
+    sampleEnd: "2026-01-07T23:59:59Z",
+    randomSeed: 0,
+    validationId: VALIDATION_ID,
+  });
+  const promote = await revisionClient.promoteRevision({
+    ...actor,
+    commandId: "73737373-7373-4373-8373-737373737373",
+    expectedRevisionId: ROOT_REVISION_ID,
+    variantId: VARIANT_A_ID,
+    candidateRevisionId: REVISION_B_ID,
+    validationId: VALIDATION_ID,
+  });
+
+  assert.deepEqual(commands.map((command) => command.command_type), [
+    "workspace.merge_create",
+    "formal.run_request",
+    "workspace.revision_promote",
+  ]);
+  assert.equal(commands.every((command) => validateTypedCommandEnvelope(command).valid), true);
+  assert.equal(merge.event.payload.candidate_revision_id, REVISION_B_ID);
+  assert.equal(formal.event.payload.validation_id, VALIDATION_ID);
+  assert.equal(promote.event.payload.validation_id, VALIDATION_ID);
+  assert.deepEqual(staged, ["def on_bar(bar):\n    return []\n"]);
+  assert.deepEqual(stagedJson, [engineInputJson]);
+});
+
 test("stale promotion HTTP conflict is surfaced", async () => {
   const { client } = fakeClient();
   client.postCommand = async () => {
@@ -240,6 +333,7 @@ test("stale promotion HTTP conflict is surfaced", async () => {
       expectedRevisionId: ROOT_REVISION_ID,
       variantId: VARIANT_A_ID,
       candidateRevisionId: REVISION_A_ID,
+      validationId: VALIDATION_ID,
     }),
     (error) => error?.status === 409 && error?.code === "promotion_conflict",
   );
@@ -369,19 +463,54 @@ test("real Python HTTP reuses canonical text artifact identity from an M2 messag
   assert.equal(receipt.event.base_revision_id, null);
 });
 
-test("an official faux Pi AgentSession invokes strategy_variant_create", async () => {
+test("an official faux Pi AgentSession executes the typed merge, Formal Run, and gated Promote chain", async () => {
   const root = await mkdtemp(join(tmpdir(), "oqs-m3-pi-"));
+  const engineInputJson = "{}";
+  const engineInputHash = (await import("node:crypto"))
+    .createHash("sha256").update(engineInputJson).digest("hex");
   const faux = registerFauxProvider({
     provider: "oqs-m3-faux",
     models: [{ id: "m3-faux", name: "M3 faux", reasoning: false, input: ["text"] }],
   });
   faux.setResponses([
-    fauxAssistantMessage(fauxToolCall("strategy_variant_create", {
-      base_revision_id: ROOT_REVISION_ID,
+    fauxAssistantMessage(fauxToolCall("merge_candidate_create", {
+      expected_revision_id: ROOT_REVISION_ID,
       variant_id: VARIANT_A_ID,
+      base_revision_id: REVISION_A_ID,
+      message: "resolve the candidate",
+      files: [{ path: "strategy.py", body: "def on_bar(bar):\n    return []\n" }],
+      candidate_revision_id: REVISION_B_ID,
       command_id: "66666666-6666-4666-8666-666666666666",
     })),
-    fauxAssistantMessage("variant created"),
+    fauxAssistantMessage(fauxToolCall("formal_run_request", {
+      candidate_revision_id: REVISION_B_ID,
+      variant_id: VARIANT_A_ID,
+      engine_input_json: engineInputJson,
+      data_snapshot_id: "70707070-7070-4070-8070-707070707070",
+      data_snapshot_sha256: engineInputHash,
+      strategy_tree_oid: "a".repeat(40),
+      parameters_sha256: "b".repeat(64),
+      cost_model_sha256: "c".repeat(64),
+      environment_lock_sha256: "d".repeat(64),
+      price_basis: "raw",
+      cutoff: "2026-01-01T00:00:00Z",
+      timezone: "Asia/Shanghai",
+      sample_start: "2026-01-02T00:00:00Z",
+      sample_end: "2026-01-07T23:59:59Z",
+      random_seed: 0,
+      run_spec_id: "74747474-7474-4474-8474-747474747474",
+      run_id: "75757575-7575-4575-8575-757575757575",
+      validation_id: VALIDATION_ID,
+      command_id: "76767676-7676-4676-8676-767676767676",
+    })),
+    fauxAssistantMessage(fauxToolCall("revision_promote", {
+      expected_revision_id: ROOT_REVISION_ID,
+      variant_id: VARIANT_A_ID,
+      candidate_revision_id: REVISION_B_ID,
+      validation_id: VALIDATION_ID,
+      command_id: "77777777-7777-4777-8777-777777777777",
+    })),
+    fauxAssistantMessage("validated candidate promoted"),
   ]);
   const modelRuntime = await ModelRuntime.create({
     authPath: join(root, "auth.json"),
@@ -406,8 +535,40 @@ test("an official faux Pi AgentSession invokes strategy_variant_create", async (
     }],
     streamSimple,
   });
-  const { client, commands } = fakeClient();
-  const revisionClient = new FetchQuantDomainRevisionClient(client, async () => {
+  const commands = [];
+  const receipts = [];
+  const sessionClient = new FetchQuantDomainSessionClient(
+    "http://quant-domain.test",
+    async (input, init) => {
+      const url = String(input);
+      if (url.includes("/v1/artifact-blobs/")) {
+        const sha256 = url.slice(url.lastIndexOf("/") + 1);
+        const byteSize = init.body.byteLength;
+        return new Response(JSON.stringify({
+          sha256,
+          byte_size: byteSize,
+          storage_uri: `cas://sha256/${sha256}`,
+        }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const command = JSON.parse(init.body);
+      commands.push(structuredClone(command));
+      const eventType = command.command_type === "workspace.merge_create"
+        ? "workspace.merge_candidate_created"
+        : command.command_type === "formal.run_request"
+          ? "formal.run_queued"
+          : "workspace.revision_promoted";
+      const commandReceipt = receipt(command, eventType);
+      receipts.push(structuredClone(commandReceipt));
+      return new Response(JSON.stringify(commandReceipt), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  );
+  const revisionClient = new FetchQuantDomainRevisionClient(sessionClient, async () => {
     throw new Error("reads are not used");
   });
   const adapter = await PiSessionAdapter.create({
@@ -427,11 +588,35 @@ test("an official faux Pi AgentSession invokes strategy_variant_create", async (
   try {
     await adapter.followUp({
       messageId: "67676767-6767-4767-8767-676767676767",
-      quotedBody: "create a strategy variant",
+      quotedBody: "merge, validate, and promote the strategy candidate",
     }, { wake: true });
-    assert.equal(commands.length, 1);
-    assert.equal(commands[0].command_type, "strategy.variant_create");
-    assert.equal(validateTypedCommandEnvelope(commands[0]).valid, true);
+    assert.deepEqual(commands.map((command) => command.command_type), [
+      "workspace.merge_create",
+      "formal.run_request",
+      "workspace.revision_promote",
+    ]);
+    assert.equal(
+      commands.every((command) => validateTypedCommandEnvelope(command).valid),
+      true,
+    );
+    commands.forEach((command, index) => {
+      assert.equal(receipts[index].command_id, command.command_id);
+      assert.equal(receipts[index].event.causation_id, command.command_id);
+      assert.equal(command.project_id, PROJECT_ID);
+      assert.equal(command.activity_id, ACTIVITY_ID);
+      assert.equal(command.session_id, SESSION_ID);
+      assert.equal(command.workbench_id, "code");
+    });
+    assert.equal(commands[1].base_revision_id, commands[0].payload.candidate_revision_id);
+    assert.equal(commands[1].payload.validation_id, VALIDATION_ID);
+    assert.equal(receipts[1].event.payload.run_spec_id, commands[1].payload.run_spec_id);
+    assert.equal(receipts[1].event.payload.run_id, commands[1].payload.run_id);
+    assert.equal(receipts[1].event.payload.validation_id, VALIDATION_ID);
+    assert.equal(
+      receipts[2].event.payload.promoted_revision_id,
+      commands[0].payload.candidate_revision_id,
+    );
+    assert.equal(receipts[2].event.payload.validation_id, VALIDATION_ID);
   } finally {
     adapter.dispose();
     faux.unregister();

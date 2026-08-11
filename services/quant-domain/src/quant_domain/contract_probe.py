@@ -79,6 +79,16 @@ validators = {
         registry=registry,
         format_checker=FormatChecker(),
     ),
+    "formal_run_command": Draft202012Validator(
+        schemas["formal-run-command"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "formal_run_event": Draft202012Validator(
+        schemas["formal-run-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
 }
 
 results = {}
@@ -112,7 +122,7 @@ for contract_case in case_document["cases"]:
     if valid and contract_case["kind"] == "revision_command":
         command_type = fixture["command_type"]
         payload = fixture["payload"]
-        if command_type == "workspace.revision_create":
+        if command_type in {"workspace.revision_create", "workspace.merge_create"}:
             paths = [file["path"] for file in payload["files"]]
             valid = len(paths) == len(set(paths))
             valid = valid and all(
@@ -130,14 +140,19 @@ for contract_case in case_document["cases"]:
                 valid = valid and artifact["storage_uri"] == (
                     f"cas://sha256/{artifact['sha256']}"
                 )
-            if fixture["expected_revision_id"] is not None:
+            if (
+                command_type == "workspace.revision_create"
+                and fixture["expected_revision_id"] is not None
+            ):
                 valid = valid and fixture["expected_revision_id"] == fixture["base_revision_id"]
+            if command_type == "workspace.merge_create":
+                valid = valid and fixture["expected_revision_id"] != fixture["base_revision_id"]
         elif command_type == "strategy.variant_create":
             valid = (
                 payload["variant_id"] == fixture["variant_id"]
                 and payload["base_revision_id"] == fixture["base_revision_id"]
             )
-        else:
+        elif command_type == "workspace.revision_promote":
             valid = (
                 fixture["expected_revision_id"] == fixture["base_revision_id"]
                 and payload["variant_id"] == fixture["variant_id"]
@@ -155,11 +170,34 @@ for contract_case in case_document["cases"]:
                 payload["variant_id"] == fixture["variant_id"]
                 and payload["revision_id"] == fixture["base_revision_id"]
             )
+        elif event_type == "workspace.merge_candidate_created":
+            valid = (
+                payload["variant_parent_revision_id"] == fixture["base_revision_id"]
+                and payload["project_parent_revision_id"]
+                != payload["variant_parent_revision_id"]
+            )
         else:
             valid = (
                 payload["variant_id"] == fixture["variant_id"]
                 and payload["previous_revision_id"] == fixture["base_revision_id"]
             )
+    if valid and contract_case["kind"] == "formal_run_command":
+        payload = fixture["payload"]
+        artifact = payload["engine_input"]
+        valid = (
+            artifact["storage_uri"] == f"cas://sha256/{artifact['sha256']}"
+            and fixture["expected_revision_id"] == fixture["base_revision_id"]
+            and payload["candidate_revision_id"] == fixture["base_revision_id"]
+        )
+    if valid and contract_case["kind"] == "formal_run_event":
+        payload = fixture["payload"]
+        valid = payload["candidate_revision_id"] == fixture["base_revision_id"]
+        if (
+            valid
+            and fixture["event_type"] == "formal.run_completed"
+            and payload["status"] == "succeeded"
+        ):
+            valid = payload["calculation_hash"] == payload["engine_result_sha256"]
     results[contract_case["name"]] = valid
 
 sys.stdout.write(json.dumps(results, sort_keys=True))

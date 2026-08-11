@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-run-command.schema.json",
+  "title": "Open Quant Studio Formal Run command v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": { "const": "formal.run_request" },
+        "expected_revision_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "base_revision_id": { "$ref": "#/$defs/uuid" },
+        "payload": { "$ref": "#/$defs/runRequestPayload" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "engineInputArtifact": {
+      "allOf": [
+        {
+          "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": { "const": "application/json" },
+            "byte_size": { "type": "integer", "minimum": 2, "maximum": 5242880 },
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "runRequestPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id",
+        "run_id",
+        "validation_id",
+        "candidate_revision_id",
+        "engine_input",
+        "data_snapshot_id",
+        "data_snapshot_sha256",
+        "strategy_tree_oid",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "environment_lock_sha256",
+        "engine_version",
+        "price_basis",
+        "cutoff",
+        "timezone",
+        "sample_start",
+        "sample_end",
+        "random_seed",
+        "output_schema_version",
+        "gate_policy_version"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "engine_input": { "$ref": "#/$defs/engineInputArtifact" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "type": "string", "format": "date-time" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "type": "string", "format": "date-time" },
+        "sample_end": { "type": "string", "format": "date-time" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "const": 1 },
+        "gate_policy_version": { "const": "m3-v1" }
+      }
+    }
+  }
+}
