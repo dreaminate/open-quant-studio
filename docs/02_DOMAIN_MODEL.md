@@ -34,4 +34,10 @@ Canonical items are retrieved by default. Candidate items are retrieved only whe
 
 ## Concurrent changes
 
-Every write command names `project_id`, `activity_id`, `session_id`, `workbench_id`, `variant_id`, and `base_revision_id`. Concurrent work creates child revisions. Promotion uses compare-and-set against the expected head; conflicts require compare, merge, or an explicit different promotion.
+Every write command carries `project_id`, `activity_id`, `session_id`,
+`workbench_id`, `variant_id`, and `base_revision_id`. Project-scoped commands
+that precede the M3 revision/variant subsystem, such as M1 `context.capture`,
+set the last two fields explicitly to null. Commands that mutate variant-backed
+research must name both identities. Concurrent work creates child revisions.
+Promotion uses compare-and-set against the expected head; conflicts require
+compare, merge, or an explicit different promotion.

@@ -1,3 +1,6 @@
 # packages/research-ui
 
-Future UI package for provenance-safe QuantBT capability slices. Components are migrated only after source snapshot, license, attribution, visual behavior, and contract tests are recorded. No component is implemented yet.
+M0 defines only the package boundary for provenance-safe workbench components.
+No QuantBT file is present: its live worktree is dirty and its committed UI tree
+has no verified reuse license. Any future slice still requires an exact source
+snapshot, license, attribution, changed-file list, and behavior oracle.

@@ -6,9 +6,17 @@ Repository: https://github.com/dreaminate/open-quant-studio
 
 ## Current state
 
-This repository is an architecture and development bootstrap. The product application, runtime integration, backtest integration, and POC are **not implemented yet**.
+The local checkout contains the M0 foundation and the M1 durable-domain vertical
+slice. M1 adds typed context/artifact/job/log contracts, a Python-only SQLite
+WAL writer, atomic event/outbox/receipt writes, a deterministic artifact
+verification job, real HTTP/SSE resume behavior, and a fetch-based TypeScript
+consumer that advances its cursor only after projection acknowledgement.
 
-The first development session must begin at milestone M0 in [the implementation plan](docs/08_IMPLEMENTATION_PLAN.md). Do not interpret the presence of directories or documents as a working application.
+The Pi runtime, Session Fabric, Rust/PyO3 formal engine integration, unified SPA,
+restart recovery, full log lifecycle, and complete POC remain **not
+implemented**. The M0 oracle is not a formal Run, and M1 artifacts/jobs are not
+formal Runs. Read [the M0 evidence](docs/09_M0_FOUNDATION_EVIDENCE.md) and [the
+M1 evidence](docs/10_M1_DURABLE_CORE_EVIDENCE.md).
 
 ## Non-negotiable product boundaries
 
@@ -31,6 +39,7 @@ services/quant-domain/     Python domain service and Job Runner
 crates/quant-engine/       quant-assistant Rust/PyO3 backtest core
 packages/contracts/        command, event, artifact, and tool contracts
 packages/research-ui/      QuantBT-derived workbench components
+fixtures/                  synthetic M0 market data and golden accounting oracle
 docs/                      frozen architecture and POC gates
 prompts/                   fresh-session development and handoff prompts
 third_party/               provenance and attribution policy
@@ -40,8 +49,9 @@ third_party/               provenance and attribution policy
 
 1. Read [AGENTS.md](AGENTS.md).
 2. Read [the project charter](docs/00_PROJECT_CHARTER.md) through [the implementation plan](docs/08_IMPLEMENTATION_PLAN.md).
-3. Paste [START_DEVELOPMENT_PROMPT.md](prompts/START_DEVELOPMENT_PROMPT.md) into the new development session.
-4. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
+3. Run `pnpm install --frozen-lockfile` and `uv sync --project services/quant-domain --frozen`.
+4. Run `pnpm validate:m1` before relying on the local M1 evidence.
+5. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
 
 ## License status
 

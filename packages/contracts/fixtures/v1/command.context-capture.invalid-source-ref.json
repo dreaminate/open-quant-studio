@@ -1,0 +1,31 @@
+{
+  "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "schema_version": 1,
+  "command_type": "context.capture",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m1-a",
+  "workbench_id": "canvas",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "context_item_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "title": "Frozen M0 market fixture",
+    "trust_state": "raw_evidence",
+    "artifact": {
+      "artifact_id": "99999999-9999-4999-8999-999999999999",
+      "sha256": "5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
+      "media_type": "text/csv",
+      "byte_size": 256,
+      "storage_uri": "cas://sha256/5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
+      "producing_revision_id": null,
+      "producing_run_id": null,
+      "provenance": {
+        "origin_kind": "fixture",
+        "source_ref": "Bearer REVIEW-SECRET"
+      }
+    }
+  }
+}

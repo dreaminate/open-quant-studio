@@ -1,0 +1,19 @@
+{
+  "name": "@open-quant-studio/control-plane",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript control-plane boundary; Pi integration begins in M2",
+  "exports": "./dist/domain-event-stream-client.js",
+  "types": "./dist/domain-event-stream-client.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@open-quant-studio/contracts": "workspace:*"
+  }
+}

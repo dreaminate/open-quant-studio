@@ -1,0 +1,24 @@
+{
+  "event_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "stream_seq": 2,
+  "schema_version": 1,
+  "event_type": "artifact.verification_succeeded",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m1-a",
+  "workbench_id": "canvas",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  "recorded_at": "2026-08-11T19:01:00+08:00",
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "artifact_id": "99999999-9999-4999-8999-999999999999",
+    "job_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    "result": {
+      "sha256": "5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
+      "byte_size": 256
+    },
+    "error_code": null
+  }
+}

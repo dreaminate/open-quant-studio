@@ -4,7 +4,23 @@
   "private": true,
   "description": "Local-first agent-native quantitative research studio",
   "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.16.0 <12"
+  },
   "scripts": {
-    "check:bootstrap": "node scripts/check-bootstrap.mjs"
+    "build": "pnpm --filter @open-quant-studio/contracts build && pnpm --filter @open-quant-studio/control-plane build",
+    "check:bootstrap": "node scripts/check-bootstrap.mjs",
+    "check:data-root": "node scripts/check-data-root.mjs",
+    "test": "pnpm run validate:m1",
+    "test:control-plane": "pnpm --filter @open-quant-studio/control-plane test",
+    "test:contracts": "pnpm --filter @open-quant-studio/contracts test",
+    "test:domain": "PYTHONPATH=services/quant-domain/src uv run --project services/quant-domain --frozen python -W error::ResourceWarning -m unittest discover -s services/quant-domain/test -p 'test_*.py' -v",
+    "test:golden": "uv run --project services/quant-domain --frozen python scripts/verify-golden-backtest.py fixtures/backtests/m0-long-short-v1.json",
+    "validate:m0": "pnpm run check:bootstrap && pnpm run check:data-root && pnpm run test:contracts && pnpm run test:golden",
+    "validate:m1": "pnpm run validate:m0 && pnpm run test:control-plane && pnpm run test:domain"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
   }
 }

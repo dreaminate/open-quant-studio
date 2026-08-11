@@ -1,0 +1,136 @@
+{
+  "cases": [
+    {
+      "name": "valid command",
+      "kind": "command",
+      "fixture": "command.valid.json",
+      "valid": true
+    },
+    {
+      "name": "command rejects unversioned top-level state",
+      "kind": "command",
+      "fixture": "command.invalid-extra-field.json",
+      "valid": false
+    },
+    {
+      "name": "valid event",
+      "kind": "event",
+      "fixture": "event.valid.json",
+      "valid": true
+    },
+    {
+      "name": "event stream sequence starts at one",
+      "kind": "event",
+      "fixture": "event.invalid-stream-seq.json",
+      "valid": false
+    },
+    {
+      "name": "event rejects an impossible RFC3339 calendar date",
+      "kind": "event",
+      "fixture": "event.invalid-recorded-at.json",
+      "valid": false
+    },
+    {
+      "name": "valid immutable artifact reference",
+      "kind": "artifact",
+      "fixture": "artifact.valid.json",
+      "valid": true
+    },
+    {
+      "name": "artifact rejects a non-SHA256 digest",
+      "kind": "artifact",
+      "fixture": "artifact.invalid-sha.json",
+      "valid": false
+    },
+    {
+      "name": "artifact storage URI must bind its SHA256 identity",
+      "kind": "artifact",
+      "fixture": "artifact.invalid-storage-identity.json",
+      "valid": false
+    },
+    {
+      "name": "valid context capture command",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.valid.json",
+      "valid": true
+    },
+    {
+      "name": "context capture requires artifact provenance",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "context capture only accepts raw evidence",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-trust.json",
+      "valid": false
+    },
+    {
+      "name": "context capture rejects secret-bearing provenance text",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-source-ref.json",
+      "valid": false
+    },
+    {
+      "name": "M1 context capture rejects unowned revision identities",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-m1-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "valid context captured event",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.valid.json",
+      "valid": true
+    },
+    {
+      "name": "context event rejects the wrong concrete type",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.invalid-type.json",
+      "valid": false
+    },
+    {
+      "name": "M1 context event rejects unowned revision identities",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.invalid-m1-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "valid structured diagnostic log",
+      "kind": "diagnostic_log",
+      "fixture": "diagnostic-log.valid.json",
+      "valid": true
+    },
+    {
+      "name": "diagnostic log requires an independent priority",
+      "kind": "diagnostic_log",
+      "fixture": "diagnostic-log.invalid-priority.json",
+      "valid": false
+    },
+    {
+      "name": "valid artifact verification success event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-succeeded.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid artifact verification started event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-started.valid.json",
+      "valid": true
+    },
+    {
+      "name": "successful verification cannot carry an error",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-succeeded.invalid-error.json",
+      "valid": false
+    },
+    {
+      "name": "valid artifact verification failure event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-failed.valid.json",
+      "valid": true
+    }
+  ]
+}
