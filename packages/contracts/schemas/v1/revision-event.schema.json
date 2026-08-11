@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/revision-event.schema.json",
+  "title": "Open Quant Studio revision and variant events v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "enum": [
+            "workspace.revision_created",
+            "strategy.variant_created",
+            "workspace.revision_promoted"
+          ]
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "workspace.revision_created" },
+            "variant_id": { "type": "null" },
+            "base_revision_id": { "type": "null" },
+            "payload": {
+              "allOf": [
+                { "$ref": "#/$defs/revisionCreatedPayload" },
+                { "type": "object", "properties": { "parent_revision_id": { "type": "null" } } }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "workspace.revision_created" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": {
+              "allOf": [
+                { "$ref": "#/$defs/revisionCreatedPayload" },
+                { "type": "object", "properties": { "parent_revision_id": { "$ref": "#/$defs/uuid" } } }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "strategy.variant_created" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/variantCreatedPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "workspace.revision_promoted" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/revisionPromotedPayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "revisionCreatedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_id",
+        "parent_revision_id",
+        "git_commit_oid",
+        "git_tree_oid",
+        "file_count"
+      ],
+      "properties": {
+        "revision_id": { "$ref": "#/$defs/uuid" },
+        "parent_revision_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "git_commit_oid": { "$ref": "#/$defs/gitOid" },
+        "git_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "file_count": { "type": "integer", "minimum": 1, "maximum": 32 }
+      }
+    },
+    "variantCreatedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variant_id", "revision_id"],
+      "properties": {
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "revision_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "revisionPromotedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant_id",
+        "previous_revision_id",
+        "promoted_revision_id",
+        "git_commit_oid",
+        "git_tree_oid"
+      ],
+      "properties": {
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "previous_revision_id": { "$ref": "#/$defs/uuid" },
+        "promoted_revision_id": { "$ref": "#/$defs/uuid" },
+        "git_commit_oid": { "$ref": "#/$defs/gitOid" },
+        "git_tree_oid": { "$ref": "#/$defs/gitOid" }
+      }
+    }
+  }
+}

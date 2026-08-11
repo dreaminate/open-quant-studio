@@ -23,6 +23,49 @@ CONTEXT_CAPTURE_VALIDATOR = Draft202012Validator(
     registry=REGISTRY,
     format_checker=FormatChecker(),
 )
+COMMAND_ENVELOPE_VALIDATOR = Draft202012Validator(
+    SCHEMAS["command-envelope"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+SESSION_COMMAND_VALIDATOR = Draft202012Validator(
+    SCHEMAS["session-command"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+REVISION_COMMAND_VALIDATOR = Draft202012Validator(
+    SCHEMAS["revision-command"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+EVENT_ENVELOPE_VALIDATOR = Draft202012Validator(
+    SCHEMAS["event-envelope"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+SESSION_EVENT_VALIDATOR = Draft202012Validator(
+    SCHEMAS["session-event"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+REVISION_EVENT_VALIDATOR = Draft202012Validator(
+    SCHEMAS["revision-event"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+COMMAND_VALIDATORS = {
+    "context.capture": CONTEXT_CAPTURE_VALIDATOR,
+    "session.register": SESSION_COMMAND_VALIDATOR,
+    "session.workbench_bind": SESSION_COMMAND_VALIDATOR,
+    "session.message_send": SESSION_COMMAND_VALIDATOR,
+    "session.message_reply": SESSION_COMMAND_VALIDATOR,
+    "session.message_receive": SESSION_COMMAND_VALIDATOR,
+    "session.message_mark_injected": SESSION_COMMAND_VALIDATOR,
+    "session.message_acknowledge": SESSION_COMMAND_VALIDATOR,
+    "workspace.revision_create": REVISION_COMMAND_VALIDATOR,
+    "strategy.variant_create": REVISION_COMMAND_VALIDATOR,
+    "workspace.revision_promote": REVISION_COMMAND_VALIDATOR,
+}
 DOMAIN_EVENT_VALIDATORS = {
     "context.captured": Draft202012Validator(
         SCHEMAS["context-captured-event"],
@@ -44,6 +87,15 @@ DOMAIN_EVENT_VALIDATORS = {
         registry=REGISTRY,
         format_checker=FormatChecker(),
     ),
+    "session.registered": SESSION_EVENT_VALIDATOR,
+    "session.workbench_bound": SESSION_EVENT_VALIDATOR,
+    "session.message_queued": SESSION_EVENT_VALIDATOR,
+    "session.message_receiver_received": SESSION_EVENT_VALIDATOR,
+    "session.message_injected": SESSION_EVENT_VALIDATOR,
+    "session.message_acknowledged": SESSION_EVENT_VALIDATOR,
+    "workspace.revision_created": REVISION_EVENT_VALIDATOR,
+    "strategy.variant_created": REVISION_EVENT_VALIDATOR,
+    "workspace.revision_promoted": REVISION_EVENT_VALIDATOR,
 }
 
 
@@ -64,8 +116,138 @@ def context_capture_errors(command: Any) -> list[str]:
     return messages
 
 
+def session_command_errors(command: Any) -> list[str]:
+    errors = sorted(
+        SESSION_COMMAND_VALIDATOR.iter_errors(command),
+        key=lambda error: list(error.absolute_path),
+    )
+    messages = [
+        f"/{'/'.join(str(part) for part in error.absolute_path)} violates {error.validator}"
+        for error in errors
+    ]
+    if not messages and command["command_type"] in {
+        "session.message_send",
+        "session.message_reply",
+    }:
+        artifact = command["payload"]["artifact"]
+        expected_uri = f"cas://sha256/{artifact['sha256']}"
+        if artifact["storage_uri"] != expected_uri:
+            messages.append("/payload/artifact/storage_uri must match artifact sha256")
+        if artifact["media_type"] != "text/plain":
+            messages.append("/payload/artifact/media_type must be text/plain")
+        if artifact["byte_size"] > 64 * 1024:
+            messages.append("/payload/artifact/byte_size exceeds 65536")
+    if (
+        not messages
+        and command["command_type"] == "session.register"
+        and command["payload"]["session_uri"]
+        != f"pi-jsonl://session/{command['payload']['pi_session_id']}"
+    ):
+        messages.append("/payload/session_uri must match pi_session_id")
+    if (
+        not messages
+        and command["command_type"] == "session.workbench_bind"
+        and command["payload"]["workbench_id"] != command["workbench_id"]
+    ):
+        messages.append("/payload/workbench_id must match /workbench_id")
+    return messages
+
+
+def revision_command_errors(command: Any) -> list[str]:
+    errors = sorted(
+        REVISION_COMMAND_VALIDATOR.iter_errors(command),
+        key=lambda error: list(error.absolute_path),
+    )
+    messages = [
+        f"/{'/'.join(str(part) for part in error.absolute_path)} violates {error.validator}"
+        for error in errors
+    ]
+    if messages:
+        return messages
+
+    command_type = command["command_type"]
+    if command_type == "workspace.revision_create":
+        paths: set[str] = set()
+        for index, file in enumerate(command["payload"]["files"]):
+            if file["path"] in paths:
+                messages.append(
+                    f"/payload/files/{index}/path must be unique within the command"
+                )
+            if any(
+                component.lower() == ".git"
+                for component in file["path"].split("/")
+            ):
+                messages.append(
+                    f"/payload/files/{index}/path must not contain a .git component"
+                )
+            if any(
+                path.startswith(f"{file['path']}/")
+                or file["path"].startswith(f"{path}/")
+                for path in paths
+            ):
+                messages.append(
+                    f"/payload/files/{index}/path must not collide with a file/directory ancestor"
+                )
+            paths.add(file["path"])
+            artifact = file["artifact"]
+            if artifact["storage_uri"] != f"cas://sha256/{artifact['sha256']}":
+                messages.append(
+                    f"/payload/files/{index}/artifact/storage_uri must match artifact sha256"
+                )
+        if (
+            command["expected_revision_id"] is not None
+            and command["expected_revision_id"] != command["base_revision_id"]
+        ):
+            messages.append("/expected_revision_id must match /base_revision_id")
+        return messages
+
+    payload = command["payload"]
+    if command_type == "strategy.variant_create":
+        if payload["variant_id"] != command["variant_id"]:
+            messages.append("/payload/variant_id must match /variant_id")
+        if payload["base_revision_id"] != command["base_revision_id"]:
+            messages.append("/payload/base_revision_id must match /base_revision_id")
+        return messages
+
+    if command["expected_revision_id"] != command["base_revision_id"]:
+        messages.append("/expected_revision_id must match /base_revision_id")
+    if payload["variant_id"] != command["variant_id"]:
+        messages.append("/payload/variant_id must match /variant_id")
+    return messages
+
+
+def command_errors(command: Any) -> list[str]:
+    if not isinstance(command, dict):
+        return ["/ violates type"]
+    command_type = command.get("command_type")
+    if command_type not in COMMAND_VALIDATORS:
+        return [f"unsupported command type {command_type}"]
+    if command_type == "context.capture":
+        return context_capture_errors(command)
+    if command_type in {
+        "workspace.revision_create",
+        "strategy.variant_create",
+        "workspace.revision_promote",
+    }:
+        return revision_command_errors(command)
+    validator = COMMAND_VALIDATORS[command_type]
+    errors = sorted(
+        validator.iter_errors(command), key=lambda error: list(error.absolute_path)
+    )
+    messages = [
+        f"/{'/'.join(str(part) for part in error.absolute_path)} violates {error.validator}"
+        for error in errors
+    ]
+    if command_type.startswith("session.") and not messages:
+        messages = session_command_errors(command)
+    return messages
+
+
 def domain_event_errors(event: dict[str, Any]) -> list[str]:
-    validator = DOMAIN_EVENT_VALIDATORS[event["event_type"]]
+    event_type = event.get("event_type")
+    validator = DOMAIN_EVENT_VALIDATORS.get(event_type)
+    if validator is None:
+        return [f"unsupported domain event type {event_type}"]
     errors = [
         f"/{'/'.join(str(part) for part in error.absolute_path)} violates {error.validator}"
         for error in sorted(
@@ -77,4 +259,25 @@ def domain_event_errors(event: dict[str, Any]) -> list[str]:
         artifact = event["payload"]["artifact"]
         if artifact["storage_uri"] != f"cas://sha256/{artifact['sha256']}":
             errors.append("/payload/artifact/storage_uri must match artifact sha256")
+    if not errors and event_type == "workspace.revision_created":
+        parent_revision_id = event["payload"]["parent_revision_id"]
+        if event["variant_id"] is None and event["base_revision_id"] is None:
+            if parent_revision_id is not None:
+                errors.append(
+                    "/payload/parent_revision_id must be null for a root revision"
+                )
+        elif parent_revision_id != event["base_revision_id"]:
+            errors.append("/payload/parent_revision_id must match /base_revision_id")
+    if not errors and event_type == "strategy.variant_created":
+        if event["payload"]["variant_id"] != event["variant_id"]:
+            errors.append("/payload/variant_id must match /variant_id")
+        if event["payload"]["revision_id"] != event["base_revision_id"]:
+            errors.append("/payload/revision_id must match /base_revision_id")
+    if not errors and event_type == "workspace.revision_promoted":
+        if event["payload"]["variant_id"] != event["variant_id"]:
+            errors.append("/payload/variant_id must match /variant_id")
+        if event["payload"]["previous_revision_id"] != event["base_revision_id"]:
+            errors.append(
+                "/payload/previous_revision_id must match /base_revision_id"
+            )
     return errors

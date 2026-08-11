@@ -1,8 +1,8 @@
 {
   "cases": [
     {
-      "name": "valid command",
-      "kind": "command",
+      "name": "valid strategy variant create command",
+      "kind": "revision_command",
       "fixture": "command.valid.json",
       "valid": true
     },
@@ -13,8 +13,8 @@
       "valid": false
     },
     {
-      "name": "valid event",
-      "kind": "event",
+      "name": "valid strategy variant created event",
+      "kind": "revision_event",
       "fixture": "event.valid.json",
       "valid": true
     },
@@ -55,6 +55,102 @@
       "valid": true
     },
     {
+      "name": "valid session register command",
+      "kind": "session_command",
+      "fixture": "command.session-register.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid session workbench binding command",
+      "kind": "session_command",
+      "fixture": "command.session-workbench-bind.valid.json",
+      "valid": true
+    },
+    {
+      "name": "session register URI must bind its Pi identity",
+      "kind": "session_command",
+      "fixture": "command.session-register.invalid-uri.json",
+      "valid": false
+    },
+    {
+      "name": "valid root revision create command",
+      "kind": "revision_command",
+      "fixture": "command.revision-create-root.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid child revision create command",
+      "kind": "revision_command",
+      "fixture": "command.revision-create-child.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid revision promote command",
+      "kind": "revision_command",
+      "fixture": "command.revision-promote.valid.json",
+      "valid": true
+    },
+    {
+      "name": "revision create rejects unsafe file paths",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects Git metadata paths case insensitively",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-git-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects file directory path collisions",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-path-collision.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects duplicate file paths",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-duplicate-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create bounds text artifacts",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-artifact.json",
+      "valid": false
+    },
+    {
+      "name": "revision create child requires expected and base CAS identity",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-child-cas.json",
+      "valid": false
+    },
+    {
+      "name": "variant create payload identities are envelope-bound",
+      "kind": "revision_command",
+      "fixture": "command.variant-create.invalid-payload.json",
+      "valid": false
+    },
+    {
+      "name": "revision promote payload and envelope are CAS-bound",
+      "kind": "revision_command",
+      "fixture": "command.revision-promote.invalid-cas.json",
+      "valid": false
+    },
+    {
+      "name": "session message artifact must be bounded plain text",
+      "kind": "session_command",
+      "fixture": "command.session-message-send.invalid-media.json",
+      "valid": false
+    },
+    {
+      "name": "session reply requires a source reference",
+      "kind": "session_command",
+      "fixture": "command.session-message-reply.invalid-no-source.json",
+      "valid": false
+    },
+    {
       "name": "context capture requires artifact provenance",
       "kind": "context_capture_command",
       "fixture": "command.context-capture.invalid-provenance.json",
@@ -83,6 +179,54 @@
       "kind": "context_captured_event",
       "fixture": "event.context-captured.valid.json",
       "valid": true
+    },
+    {
+      "name": "valid queued session message event",
+      "kind": "session_event",
+      "fixture": "event.session-message-queued.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid session workbench bound event",
+      "kind": "session_event",
+      "fixture": "event.session-workbench-bound.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid root revision created event",
+      "kind": "revision_event",
+      "fixture": "event.revision-created-root.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid child revision created event",
+      "kind": "revision_event",
+      "fixture": "event.revision-created-child.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid revision promoted event",
+      "kind": "revision_event",
+      "fixture": "event.revision-promoted.valid.json",
+      "valid": true
+    },
+    {
+      "name": "revision created event parent follows the base revision",
+      "kind": "revision_event",
+      "fixture": "event.revision-created.invalid-parent.json",
+      "valid": false
+    },
+    {
+      "name": "variant created event payload follows the variant",
+      "kind": "revision_event",
+      "fixture": "event.variant-created.invalid-payload.json",
+      "valid": false
+    },
+    {
+      "name": "revision promoted event previous revision follows the base",
+      "kind": "revision_event",
+      "fixture": "event.revision-promoted.invalid-previous.json",
+      "valid": false
     },
     {
       "name": "context event rejects the wrong concrete type",

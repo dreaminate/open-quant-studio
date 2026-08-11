@@ -19,7 +19,38 @@ Public M1 seams:
   structured log.
 - `GET /v1/jobs/{job_id}` and `GET /v1/logs` expose job state and filtered logs.
 
+M2 adds the durable Session Fabric catalog and inbox. `session.register` writes
+an OQS session to Pi identity mapping plus its initial workbench binding without
+claiming active in-memory state or storing a transcript path.
+`session.workbench_bind` replaces the durable active projection while retaining
+the session's known workbench set. Message send/reply
+commands register a pre-staged, bounded UTF-8 text Artifact and atomically write
+an immutable message, queued event/outbox row, and idempotency receipt. Receipt
+commands advance only `queued -> receiver_received -> injected -> acknowledged`
+with expected state/version compare-and-set checks. `GET /v1/sessions`,
+`GET /v1/inbox`, and identity-checked `GET /v1/messages/{message_id}` expose
+catalog metadata, body-free inbox rows, and verified bounded UTF-8 body access.
+Source references require a hash-addressed canonical Pi entry witness in the
+local CAS. `GET /v1/events?wait=1` performs one bounded asynchronous wait for a
+new event; the default remains a finite resumable batch.
+
+The provenance-safe M3 revision slice adds `workspace.revision_create`,
+`strategy.variant_create`, and `workspace.revision_promote`. Python remains the
+sole durable writer: it registers bounded CAS text artifacts, writes immutable
+revision/file/variant/event/outbox/receipt rows in SQLite, and creates the
+matching Git blobs, trees, and zero/one-parent commits in a project-local bare
+repository. Accepted commits receive immutable per-revision refs and survive
+Git garbage collection. Variant and project heads are explicit mutable
+projections guarded by compare-and-set; an immutable head history prevents ABA
+by requiring a revert to use a new revision identity. Each project is bounded
+to 64 variants so the durable writer and bounded control-plane catalog agree. `GET
+/v1/revisions/{revision_id}`, `GET /v1/variants`,
+`GET /v1/revisions/compare`, and `GET /v1/projects/{project_id}/revision-head`
+return identity and hash metadata without source bodies.
+
 Run locally with `OQS_DATA_ROOT=var PYTHONPATH=services/quant-domain/src uv run
---project services/quant-domain --frozen uvicorn quant_domain.app:app`. M1 does
-not add retries, checkpoints, restart recovery, retention/deletion, import/export,
-Pi wake-ups, an outbox dispatcher, or formal Runs; those remain later milestones.
+--project services/quant-domain --frozen uvicorn quant_domain.app:app`. M2 does
+not add checkpoints, restart recovery, terminal cancellation/expiry,
+retention/deletion, import/export, authentication, a persistent outbox
+dispatcher, formal engine, formal Runs, formal gates, merge, or Git
+export/import retention; those remain later milestone work.

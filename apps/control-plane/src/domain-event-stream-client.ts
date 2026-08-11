@@ -9,6 +9,7 @@ export interface DomainEventStreamClient {
     projectId: string;
     lastAcknowledgedStreamSeq: number;
     signal: AbortSignal;
+    waitForEvent?: boolean;
     onEvent(event: DomainEvent): Promise<void> | void;
   }): Promise<number>;
 }
@@ -32,6 +33,7 @@ export class FetchDomainEventStreamClient implements DomainEventStreamClient {
     projectId: string;
     lastAcknowledgedStreamSeq: number;
     signal: AbortSignal;
+    waitForEvent?: boolean;
     onEvent(event: DomainEvent): Promise<void> | void;
   }): Promise<number> {
     const headers = new Headers({ Accept: "text/event-stream" });
@@ -41,8 +43,12 @@ export class FetchDomainEventStreamClient implements DomainEventStreamClient {
         request.lastAcknowledgedStreamSeq.toString(),
       );
     }
+    const query = new URLSearchParams({ project_id: request.projectId });
+    if (request.waitForEvent === true) {
+      query.set("wait", "1");
+    }
     const response = await this.#fetch(
-      `${this.#baseUrl}/v1/events?project_id=${encodeURIComponent(request.projectId)}`,
+      `${this.#baseUrl}/v1/events?${query}`,
       { headers, signal: request.signal },
     );
     if (!response.ok) {

@@ -11,7 +11,7 @@ file was copied.
 | QuantBT | `/Users/wzy/Work/01_Projects/My-Projects/Original/QuantBT`; clean commit object `e13b322ea00e6dc80cfe003ba44d126df8676230`; origin and remote `main` match that SHA; live worktree has 52 modified tracked paths and 20 untracked entries; no root/subtree license for the candidate UI | Unsafe to copy. Git-object addressing can isolate the committed tree from WIP, but no file may migrate until rights, attribution, paths, and an oracle are approved. |
 | quant-assistant | `/Users/wzy/Work/01_Projects/My-Projects/Derived/quant-assistant`; branch `codex/quant-memory-mcp`; commit object `985f4502485f1b2978d72dca89e769a3a61525b8`; 77 modified, 35 deleted, and 102 untracked paths; no upstream; origin is `TencentCloud/TencentDB-Agent-Memory.git` | Unsafe to copy. The commit contains a Rust/PyO3 engine and crate metadata says MIT, but no root/Rust license or reliable product lineage proves per-file reuse rights. |
 | VibeTrading | `/Users/wzy/Work/01_Projects/Open-Source/G-Finance-Quant-and-Company-Research/Vibe-Trading`; MIT; clean local `main` at `bec189f2eea3926262d6b692da9acdf1a19a6eeb`; remote `main` advanced to `1bf1d8b4c9b212ee73d5d1e46a00c498738d2cfd` | Local SHA is reproducible but not current remote tip. Use selected streaming/status behavior only as a named design/test oracle; M0 imports no source. Reject its AgentLoop, swarm, scheduler, broker, and backtest surfaces. |
-| Pi | MIT upstream `earendil-works/pi`; final M0 remote refresh found `main` at `2a95ef70db83a19cf5500f31dc4ff8247e04043e`; reviewed SHA `24047f5dfb222ef7d26b554a0e576e5efa844024` still exists; that reviewed package reports version `0.84.1` and Node `>=22.19.0` | Do not install in M0. Pin a reviewed SHA, not mutable `main` or the version label, and verify runtime imports behind `pi-adapter` in M2. Pi remains the only permitted AgentLoop. |
+| Pi | MIT upstream `earendil-works/pi`; exact release `v0.84.1`, tag/npm `gitHead` `53fa77ccd8a279eb87e92294ef3687b03ff80112`, and registry integrity are recorded in `third_party/M2_DEPENDENCY_DECISIONS.md`; mutable `main` was `b6557f43ec3cc93b5808a073e44a7c2ded75978d` at the M2 point-in-time query | M2 uses exact registry version `0.84.1` plus the frozen lock, never mutable `main`. Pi stays behind the OQS adapter as the only permitted AgentLoop; built-in filesystem/shell tools and ambient resources remain disabled. |
 
 ## Capability ownership
 
@@ -46,3 +46,23 @@ Python standard library and upstream SQLite transaction/WAL semantics; HTTP/SSE
 uses declared registry packages rather than copied framework source. Exact new
 direct/transitive dependency versions and licenses are recorded in
 `third_party/M1_DEPENDENCY_DECISIONS.md`.
+
+## M2 cleanroom decision
+
+M2 imports no donor or Session Fabric prior-art source. It consumes Pi's exact
+MIT-licensed `v0.84.1` registry release and implements OQS-specific typed tools,
+HTTP routing, durable inbox delivery, and bounded recall as cleanroom product
+code. Exact integrities, the retained upstream license, transitive license
+groups, native/optional dependency caveats, and the point-in-time upstream
+identity are recorded in `third_party/M2_DEPENDENCY_DECISIONS.md`.
+
+## Partial M3 cleanroom decision
+
+The revision/variant/CAS slice is OQS-owned cleanroom code implemented against
+the frozen command/domain rules, Python's standard library, SQLite, and the
+locally available `/usr/bin/git` plumbing interface. It copies no donor source
+and adds no package dependency. The quant-assistant Rust/PyO3 engine remains
+excluded: its current local tree is dirty, its configured origin names an
+unrelated TencentDB Agent Memory repository, and root/Rust license coverage and
+engine lineage remain unresolved. Consequently this slice is not formal engine
+integration and does not complete M3.

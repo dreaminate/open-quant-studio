@@ -12,6 +12,10 @@ import {
   validateContextCapturedEvent,
   validateDiagnosticLog,
   validateEventEnvelope,
+  validateRevisionCommand,
+  validateRevisionEvent,
+  validateSessionCommand,
+  validateSessionEvent,
 } from "../dist/index.js";
 
 const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -36,6 +40,10 @@ test("TypeScript and Python agree on command/event contract vectors", () => {
         context_captured_event: validateContextCapturedEvent,
         diagnostic_log: validateDiagnosticLog,
         event: validateEventEnvelope,
+        revision_command: validateRevisionCommand,
+        revision_event: validateRevisionEvent,
+        session_command: validateSessionCommand,
+        session_event: validateSessionEvent,
       };
       const result = validators[contractCase.kind](fixture);
 

@@ -105,7 +105,12 @@ class M1DomainTest(unittest.TestCase):
         self.assertEqual(foreign_keys, 1)
         self.assertEqual(
             [tuple(row) for row in migrations],
-            [("001_m1_domain_core",), ("002_m1_immutability",)],
+            [
+                ("001_m1_domain_core",),
+                ("002_m1_immutability",),
+                ("003_m2_session_fabric",),
+                ("004_m3_revision_graph",),
+            ],
         )
 
         command = context_capture_command()

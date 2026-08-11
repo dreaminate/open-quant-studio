@@ -16,6 +16,9 @@ const requiredFiles = [
   "docs/07_POC_ACCEPTANCE.md",
   "docs/08_IMPLEMENTATION_PLAN.md",
   "docs/09_M0_FOUNDATION_EVIDENCE.md",
+  "docs/10_M1_DURABLE_CORE_EVIDENCE.md",
+  "docs/11_M2_SESSION_FABRIC_EVIDENCE.md",
+  "docs/12_M3_REVISION_SLICE_EVIDENCE.md",
   "fixtures/backtests/m0-long-short-v1.json",
   "fixtures/market/m0-long-short-v1.csv",
   "packages/contracts/fixtures/v1/cases.json",
@@ -23,6 +26,10 @@ const requiredFiles = [
   "packages/contracts/package.json",
   "packages/contracts/schemas/v1/command-envelope.schema.json",
   "packages/contracts/schemas/v1/event-envelope.schema.json",
+  "packages/contracts/schemas/v1/session-command.schema.json",
+  "packages/contracts/schemas/v1/session-event.schema.json",
+  "packages/contracts/schemas/v1/revision-command.schema.json",
+  "packages/contracts/schemas/v1/revision-event.schema.json",
   "packages/contracts/src/index.ts",
   "packages/research-ui/package.json",
   "prompts/START_DEVELOPMENT_PROMPT.md",
@@ -31,8 +38,12 @@ const requiredFiles = [
   "scripts/verify-golden-backtest.py",
   "services/quant-domain/pyproject.toml",
   "services/quant-domain/src/quant_domain/contract_probe.py",
+  "services/quant-domain/src/quant_domain/git_workspace.py",
   "services/quant-domain/uv.lock",
   "third_party/M0_IMPORT_DECISIONS.md",
+  "third_party/M1_DEPENDENCY_DECISIONS.md",
+  "third_party/M2_DEPENDENCY_DECISIONS.md",
+  "third_party/licenses/PI_MIT.txt",
   "tsconfig.base.json",
 ];
 
@@ -51,6 +62,10 @@ const jsonFiles = [
   "packages/contracts/package.json",
   "packages/contracts/schemas/v1/command-envelope.schema.json",
   "packages/contracts/schemas/v1/event-envelope.schema.json",
+  "packages/contracts/schemas/v1/session-command.schema.json",
+  "packages/contracts/schemas/v1/session-event.schema.json",
+  "packages/contracts/schemas/v1/revision-command.schema.json",
+  "packages/contracts/schemas/v1/revision-event.schema.json",
   "packages/research-ui/package.json",
   "tsconfig.base.json",
 ];
@@ -70,5 +85,5 @@ if (
 }
 
 process.stdout.write(
-  `M0 bootstrap manifest valid: ${requiredFiles.length} required files present.\n`,
+  `Repository manifest valid: ${requiredFiles.length} required files present.\n`,
 );

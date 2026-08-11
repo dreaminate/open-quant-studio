@@ -18,4 +18,7 @@ M0's no-copy decisions and registry dependency licenses are recorded in
 M1's cleanroom HTTP/SSE dependency boundary and resolved runtime licenses are
 recorded in `M1_DEPENDENCY_DECISIONS.md`.
 
+M2's exact Pi release identity, registry integrities, retained MIT notice, and
+resolved-license audit are recorded in `M2_DEPENDENCY_DECISIONS.md`.
+
 PSM/byteowlz material may not be copied from the reviewed unlicensed snapshots. MCP Agent Mail may not be copied, run, tested, or integrated because of its restrictive license rider. See `docs/06_MIGRATION_MAP.md`.

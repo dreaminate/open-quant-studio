@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/session-command.schema.json",
+  "title": "Open Quant Studio Session Fabric commands v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": {
+          "enum": [
+            "session.register",
+            "session.workbench_bind",
+            "session.message_send",
+            "session.message_reply",
+            "session.message_receive",
+            "session.message_mark_injected",
+            "session.message_acknowledge"
+          ]
+        },
+        "expected_revision_id": { "type": "null" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "session_id": { "$ref": "#/$defs/identity" },
+        "workbench_id": { "$ref": "#/$defs/identity" }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.register" },
+            "payload": { "$ref": "#/$defs/registerPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.workbench_bind" },
+            "payload": { "$ref": "#/$defs/workbenchBindPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.message_send" },
+            "payload": { "$ref": "#/$defs/sendPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.message_reply" },
+            "payload": { "$ref": "#/$defs/replyPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.message_receive" },
+            "payload": { "$ref": "#/$defs/receivePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.message_mark_injected" },
+            "payload": { "$ref": "#/$defs/injectedPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "session.message_acknowledge" },
+            "payload": { "$ref": "#/$defs/acknowledgePayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identity": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+    },
+    "piIdentity": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "sessionUri": {
+      "type": "string",
+      "pattern": "^pi-jsonl://session/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "sourceUri": {
+      "type": "string",
+      "pattern": "^pi-jsonl://session/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?#entry=[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "entry_id", "leaf_id", "sha256", "source_uri"],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/identity" },
+        "entry_id": { "$ref": "#/$defs/identity" },
+        "leaf_id": { "$ref": "#/$defs/identity" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "source_uri": { "$ref": "#/$defs/sourceUri" }
+      }
+    },
+    "m2Artifact": {
+      "allOf": [
+        { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "registerPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pi_session_id", "session_uri"],
+      "properties": {
+        "pi_session_id": { "$ref": "#/$defs/piIdentity" },
+        "session_uri": { "$ref": "#/$defs/sessionUri" }
+      }
+    },
+    "workbenchBindPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workbench_id"],
+      "properties": {
+        "workbench_id": { "$ref": "#/$defs/identity" }
+      }
+    },
+    "messagePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_id", "recipient_session_id", "message_kind", "reply_to", "source_refs", "artifact"],
+      "properties": {
+        "message_id": { "$ref": "#/$defs/uuid" },
+        "recipient_session_id": { "$ref": "#/$defs/identity" },
+        "reply_to": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "source_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/sourceRef" }
+        },
+        "artifact": { "$ref": "#/$defs/m2Artifact" },
+        "message_kind": { "enum": ["send", "ask", "reply"] }
+      }
+    },
+    "sendPayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "message_kind": { "enum": ["send", "ask"] },
+            "reply_to": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "replyPayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "message_kind": { "const": "reply" },
+            "reply_to": { "$ref": "#/$defs/uuid" },
+            "source_refs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": { "$ref": "#/$defs/sourceRef" }
+            }
+          }
+        }
+      ]
+    },
+    "receiptPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_id", "expected_state", "expected_version"],
+      "properties": {
+        "message_id": { "$ref": "#/$defs/uuid" },
+        "expected_state": { "enum": ["queued", "receiver_received", "injected", "acknowledged"] },
+        "expected_version": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "receivePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/receiptPayload" },
+        {
+          "type": "object",
+          "properties": {
+            "expected_state": { "const": "queued" },
+            "expected_version": { "const": 0 }
+          }
+        }
+      ]
+    },
+    "injectedPayload": {
+      "allOf": [
+        { "$ref": "#/$defs/receiptPayload" },
+        {
+          "type": "object",
+          "properties": {
+            "expected_state": { "const": "receiver_received" },
+            "expected_version": { "const": 1 }
+          }
+        }
+      ]
+    },
+    "acknowledgePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/receiptPayload" },
+        {
+          "type": "object",
+          "properties": {
+            "expected_state": { "const": "injected" },
+            "expected_version": { "const": 2 }
+          }
+        }
+      ]
+    }
+  }
+}

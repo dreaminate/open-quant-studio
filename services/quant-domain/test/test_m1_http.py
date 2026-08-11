@@ -37,7 +37,7 @@ def parse_sse(body: str) -> list[dict[str, object]]:
     return events
 
 
-class M1HttpTest(unittest.TestCase):
+class HttpTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
         self.data_root = Path(self.tempdir.name)
@@ -108,6 +108,8 @@ class M1HttpTest(unittest.TestCase):
         connection.close()
         return status, response_headers, response_body
 
+
+class M1HttpTest(HttpTestCase):
     def test_real_http_command_job_logs_and_resumable_sse_vertical_slice(self) -> None:
         blob = b"HTTP M1 raw evidence\n"
         digest = hashlib.sha256(blob).hexdigest()
