@@ -1,0 +1,10 @@
+{
+  "name": "open-quant-studio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first agent-native quantitative research studio",
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "check:bootstrap": "node scripts/check-bootstrap.mjs"
+  }
+}
