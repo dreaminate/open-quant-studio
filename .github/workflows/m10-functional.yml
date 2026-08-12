@@ -69,6 +69,9 @@ jobs:
       - name: Install frozen Python dependencies
         run: uv sync --project services/quant-domain --frozen
 
+      - name: Fetch frozen Rust dependencies
+        run: cargo fetch --manifest-path crates/quant-engine/Cargo.toml --locked
+
       - name: Install Chromium on Ubuntu
         if: runner.os == 'Linux'
         run: pnpm --filter @open-quant-studio/web exec playwright install --with-deps chromium
