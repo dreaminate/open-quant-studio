@@ -15,11 +15,25 @@ Every durable mutation is submitted to the Python service with:
   "workbench_id": "string",
   "correlation_id": "uuid",
   "expected_revision_id": "uuid-or-null",
+  "variant_id": "uuid-or-null",
+  "base_revision_id": "uuid-or-null",
   "payload": {}
 }
 ```
 
 `command_id` is the idempotency key. The service persists state, an immutable domain event, and an outbox record in one transaction.
+
+M1 implements one concrete mutation, `context.capture`. Its payload contains a
+`context_item_id`, title, the fixed `raw_evidence` trust state, and one complete
+immutable Artifact reference. The service hashes the canonical full envelope.
+As a command-specific historical constraint, M1 `context.capture` requires
+`expected_revision_id`, `variant_id`, `base_revision_id`,
+`producing_revision_id`, and `producing_run_id` to be explicitly null for this
+command and its event. Later revision/variant commands own those identities;
+Formal Run commands use their own concrete contracts.
+An exact duplicate returns the original stored event with disposition
+`replayed`; the same `command_id` with any changed envelope field returns
+`command_id_conflict` and writes nothing.
 
 ## Event envelope
 
@@ -36,16 +50,63 @@ Every durable mutation is submitted to the Python service with:
   "correlation_id": "uuid",
   "causation_id": "command-or-event-id",
   "recorded_at": "RFC3339 timestamp",
+  "variant_id": "uuid-or-null",
+  "base_revision_id": "uuid-or-null",
   "payload": {}
 }
 ```
 
 SSE preserves monotonic `stream_seq` within its product stream. Consumers resume from the last acknowledged sequence and must handle redelivery idempotently.
 
+M1 serves `GET /v1/events?project_id=...` as `text/event-stream`. Each frame has
+decimal `stream_seq` as `id`, `domain.event` as `event`, and one JSON event
+envelope as `data`. The only resume authority is the `Last-Event-ID` header:
+absent means zero, a non-negative decimal returns rows strictly after that
+sequence, and malformed values return HTTP 400. The UUID `event_id` remains the
+event-application idempotency identity and is not the SSE cursor.
+
 ## Artifacts
 
-Commands and events refer to large values by `artifact_id`, content hash, media type, byte size, and producing revision/Run. Raw market data, model files, full logs, equity series, trade ledgers, and reports do not travel in command or SSE envelopes.
+Commands and events refer to large values by `artifact_id`, lowercase SHA-256,
+media type, byte size, `cas://sha256/...` storage URI, provenance, and nullable
+producing revision/Run. A blob PUT only stages hash-verified bytes; the typed
+command is the authority that registers Artifact metadata. Raw market data,
+model files, full logs, equity series, trade ledgers, and reports do not travel
+in command or SSE envelopes.
+
+`storage_uri` must equal `cas://sha256/{sha256}` in both runtime validators; a
+schema-shaped mismatch is invalid. M1 provenance uses an opaque UUID
+`source_ref`, never a user-supplied URL, header, path, or free-text credential.
+The referenced source catalog arrives in a later milestone.
+
+The M1 Job Runner emits `artifact.verification_started` in the same transaction
+that claims a pending job, then verifies registered artifact bytes and emits
+either `artifact.verification_succeeded` with the observed hash/size or
+`artifact.verification_failed` with a bounded error code. All three payload
+shapes are shared TypeScript/Python contracts. Each event receives a matching
+outbox row; M1 does not yet implement an outbox dispatcher.
 
 ## Formal RunSpec
 
 A Formal Run freezes at least data snapshot, universe, sample window, timezone, strategy revision, parameters, random seed, fee/slippage model, engine version, environment lock identity, and output schema version. A started Run is never edited; another attempt receives another `run_id`.
+
+The strategy-to-engine boundary contains only ordered bars, market metadata, a frozen RunSpec, and structured OrderIntents. The engine returns a typed immutable result containing orders, trades, signed positions, cash ledger, equity/drawdown curves, metrics, costs, logs, provenance, and gate outcomes. Large series live in CAS; command/event envelopes carry bounded identities and hashes.
+
+M3 implements `workspace.merge_create`, `formal.run_request`, and
+`workspace.revision_promote`. Their durable lifecycle events are
+`workspace.merge_candidate_created`, `formal.run_queued`,
+`formal.run_started`, `formal.run_completed`, and
+`workspace.revision_promoted`. Promote requires the exact passed
+`validation_id` for the candidate and compare-and-set identities for both the
+project and variant heads.
+
+The candidate subprocess receives only ordered bars, not the expected intent
+tape. It returns raw callback batches; the trusted Python parent assigns
+`known_at`, validates the exact three-field shape of a strategy-requested
+future-open `effective_at` (or defaults it to the next bar), persists the
+resulting intent tape in CAS, and requires exact equality with the immutable
+Rust input. Rust/PyO3 rejects unknown formal-input fields, consumes those exact
+bytes, and remains the only authority for fills, ledgers, costs, equity,
+drawdown, and metrics. A succeeded completion event requires
+`calculation_hash == engine_result_sha256`; failed completions carry no result
+or manifest identity.

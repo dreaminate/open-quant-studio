@@ -1,0 +1,33 @@
+{
+  "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa07",
+  "schema_version": 1,
+  "command_type": "session.message_send",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "workbench_id": "canvas",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "message_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "recipient_session_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "message_kind": "send",
+    "reply_to": null,
+    "source_refs": [],
+    "artifact": {
+      "artifact_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "application/octet-stream",
+      "byte_size": 14,
+      "storage_uri": "cas://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producing_revision_id": null,
+      "producing_run_id": null,
+      "provenance": {
+        "origin_kind": "fixture",
+        "source_ref": "15151515-1515-4515-8515-151515151515"
+      }
+    }
+  }
+}

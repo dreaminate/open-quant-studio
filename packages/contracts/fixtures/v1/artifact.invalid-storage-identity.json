@@ -1,0 +1,13 @@
+{
+  "artifact_id": "99999999-9999-4999-8999-999999999999",
+  "sha256": "5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
+  "media_type": "text/csv",
+  "byte_size": 256,
+  "storage_uri": "cas://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "producing_revision_id": null,
+  "producing_run_id": null,
+  "provenance": {
+    "origin_kind": "fixture",
+    "source_ref": "15151515-1515-4515-8515-151515151515"
+  }
+}

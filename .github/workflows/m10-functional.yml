@@ -1,0 +1,89 @@
+name: M10 functional
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  m10-functional:
+    name: M10 functional (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Activate pinned pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.21.0 --activate
+          test "$(pnpm --version)" = "11.21.0"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.23"
+          enable-cache: true
+          cache-dependency-glob: services/quant-domain/uv.lock
+
+      - name: Set up stable Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          cache: true
+
+      - name: Verify toolchain versions
+        shell: bash
+        run: |
+          node --version
+          pnpm --version
+          python --version
+          uv --version
+          rustc --version
+          cargo --version
+
+      - name: Install frozen Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install frozen Python dependencies
+        run: uv sync --project services/quant-domain --frozen
+
+      - name: Fetch frozen Rust dependencies
+        run: cargo fetch --manifest-path crates/quant-engine/Cargo.toml --locked
+
+      - name: Install Chromium on Ubuntu
+        if: runner.os == 'Linux'
+        run: pnpm --filter @open-quant-studio/web exec playwright install --with-deps chromium
+
+      - name: Install Chromium on macOS
+        if: runner.os == 'macOS'
+        run: pnpm --filter @open-quant-studio/web exec playwright install chromium
+
+      - name: Run M10 portable functional validation on macOS
+        if: runner.os == 'macOS'
+        run: pnpm run validate:m10:portable
+
+      - name: Run M10 functional validation with Compose on Ubuntu
+        if: runner.os == 'Linux'
+        run: pnpm run validate:m10

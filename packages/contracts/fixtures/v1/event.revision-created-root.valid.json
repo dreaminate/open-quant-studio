@@ -1,0 +1,22 @@
+{
+  "event_id": "20202020-2020-4020-8020-202020202020",
+  "stream_seq": 2,
+  "schema_version": 1,
+  "event_type": "workspace.revision_created",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m3-root",
+  "workbench_id": "code",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "10101010-1010-4101-8101-101010101010",
+  "recorded_at": "2026-08-11T19:00:00+08:00",
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "revision_id": "88888888-8888-4888-8888-888888888888",
+    "parent_revision_id": null,
+    "git_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "git_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "file_count": 2
+  }
+}

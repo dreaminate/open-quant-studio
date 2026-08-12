@@ -1,0 +1,44 @@
+{
+  "command_id": "61616161-6161-4161-8161-616161616161",
+  "schema_version": 1,
+  "command_type": "data.snapshot_create",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m7-import",
+  "workbench_id": "data-import",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "snapshot_id": "62626262-6262-4262-8262-626262626262",
+    "source": {
+      "artifact_id": "63636363-6363-4363-8363-636363636363",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "text/csv",
+      "byte_size": 4096,
+      "storage_uri": "cas://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producing_revision_id": null,
+      "producing_run_id": null,
+      "provenance": {
+        "origin_kind": "user_upload",
+        "source_ref": "64646464-6464-4464-8464-646464646464"
+      }
+    },
+    "source_format": "csv",
+    "file_name": "000001.csv",
+    "mapping": {
+      "timestamp": "timestamp",
+      "symbol": "symbol",
+      "open": "open",
+      "high": "high",
+      "low": "low",
+      "close": "close",
+      "volume": "volume"
+    },
+    "market": "a_share_daily",
+    "timezone": "Asia/Shanghai",
+    "price_basis": "raw",
+    "cutoff": "2026-08-12T00:00:00Z"
+  }
+}

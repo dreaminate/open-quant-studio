@@ -1,0 +1,152 @@
+{
+  "spec_id": "oqs.m0.long-short.v1",
+  "schema_version": 1,
+  "status": "test_oracle_only",
+  "formal_engine_integrated": false,
+  "provenance": {
+    "kind": "synthetic",
+    "created_for": "Open Quant Studio M0",
+    "external_source": null,
+    "description": "Six invented closing prices used only to freeze accounting expectations."
+  },
+  "market_data": {
+    "path": "fixtures/market/m0-long-short-v1.csv",
+    "sha256": "5106492190b928ce9c92f7d0e78571f0da8b3800651b9c1cc9983025ba9e1dc2",
+    "symbol": "SYNTH.CN",
+    "currency": "CNY",
+    "timezone": "Asia/Shanghai",
+    "price_field": "close"
+  },
+  "assumptions": {
+    "starting_cash": "10000.0000",
+    "execution_price": "same_bar_close",
+    "fee_rate_per_side": "0.0006",
+    "slippage_rate": "0",
+    "borrow_cost_rate": "0",
+    "quantity_step": "1",
+    "random_seed": 0,
+    "cash_equation": "cash_after = cash_before - signed_quantity * price - fee",
+    "equity_equation": "equity = cash + signed_position * close"
+  },
+  "actions": [
+    {
+      "timestamp": "2024-01-02T16:00:00+08:00",
+      "action": "buy",
+      "quantity": "10"
+    },
+    {
+      "timestamp": "2024-01-04T16:00:00+08:00",
+      "action": "sell",
+      "quantity": "10"
+    },
+    {
+      "timestamp": "2024-01-05T16:00:00+08:00",
+      "action": "short",
+      "quantity": "5"
+    },
+    {
+      "timestamp": "2024-01-09T16:00:00+08:00",
+      "action": "cover",
+      "quantity": "5"
+    }
+  ],
+  "expected": {
+    "fills": [
+      {
+        "timestamp": "2024-01-02T16:00:00+08:00",
+        "action": "buy",
+        "quantity": "10",
+        "price": "100.0000",
+        "notional": "1000.0000",
+        "fee": "0.6000",
+        "cash_after": "8999.4000",
+        "position_after": "10"
+      },
+      {
+        "timestamp": "2024-01-04T16:00:00+08:00",
+        "action": "sell",
+        "quantity": "10",
+        "price": "105.0000",
+        "notional": "1050.0000",
+        "fee": "0.6300",
+        "cash_after": "10048.7700",
+        "position_after": "0"
+      },
+      {
+        "timestamp": "2024-01-05T16:00:00+08:00",
+        "action": "short",
+        "quantity": "5",
+        "price": "100.0000",
+        "notional": "500.0000",
+        "fee": "0.3000",
+        "cash_after": "10548.4700",
+        "position_after": "-5"
+      },
+      {
+        "timestamp": "2024-01-09T16:00:00+08:00",
+        "action": "cover",
+        "quantity": "5",
+        "price": "95.0000",
+        "notional": "475.0000",
+        "fee": "0.2850",
+        "cash_after": "10073.1850",
+        "position_after": "0"
+      }
+    ],
+    "round_trips": [
+      {
+        "side": "long",
+        "entry_timestamp": "2024-01-02T16:00:00+08:00",
+        "exit_timestamp": "2024-01-04T16:00:00+08:00",
+        "quantity": "10",
+        "gross_pnl": "50.0000",
+        "fees": "1.2300",
+        "net_pnl": "48.7700"
+      },
+      {
+        "side": "short",
+        "entry_timestamp": "2024-01-05T16:00:00+08:00",
+        "exit_timestamp": "2024-01-09T16:00:00+08:00",
+        "quantity": "5",
+        "gross_pnl": "25.0000",
+        "fees": "0.5850",
+        "net_pnl": "24.4150"
+      }
+    ],
+    "equity": [
+      {
+        "timestamp": "2024-01-02T16:00:00+08:00",
+        "equity": "9999.4000"
+      },
+      {
+        "timestamp": "2024-01-03T16:00:00+08:00",
+        "equity": "10099.4000"
+      },
+      {
+        "timestamp": "2024-01-04T16:00:00+08:00",
+        "equity": "10048.7700"
+      },
+      {
+        "timestamp": "2024-01-05T16:00:00+08:00",
+        "equity": "10048.4700"
+      },
+      {
+        "timestamp": "2024-01-08T16:00:00+08:00",
+        "equity": "10098.4700"
+      },
+      {
+        "timestamp": "2024-01-09T16:00:00+08:00",
+        "equity": "10073.1850"
+      }
+    ],
+    "summary": {
+      "ending_cash": "10073.1850",
+      "ending_position": "0",
+      "gross_pnl": "75.0000",
+      "total_fees": "1.8150",
+      "net_pnl": "73.1850",
+      "total_return": "0.0073185",
+      "max_drawdown": "0.0050428738340892"
+    }
+  }
+}

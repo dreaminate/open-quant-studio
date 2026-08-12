@@ -1,0 +1,22 @@
+{
+  "event_id": "43434343-4343-4343-8343-434343434343",
+  "stream_seq": 17,
+  "schema_version": 1,
+  "event_type": "diagnostic.logs_deleted",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "logs",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "41414141-4141-4141-8141-414141414141",
+  "recorded_at": "2026-08-12T02:02:00+08:00",
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "receipt_id": "44444444-4444-4444-8444-444444444449",
+    "reason": "user",
+    "selection_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "deleted_count": 1,
+    "completed_at": "2026-08-12T02:02:00+08:00"
+  }
+}

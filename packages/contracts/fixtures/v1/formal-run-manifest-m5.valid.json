@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "manifest_version": "m5-v1",
+  "run_id": "18181818-1818-4181-8181-181818181818",
+  "validation_id": "19191919-1919-4191-8191-191919191919",
+  "run_spec": {
+    "run_spec_id": "17171717-1717-4171-8171-171717171717",
+    "spec_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "project_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": "33333333-3333-4333-8333-333333333333",
+    "variant_id": "55555555-5555-4555-8555-555555555555",
+    "candidate_revision_id": "77777777-7777-4777-8777-777777777777",
+    "market_input_artifact_id": "21212121-2121-4121-8121-212121212121",
+    "data_snapshot_id": "23232323-2323-4232-8232-232323232323",
+    "data_snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "strategy_tree_oid": "cccccccccccccccccccccccccccccccccccccccc",
+    "parameters_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "cost_model_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "environment_lock_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "engine_version": "oqs-quant-engine/0.1.0",
+    "price_basis": "raw",
+    "cutoff": "2026-01-01T00:00:00Z",
+    "timezone": "Asia/Shanghai",
+    "sample_start": "2026-01-02T00:00:00Z",
+    "sample_end": "2026-01-07T23:59:59Z",
+    "random_seed": 0,
+    "output_schema_version": 1,
+    "gate_policy_version": "m5-v1",
+    "strategy_protocol_version": "oqs-strategy-host/m5-stream-v2",
+    "checkpoint_batch_size": 256,
+    "engine_checkpoint_abi": "oqs-quant-engine/checkpoint-v1"
+  },
+  "revision": {
+    "candidate_revision_id": "77777777-7777-4777-8777-777777777777",
+    "git_commit_oid": "1111111111111111111111111111111111111111",
+    "git_tree_oid": "2222222222222222222222222222222222222222",
+    "strategy_path": "strategy.py",
+    "strategy_artifact_id": "24242424-2424-4242-8242-242424242424",
+    "strategy_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "strategy_git_blob_oid": "3333333333333333333333333333333333333333",
+    "project_parent_revision_id": "25252525-2525-4252-8252-252525252525",
+    "variant_parent_revision_id": "26262626-2626-4262-8262-262626262626",
+    "expected_project_head_version": 3,
+    "expected_variant_head_version": 4
+  },
+  "market_input": {
+    "artifact_id": "21212121-2121-4121-8121-212121212121",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "media_type": "application/json",
+    "byte_size": 4096,
+    "storage_uri": "cas://sha256/2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "strategy_execution": {
+    "intent_tape_artifact_id": "27272727-2727-4272-8272-272727272727",
+    "intent_tape_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "intent_tape_byte_size": 1024,
+    "intent_tape_storage_uri": "cas://sha256/3333333333333333333333333333333333333333333333333333333333333333",
+    "timing_authority": "oqs-strategy-host/m5-stream-v2",
+    "frozen": true
+  },
+  "resolved_engine_input": {
+    "artifact_id": "28282828-2828-4282-8282-282828282828",
+    "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "media_type": "application/json",
+    "byte_size": 5120,
+    "storage_uri": "cas://sha256/4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "checkpoint": {
+    "engine_checkpoint_abi": "oqs-quant-engine/checkpoint-v1",
+    "checkpoint_batch_size": 256,
+    "final_checkpoint_seq": 4,
+    "final_next_bar_index": 1024,
+    "calculation_context_sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+  },
+  "engine_result": {
+    "artifact_id": "29292929-2929-4292-8292-292929292929",
+    "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "media_type": "application/json",
+    "byte_size": 8192,
+    "storage_uri": "cas://sha256/6666666666666666666666666666666666666666666666666666666666666666",
+    "schema_version": 1,
+    "engine_version": "oqs-quant-engine/0.1.0"
+  },
+  "gates": {
+    "contract": "passed",
+    "strategy_import": "passed",
+    "smoke_run": "passed"
+  },
+  "logs": {
+    "run_id": "18181818-1818-4181-8181-181818181818",
+    "deletable": true,
+    "included_in_calculation_hash": false
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "event_id": "37373737-3737-4737-8737-373737373737",
+  "stream_seq": 16,
+  "schema_version": 1,
+  "event_type": "formal.run_cancelled",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "run-detail",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "31313131-3131-4131-8131-313131313131",
+  "recorded_at": "2026-08-12T02:01:00+08:00",
+  "variant_id": "55555555-5555-4555-8555-555555555555",
+  "base_revision_id": "77777777-7777-4777-8777-777777777777",
+  "payload": {
+    "lifecycle_version": "m5-v1",
+    "job_id": "25252525-2525-4252-8252-252525252525",
+    "run_spec_id": "17171717-1717-4171-8171-171717171717",
+    "run_id": "18181818-1818-4181-8181-181818181818",
+    "validation_id": "19191919-1919-4191-8191-191919191919",
+    "candidate_revision_id": "77777777-7777-4777-8777-777777777777",
+    "run_spec_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "execution_version": 4,
+    "status": "cancelled",
+    "validation_outcome": "not_run",
+    "gates": {
+      "contract": "not_run",
+      "strategy_import": "not_run",
+      "smoke_run": "not_run"
+    },
+    "engine_result_artifact_id": null,
+    "manifest_artifact_id": null,
+    "calculation_hash": null,
+    "error_code": null,
+    "cancel_reason": "user_requested"
+  }
+}

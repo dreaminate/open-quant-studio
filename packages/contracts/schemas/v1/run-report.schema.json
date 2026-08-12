@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/run-report.schema.json",
+  "title": "Open Quant Studio M9 Run report read model v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report", "json_artifact", "html_artifact"],
+  "properties": {
+    "report": { "$ref": "#/$defs/report" },
+    "json_artifact": { "$ref": "#/$defs/jsonArtifact" },
+    "html_artifact": { "$ref": "#/$defs/htmlArtifact" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "atom": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableDateTime": {
+      "oneOf": [
+        { "$ref": "#/$defs/dateTime" },
+        { "type": "null" }
+      ]
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reconciliationValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/nonEmptyString" },
+        { "$ref": "#/$defs/count" }
+      ]
+    },
+    "reportArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "sha256", "media_type", "byte_size", "storage_uri"],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "$ref": "#/$defs/nonEmptyString" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "storage_uri": {
+          "type": "string",
+          "pattern": "^cas://sha256/[a-f0-9]{64}$"
+        }
+      }
+    },
+    "jsonArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/reportArtifact" },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": {
+              "const": "application/vnd.open-quant-studio.run-report+json"
+            }
+          }
+        }
+      ]
+    },
+    "htmlArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/reportArtifact" },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": {
+              "const": "application/vnd.open-quant-studio.run-report+html"
+            }
+          }
+        }
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id", "run_spec_id", "project_id", "activity_id", "variant_id",
+        "candidate_revision_id", "status", "calculation_hash", "finished_at"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "succeeded" },
+        "calculation_hash": { "$ref": "#/$defs/sha256" },
+        "finished_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_result_sha256", "engine_version", "engine_schema_version", "account_model",
+        "data_snapshot_id", "data_snapshot_sha256", "strategy_tree_oid", "parameters_sha256",
+        "cost_model_sha256", "environment_lock_sha256", "price_basis", "cutoff", "timezone",
+        "sample_start", "sample_end"
+      ],
+      "properties": {
+        "engine_result_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "$ref": "#/$defs/nonEmptyString" },
+        "engine_schema_version": { "type": "integer", "minimum": 1 },
+        "account_model": { "$ref": "#/$defs/nonEmptyString" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "$ref": "#/$defs/nonEmptyString" },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_at", "end_at", "session_count"],
+      "properties": {
+        "start_at": { "$ref": "#/$defs/nullableDateTime" },
+        "end_at": { "$ref": "#/$defs/nullableDateTime" },
+        "session_count": { "$ref": "#/$defs/count" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "starting_equity_atoms", "ending_equity_atoms", "net_pnl_atoms", "total_return_rate_atoms",
+        "max_drawdown_atoms", "max_drawdown_rate_atoms", "gross_exposure_atoms", "net_exposure_atoms",
+        "total_fees_atoms", "total_stamp_duty_atoms", "total_funding_atoms", "total_slippage_atoms",
+        "order_count", "fill_count", "closed_trade_count", "open_position_count"
+      ],
+      "properties": {
+        "starting_equity_atoms": { "$ref": "#/$defs/atom" },
+        "ending_equity_atoms": { "$ref": "#/$defs/atom" },
+        "net_pnl_atoms": { "$ref": "#/$defs/atom" },
+        "total_return_rate_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_rate_atoms": { "$ref": "#/$defs/atom" },
+        "gross_exposure_atoms": { "$ref": "#/$defs/atom" },
+        "net_exposure_atoms": { "$ref": "#/$defs/atom" },
+        "total_fees_atoms": { "$ref": "#/$defs/atom" },
+        "total_stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+        "total_funding_atoms": { "$ref": "#/$defs/atom" },
+        "total_slippage_atoms": { "$ref": "#/$defs/atom" },
+        "order_count": { "$ref": "#/$defs/count" },
+        "fill_count": { "$ref": "#/$defs/count" },
+        "closed_trade_count": { "$ref": "#/$defs/count" },
+        "open_position_count": { "$ref": "#/$defs/count" }
+      }
+    },
+    "reconciliationCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "expected", "actual", "passed"],
+      "properties": {
+        "field": { "$ref": "#/$defs/nonEmptyString" },
+        "expected": { "$ref": "#/$defs/reconciliationValue" },
+        "actual": { "$ref": "#/$defs/reconciliationValue" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "checks"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reconciliationCheck" }
+        }
+      }
+    },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "name", "unit", "formula", "inputs", "empty_behavior"],
+      "properties": {
+        "field": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "unit": { "$ref": "#/$defs/nonEmptyString" },
+        "formula": { "$ref": "#/$defs/nonEmptyString" },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "empty_behavior": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine_result_artifact_id", "manifest_artifact_id"],
+      "properties": {
+        "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+        "manifest_artifact_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_version", "run", "identities", "period", "summary", "reconciliation", "definitions", "source"
+      ],
+      "properties": {
+        "report_version": { "const": "m9-v1" },
+        "run": { "$ref": "#/$defs/run" },
+        "identities": { "$ref": "#/$defs/identities" },
+        "period": { "$ref": "#/$defs/period" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "reconciliation": { "$ref": "#/$defs/reconciliation" },
+        "definitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/definition" }
+        },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "name": "@open-quant-studio/control-plane",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "TypeScript control-plane boundary; Pi integration begins in M2",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./domain-event-stream-client": {
+      "types": "./dist/domain-event-stream-client.d.ts",
+      "import": "./dist/domain-event-stream-client.js"
+    },
+    "./pi-session-adapter": {
+      "types": "./dist/pi-session-adapter.d.ts",
+      "import": "./dist/pi-session-adapter.js"
+    },
+    "./session-registry": {
+      "types": "./dist/session-registry.d.ts",
+      "import": "./dist/session-registry.js"
+    },
+    "./pi-jsonl-recall": {
+      "types": "./dist/pi-jsonl-recall.d.ts",
+      "import": "./dist/pi-jsonl-recall.js"
+    },
+    "./domain-session-client": {
+      "types": "./dist/domain-session-client.d.ts",
+      "import": "./dist/domain-session-client.js"
+    },
+    "./session-fabric": {
+      "types": "./dist/session-fabric.d.ts",
+      "import": "./dist/session-fabric.js"
+    },
+    "./session-tools": {
+      "types": "./dist/session-tools.d.ts",
+      "import": "./dist/session-tools.js"
+    },
+    "./domain-revision-client": {
+      "types": "./dist/domain-revision-client.d.ts",
+      "import": "./dist/domain-revision-client.js"
+    },
+    "./revision-tools": {
+      "types": "./dist/revision-tools.d.ts",
+      "import": "./dist/revision-tools.js"
+    },
+    "./browser-server": {
+      "types": "./dist/browser-server.d.ts",
+      "import": "./dist/browser-server.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.84.1",
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@open-quant-studio/contracts": "workspace:*",
+    "typebox": "1.3.7"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "0.84.1"
+  }
+}

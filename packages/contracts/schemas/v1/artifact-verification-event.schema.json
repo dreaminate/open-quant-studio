@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/artifact-verification-event.schema.json",
+  "title": "Open Quant Studio artifact verification event v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "enum": [
+            "artifact.verification_succeeded",
+            "artifact.verification_failed",
+            "artifact.verification_started"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifact_id", "job_id", "result", "error_code"],
+          "properties": {
+            "artifact_id": { "$ref": "#/$defs/uuid" },
+            "job_id": { "$ref": "#/$defs/uuid" },
+            "result": {
+              "oneOf": [
+                { "$ref": "#/$defs/successResult" },
+                { "type": "null" }
+              ]
+            },
+            "error_code": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "artifact_blob_missing",
+                    "artifact_integrity_mismatch"
+                  ]
+                },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "artifact.verification_succeeded" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "result": { "$ref": "#/$defs/successResult" },
+                "error_code": { "type": "null" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "artifact.verification_failed" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "result": { "type": "null" },
+                "error_code": {
+                  "enum": [
+                    "artifact_blob_missing",
+                    "artifact_integrity_mismatch"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "artifact.verification_started" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "result": { "type": "null" },
+                "error_code": { "type": "null" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "successResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "byte_size"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "byte_size": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

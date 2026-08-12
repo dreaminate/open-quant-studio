@@ -1,0 +1,466 @@
+{
+  "cases": [
+    {
+      "name": "valid strategy variant create command",
+      "kind": "revision_command",
+      "fixture": "command.valid.json",
+      "valid": true
+    },
+    {
+      "name": "command rejects unversioned top-level state",
+      "kind": "command",
+      "fixture": "command.invalid-extra-field.json",
+      "valid": false
+    },
+    {
+      "name": "valid strategy variant created event",
+      "kind": "revision_event",
+      "fixture": "event.valid.json",
+      "valid": true
+    },
+    {
+      "name": "event stream sequence starts at one",
+      "kind": "event",
+      "fixture": "event.invalid-stream-seq.json",
+      "valid": false
+    },
+    {
+      "name": "event rejects an impossible RFC3339 calendar date",
+      "kind": "event",
+      "fixture": "event.invalid-recorded-at.json",
+      "valid": false
+    },
+    {
+      "name": "valid immutable artifact reference",
+      "kind": "artifact",
+      "fixture": "artifact.valid.json",
+      "valid": true
+    },
+    {
+      "name": "artifact rejects a non-SHA256 digest",
+      "kind": "artifact",
+      "fixture": "artifact.invalid-sha.json",
+      "valid": false
+    },
+    {
+      "name": "artifact storage URI must bind its SHA256 identity",
+      "kind": "artifact",
+      "fixture": "artifact.invalid-storage-identity.json",
+      "valid": false
+    },
+    {
+      "name": "valid context capture command",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid session register command",
+      "kind": "session_command",
+      "fixture": "command.session-register.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid session workbench binding command",
+      "kind": "session_command",
+      "fixture": "command.session-workbench-bind.valid.json",
+      "valid": true
+    },
+    {
+      "name": "session register URI must bind its Pi identity",
+      "kind": "session_command",
+      "fixture": "command.session-register.invalid-uri.json",
+      "valid": false
+    },
+    {
+      "name": "valid root revision create command",
+      "kind": "revision_command",
+      "fixture": "command.revision-create-root.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid child revision create command",
+      "kind": "revision_command",
+      "fixture": "command.revision-create-child.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid revision promote command",
+      "kind": "revision_command",
+      "fixture": "command.revision-promote.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid two-parent merge command",
+      "kind": "revision_command",
+      "fixture": "command.merge-create.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid M5 Formal Run request command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-request-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "historical all-bars Formal Run request is not executable in M5",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-request.valid.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects unsafe file paths",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects Git metadata paths case insensitively",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-git-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects file directory path collisions",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-path-collision.json",
+      "valid": false
+    },
+    {
+      "name": "revision create rejects duplicate file paths",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-duplicate-path.json",
+      "valid": false
+    },
+    {
+      "name": "revision create bounds text artifacts",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-artifact.json",
+      "valid": false
+    },
+    {
+      "name": "revision create child requires expected and base CAS identity",
+      "kind": "revision_command",
+      "fixture": "command.revision-create.invalid-child-cas.json",
+      "valid": false
+    },
+    {
+      "name": "variant create payload identities are envelope-bound",
+      "kind": "revision_command",
+      "fixture": "command.variant-create.invalid-payload.json",
+      "valid": false
+    },
+    {
+      "name": "revision promote payload and envelope are CAS-bound",
+      "kind": "revision_command",
+      "fixture": "command.revision-promote.invalid-cas.json",
+      "valid": false
+    },
+    {
+      "name": "session message artifact must be bounded plain text",
+      "kind": "session_command",
+      "fixture": "command.session-message-send.invalid-media.json",
+      "valid": false
+    },
+    {
+      "name": "session reply requires a source reference",
+      "kind": "session_command",
+      "fixture": "command.session-message-reply.invalid-no-source.json",
+      "valid": false
+    },
+    {
+      "name": "context capture requires artifact provenance",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "context capture only accepts raw evidence",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-trust.json",
+      "valid": false
+    },
+    {
+      "name": "context capture rejects secret-bearing provenance text",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-source-ref.json",
+      "valid": false
+    },
+    {
+      "name": "M1 context capture rejects unowned revision identities",
+      "kind": "context_capture_command",
+      "fixture": "command.context-capture.invalid-m1-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "valid context captured event",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid queued session message event",
+      "kind": "session_event",
+      "fixture": "event.session-message-queued.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid session workbench bound event",
+      "kind": "session_event",
+      "fixture": "event.session-workbench-bound.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid root revision created event",
+      "kind": "revision_event",
+      "fixture": "event.revision-created-root.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid child revision created event",
+      "kind": "revision_event",
+      "fixture": "event.revision-created-child.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid revision promoted event",
+      "kind": "revision_event",
+      "fixture": "event.revision-promoted.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid merge candidate created event",
+      "kind": "revision_event",
+      "fixture": "event.merge-candidate-created.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run queued event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-queued.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run started event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-started.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run succeeded event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-succeeded.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run failed event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-failed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "Formal Run calculation hash follows the engine result artifact",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed.invalid-calculation-hash.json",
+      "valid": false
+    },
+    {
+      "name": "revision created event parent follows the base revision",
+      "kind": "revision_event",
+      "fixture": "event.revision-created.invalid-parent.json",
+      "valid": false
+    },
+    {
+      "name": "variant created event payload follows the variant",
+      "kind": "revision_event",
+      "fixture": "event.variant-created.invalid-payload.json",
+      "valid": false
+    },
+    {
+      "name": "revision promoted event previous revision follows the base",
+      "kind": "revision_event",
+      "fixture": "event.revision-promoted.invalid-previous.json",
+      "valid": false
+    },
+    {
+      "name": "context event rejects the wrong concrete type",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.invalid-type.json",
+      "valid": false
+    },
+    {
+      "name": "M1 context event rejects unowned revision identities",
+      "kind": "context_captured_event",
+      "fixture": "event.context-captured.invalid-m1-provenance.json",
+      "valid": false
+    },
+    {
+      "name": "valid structured diagnostic log",
+      "kind": "diagnostic_log",
+      "fixture": "diagnostic-log.valid.json",
+      "valid": true
+    },
+    {
+      "name": "diagnostic log requires an independent priority",
+      "kind": "diagnostic_log",
+      "fixture": "diagnostic-log.invalid-priority.json",
+      "valid": false
+    },
+    {
+      "name": "valid artifact verification success event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-succeeded.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid artifact verification started event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-started.valid.json",
+      "valid": true
+    },
+    {
+      "name": "successful verification cannot carry an error",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-succeeded.invalid-error.json",
+      "valid": false
+    },
+    {
+      "name": "valid artifact verification failure event",
+      "kind": "artifact_verification_event",
+      "fixture": "event.artifact-verification-failed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run cancel command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-cancel.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run retry command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-retry.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run checkpoint event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-checkpointed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run cancelled event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-cancelled.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid M5 Formal Run completed event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "Formal Run retry event requires a new Run identity",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-retried.invalid-same-run.json",
+      "valid": false
+    },
+    {
+      "name": "valid M5 Formal Run manifest",
+      "kind": "formal_run_manifest",
+      "fixture": "formal-run-manifest-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic delete command",
+      "kind": "diagnostic_command",
+      "fixture": "command.diagnostic-log-delete.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic retention command",
+      "kind": "diagnostic_command",
+      "fixture": "command.diagnostic-retention-configure.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic deletion event",
+      "kind": "diagnostic_event",
+      "fixture": "event.diagnostic-logs-deleted.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive manifest",
+      "kind": "project_archive_manifest",
+      "fixture": "project-archive-manifest.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive import command",
+      "kind": "project_archive_command",
+      "fixture": "command.project-archive-import.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive imported event",
+      "kind": "project_archive_event",
+      "fixture": "event.project-archive-imported.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test request",
+      "kind": "forward_test_command",
+      "fixture": "command.forward-test-request.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test completion",
+      "kind": "forward_test_event",
+      "fixture": "event.forward-test-completed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test read model",
+      "kind": "forward_test_read_model",
+      "fixture": "forward-test-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot creation command",
+      "kind": "data_snapshot_command",
+      "fixture": "command.data-snapshot-create.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot created event",
+      "kind": "data_snapshot_event",
+      "fixture": "event.data-snapshot-created.valid.json",
+      "valid": true
+    },
+    {
+      "name": "data snapshot created event requires a positive row count",
+      "kind": "data_snapshot_event",
+      "fixture": "event.data-snapshot-created.invalid-row-count.json",
+      "valid": false
+    },
+    {
+      "name": "valid data import preview read model",
+      "kind": "data_snapshot_import_preview_read_model",
+      "fixture": "data-import-preview-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot read model",
+      "kind": "data_snapshot_read_model",
+      "fixture": "data-snapshot-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot list read model",
+      "kind": "data_snapshot_list_read_model",
+      "fixture": "data-snapshot-list-read-model.valid.json",
+      "valid": true
+    }
+  ]
+}

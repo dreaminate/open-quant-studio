@@ -1,0 +1,84 @@
+{
+  "spec_id": "oqs.m8.a-share-rotation.v2",
+  "schema_version": 2,
+  "status": "formal_portfolio_engine_contract",
+  "provenance": {
+    "kind": "synthetic",
+    "created_for": "Open Quant Studio M8",
+    "external_source": null,
+    "description": "Four invented multi-symbol A-share sessions for deterministic shared-cash rotation accounting."
+  },
+  "input": {
+    "schema_version": 2,
+    "account": {
+      "model": "a_share_portfolio_cash",
+      "symbols": ["AAA.XSHG", "BBB.XSHG", "CCC.XSHG"],
+      "price_scale": 100,
+      "cash_scale": 100,
+      "rate_scale": 1000000,
+      "starting_balance_atoms": "10000",
+      "lot_size": 100,
+      "commission_rate_atoms": "0",
+      "stamp_duty_rate_atoms": "0",
+      "slippage_atoms": "0"
+    },
+    "sessions": [
+      {
+        "session_seq": 1,
+        "timestamp": "2026-02-02T07:00:00Z",
+        "bars": [
+          {"symbol": "AAA.XSHG", "open_atoms": "100", "high_atoms": "110", "low_atoms": "90", "close_atoms": "100", "can_buy": true, "can_sell": true},
+          {"symbol": "BBB.XSHG", "open_atoms": "100", "high_atoms": "110", "low_atoms": "90", "close_atoms": "100", "can_buy": true, "can_sell": true},
+          {"symbol": "CCC.XSHG", "open_atoms": "100", "high_atoms": "110", "low_atoms": "90", "close_atoms": "100", "can_buy": true, "can_sell": true}
+        ]
+      },
+      {
+        "session_seq": 2,
+        "timestamp": "2026-02-03T07:00:00Z",
+        "bars": [
+          {"symbol": "AAA.XSHG", "open_atoms": "120", "high_atoms": "125", "low_atoms": "110", "close_atoms": "120", "can_buy": true, "can_sell": true},
+          {"symbol": "BBB.XSHG", "open_atoms": "100", "high_atoms": "105", "low_atoms": "95", "close_atoms": "100", "can_buy": true, "can_sell": true},
+          {"symbol": "CCC.XSHG", "open_atoms": "100", "high_atoms": "105", "low_atoms": "95", "close_atoms": "100", "can_buy": true, "can_sell": true}
+        ]
+      },
+      {
+        "session_seq": 3,
+        "timestamp": "2026-02-04T07:00:00Z",
+        "bars": [
+          {"symbol": "AAA.XSHG", "open_atoms": "50", "high_atoms": "60", "low_atoms": "45", "close_atoms": "55", "can_buy": true, "can_sell": true},
+          {"symbol": "BBB.XSHG", "open_atoms": "110", "high_atoms": "115", "low_atoms": "100", "close_atoms": "110", "can_buy": true, "can_sell": true},
+          {"symbol": "CCC.XSHG", "open_atoms": "70", "high_atoms": "85", "low_atoms": "65", "close_atoms": "80", "can_buy": true, "can_sell": true}
+        ]
+      },
+      {
+        "session_seq": 4,
+        "timestamp": "2026-02-05T07:00:00Z",
+        "bars": [
+          {"symbol": "AAA.XSHG", "open_atoms": "60", "high_atoms": "65", "low_atoms": "50", "close_atoms": "60", "can_buy": true, "can_sell": true},
+          {"symbol": "BBB.XSHG", "open_atoms": "120", "high_atoms": "125", "low_atoms": "110", "close_atoms": "120", "can_buy": true, "can_sell": true},
+          {"symbol": "CCC.XSHG", "open_atoms": "90", "high_atoms": "95", "low_atoms": "80", "close_atoms": "90", "can_buy": true, "can_sell": true}
+        ]
+      }
+    ],
+    "intents": [
+      {"intent_id": "open-aaa", "intent_seq": 1, "symbol": "AAA.XSHG", "side": "buy", "position_effect": "open", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 0, "phase": "close", "stable_seq": 1}, "effective_at": {"session_seq": 1, "phase": "open", "stable_seq": 1}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "open-bbb", "intent_seq": 2, "symbol": "BBB.XSHG", "side": "buy", "position_effect": "open", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 1, "phase": "close", "stable_seq": 2}, "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 2}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "close-aaa", "intent_seq": 3, "symbol": "AAA.XSHG", "side": "sell", "position_effect": "close", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 1, "phase": "close", "stable_seq": 3}, "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 3}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "close-bbb", "intent_seq": 4, "symbol": "BBB.XSHG", "side": "sell", "position_effect": "close", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 2, "phase": "close", "stable_seq": 4}, "effective_at": {"session_seq": 3, "phase": "open", "stable_seq": 4}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "open-aaa-again", "intent_seq": 5, "symbol": "AAA.XSHG", "side": "buy", "position_effect": "open", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 2, "phase": "close", "stable_seq": 5}, "effective_at": {"session_seq": 3, "phase": "open", "stable_seq": 5}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "open-ccc", "intent_seq": 6, "symbol": "CCC.XSHG", "side": "buy", "position_effect": "open", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 2, "phase": "close", "stable_seq": 6}, "effective_at": {"session_seq": 3, "phase": "open", "stable_seq": 6}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "close-aaa-final", "intent_seq": 7, "symbol": "AAA.XSHG", "side": "sell", "position_effect": "close", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 3, "phase": "close", "stable_seq": 7}, "effective_at": {"session_seq": 4, "phase": "open", "stable_seq": 7}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null},
+      {"intent_id": "close-ccc", "intent_seq": 8, "symbol": "CCC.XSHG", "side": "sell", "position_effect": "close", "quantity": "100", "order_type": "market", "known_at": {"session_seq": 3, "phase": "close", "stable_seq": 8}, "effective_at": {"session_seq": 4, "phase": "open", "stable_seq": 8}, "limit_price_atoms": null, "stop_price_atoms": null, "time_in_force": "day", "oco_group": null}
+    ]
+  },
+  "expected": {
+    "trade_intent_ids": ["open-aaa", "close-aaa", "open-bbb", "close-bbb", "open-aaa-again", "open-ccc", "close-aaa-final", "close-ccc"],
+    "equity_atoms": ["10000", "12000", "14500", "16000"],
+    "cash_atoms": ["0", "2000", "1000", "16000"],
+    "market_value_atoms": ["10000", "10000", "13500", "0"],
+    "ending_equity_atoms": "16000",
+    "net_pnl_atoms": "6000",
+    "closed_trade_count": 4,
+    "open_position_count": 0
+  }
+}

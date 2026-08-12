@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/session-event.schema.json",
+  "title": "Open Quant Studio Session Fabric events v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "enum": [
+            "session.registered",
+            "session.workbench_bound",
+            "session.message_queued",
+            "session.message_receiver_received",
+            "session.message_injected",
+            "session.message_acknowledged"
+          ]
+        },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "session_id": { "$ref": "#/$defs/identity" },
+        "workbench_id": { "$ref": "#/$defs/identity" }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.registered" },
+            "payload": { "$ref": "#/$defs/registeredPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.workbench_bound" },
+            "payload": { "$ref": "#/$defs/workbenchBoundPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.message_queued" },
+            "payload": { "$ref": "#/$defs/queuedMessagePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.message_receiver_received" },
+            "payload": { "$ref": "#/$defs/receivedMessagePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.message_injected" },
+            "payload": { "$ref": "#/$defs/injectedMessagePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "session.message_acknowledged" },
+            "payload": { "$ref": "#/$defs/acknowledgedMessagePayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identity": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+    },
+    "piIdentity": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "sessionUri": {
+      "type": "string",
+      "pattern": "^pi-jsonl://session/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "sourceUri": {
+      "type": "string",
+      "pattern": "^pi-jsonl://session/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?#entry=[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,126}[A-Za-z0-9])?$"
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "entry_id", "leaf_id", "sha256", "source_uri"],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/identity" },
+        "entry_id": { "$ref": "#/$defs/identity" },
+        "leaf_id": { "$ref": "#/$defs/identity" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "source_uri": { "$ref": "#/$defs/sourceUri" }
+      }
+    },
+    "registeredPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "pi_session_id", "session_uri", "workbench_id"],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/identity" },
+        "pi_session_id": { "$ref": "#/$defs/piIdentity" },
+        "session_uri": { "$ref": "#/$defs/sessionUri" },
+        "workbench_id": { "$ref": "#/$defs/identity" }
+      }
+    },
+    "workbenchBoundPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "workbench_id"],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/identity" },
+        "workbench_id": { "$ref": "#/$defs/identity" }
+      }
+    },
+    "messagePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_id", "recipient_session_id", "message_kind", "artifact_id", "artifact_sha256", "state", "receipt_version", "reply_to", "source_refs"],
+      "properties": {
+        "message_id": { "$ref": "#/$defs/uuid" },
+        "recipient_session_id": { "$ref": "#/$defs/identity" },
+        "message_kind": { "enum": ["send", "ask", "reply"] },
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "state": { "enum": ["queued", "receiver_received", "injected", "acknowledged"] },
+        "receipt_version": { "type": "integer", "minimum": 0 },
+        "reply_to": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "source_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/sourceRef" }
+        }
+      }
+    },
+    "queuedMessagePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "queued" },
+            "receipt_version": { "const": 0 }
+          }
+        }
+      ]
+    },
+    "receivedMessagePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "receiver_received" },
+            "receipt_version": { "const": 1 }
+          }
+        }
+      ]
+    },
+    "injectedMessagePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "injected" },
+            "receipt_version": { "const": 2 }
+          }
+        }
+      ]
+    },
+    "acknowledgedMessagePayload": {
+      "allOf": [
+        { "$ref": "#/$defs/messagePayload" },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "acknowledged" },
+            "receipt_version": { "const": 3 }
+          }
+        }
+      ]
+    }
+  }
+}

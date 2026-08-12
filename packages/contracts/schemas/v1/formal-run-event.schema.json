@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-run-event.schema.json",
+  "title": "Open Quant Studio Formal Run lifecycle events v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "enum": [
+            "formal.run_queued",
+            "formal.run_started",
+            "formal.run_prepared",
+            "formal.run_checkpointed",
+            "formal.run_resumed",
+            "formal.run_completed",
+            "formal.run_cancelled",
+            "formal.run_retried"
+          ]
+        },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "base_revision_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "enum": ["formal.run_queued", "formal.run_started"] },
+            "payload": { "$ref": "#/$defs/legacyActivePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "formal.run_completed" },
+            "payload": { "$ref": "#/$defs/legacyCompletedPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": {
+              "enum": ["formal.run_queued", "formal.run_started", "formal.run_prepared"]
+            },
+            "payload": { "$ref": "#/$defs/m5ActivePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "enum": ["formal.run_checkpointed", "formal.run_resumed"] },
+            "payload": { "$ref": "#/$defs/m5CheckpointPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "formal.run_completed" },
+            "payload": { "$ref": "#/$defs/m5CompletedPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "formal.run_cancelled" },
+            "payload": { "$ref": "#/$defs/m5CancelledPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event_type": { "const": "formal.run_retried" },
+            "payload": { "$ref": "#/$defs/m5RetriedPayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "errorCode": {
+      "enum": [
+        "contract_gate_failed",
+        "strategy_import_failed",
+        "strategy_protocol_failed",
+        "engine_input_missing",
+        "engine_input_integrity_mismatch",
+        "checkpoint_integrity_mismatch",
+        "worker_interrupted_by_m5_upgrade",
+        "smoke_run_failed",
+        "engine_result_contract_failed"
+      ]
+    },
+    "legacyActivePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id", "run_spec_hash"],
+      "properties": {
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "legacyGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "enum": ["passed", "failed"] },
+        "strategy_import": { "enum": ["passed", "failed"] },
+        "smoke_run": { "enum": ["passed", "failed"] }
+      }
+    },
+    "legacyCompletedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id", "run_spec_hash",
+        "status", "gates", "engine_result_artifact_id", "engine_result_sha256", "manifest_artifact_id",
+        "manifest_sha256", "calculation_hash", "error_code"
+      ],
+      "properties": {
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "gates": { "$ref": "#/$defs/legacyGates" },
+        "engine_result_artifact_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "engine_result_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "manifest_artifact_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "manifest_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "calculation_hash": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "error_code": { "oneOf": [{ "$ref": "#/$defs/errorCode" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "succeeded" } } },
+          "then": {
+            "properties": {
+              "gates": {
+                "type": "object",
+                "properties": {
+                  "contract": { "const": "passed" },
+                  "strategy_import": { "const": "passed" },
+                  "smoke_run": { "const": "passed" }
+                }
+              },
+              "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+              "engine_result_sha256": { "$ref": "#/$defs/sha256" },
+              "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+              "manifest_sha256": { "$ref": "#/$defs/sha256" },
+              "calculation_hash": { "$ref": "#/$defs/sha256" },
+              "error_code": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "engine_result_artifact_id": { "type": "null" },
+              "engine_result_sha256": { "type": "null" },
+              "manifest_artifact_id": { "type": "null" },
+              "manifest_sha256": { "type": "null" },
+              "calculation_hash": { "type": "null" },
+              "error_code": { "$ref": "#/$defs/errorCode" }
+            }
+          }
+        }
+      ]
+    },
+    "m5ActivePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lifecycle_version", "job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id", "run_spec_hash", "execution_version"],
+      "properties": {
+        "lifecycle_version": { "enum": ["m5-v1", "m8-v1"] },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "execution_version": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "m5CheckpointPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle_version", "job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id",
+        "run_spec_hash", "execution_version", "claim_epoch", "checkpoint_seq",
+        "checkpoint_artifact_id", "checkpoint_sha256", "calculation_context_sha256"
+      ],
+      "properties": {
+        "lifecycle_version": { "enum": ["m5-v1", "m8-v1"] },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "execution_version": { "type": "integer", "minimum": 0 },
+        "claim_epoch": { "type": "integer", "minimum": 1 },
+        "checkpoint_seq": { "type": "integer", "minimum": 1 },
+        "next_bar_index": { "type": "integer", "minimum": 1 },
+        "next_session_index": { "type": "integer", "minimum": 1 },
+        "checkpoint_artifact_id": { "$ref": "#/$defs/uuid" },
+        "checkpoint_sha256": { "$ref": "#/$defs/sha256" },
+        "calculation_context_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "lifecycle_version": { "const": "m5-v1" } }
+          },
+          "then": {
+            "required": ["next_bar_index"],
+            "properties": {
+              "next_bar_index": { "type": "integer", "minimum": 1 },
+              "next_session_index": false
+            }
+          },
+          "else": {
+            "required": ["next_session_index"],
+            "properties": {
+              "next_session_index": { "type": "integer", "minimum": 1 },
+              "next_bar_index": false
+            }
+          }
+        }
+      ]
+    },
+    "m5CompletedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle_version", "job_id", "run_spec_id", "run_id", "validation_id",
+        "candidate_revision_id", "run_spec_hash", "execution_version", "status",
+        "gates", "engine_result_artifact_id", "engine_result_sha256",
+        "manifest_artifact_id", "manifest_sha256", "calculation_hash", "error_code"
+      ],
+      "properties": {
+        "lifecycle_version": { "enum": ["m5-v1", "m8-v1"] },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "execution_version": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["succeeded", "failed"] },
+        "gates": { "$ref": "#/$defs/legacyGates" },
+        "engine_result_artifact_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "engine_result_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "manifest_artifact_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "manifest_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "calculation_hash": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "error_code": { "oneOf": [{ "$ref": "#/$defs/errorCode" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "succeeded" } } },
+          "then": {
+            "properties": {
+              "gates": {
+                "type": "object",
+                "properties": {
+                  "contract": { "const": "passed" },
+                  "strategy_import": { "const": "passed" },
+                  "smoke_run": { "const": "passed" }
+                }
+              },
+              "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+              "engine_result_sha256": { "$ref": "#/$defs/sha256" },
+              "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+              "manifest_sha256": { "$ref": "#/$defs/sha256" },
+              "calculation_hash": { "$ref": "#/$defs/sha256" },
+              "error_code": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "engine_result_artifact_id": { "type": "null" },
+              "engine_result_sha256": { "type": "null" },
+              "manifest_artifact_id": { "type": "null" },
+              "manifest_sha256": { "type": "null" },
+              "calculation_hash": { "type": "null" },
+              "error_code": { "$ref": "#/$defs/errorCode" }
+            }
+          }
+        }
+      ]
+    },
+    "notRunGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "const": "not_run" },
+        "strategy_import": { "const": "not_run" },
+        "smoke_run": { "const": "not_run" }
+      }
+    },
+    "m5CancelledPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle_version", "job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id",
+        "run_spec_hash", "execution_version", "status", "validation_outcome", "gates",
+        "engine_result_artifact_id", "manifest_artifact_id", "calculation_hash", "error_code", "cancel_reason"
+      ],
+      "properties": {
+        "lifecycle_version": { "enum": ["m5-v1", "m8-v1"] },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "execution_version": { "type": "integer", "minimum": 1 },
+        "status": { "const": "cancelled" },
+        "validation_outcome": { "const": "not_run" },
+        "gates": { "$ref": "#/$defs/notRunGates" },
+        "engine_result_artifact_id": { "type": "null" },
+        "manifest_artifact_id": { "type": "null" },
+        "calculation_hash": { "type": "null" },
+        "error_code": { "type": "null" },
+        "cancel_reason": { "const": "user_requested" }
+      }
+    },
+    "m5RetriedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lifecycle_version", "job_id", "run_spec_id", "run_id", "validation_id", "candidate_revision_id", "run_spec_hash", "execution_version", "source_run_id"],
+      "properties": {
+        "lifecycle_version": { "enum": ["m5-v1", "m8-v1"] },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_hash": { "$ref": "#/$defs/sha256" },
+        "execution_version": { "const": 0 },
+        "source_run_id": { "$ref": "#/$defs/uuid" }
+      }
+    }
+  }
+}

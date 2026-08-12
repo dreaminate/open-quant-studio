@@ -1,0 +1,495 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-run-manifest.schema.json",
+  "title": "Open Quant Studio formal Run manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "run_id",
+    "validation_id",
+    "run_spec",
+    "revision",
+    "strategy_execution",
+    "engine_result",
+    "gates",
+    "logs"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "manifest_version": { "enum": ["m3-v1", "m5-v1", "m8-v1"] },
+    "run_id": { "$ref": "#/$defs/uuid" },
+    "validation_id": { "$ref": "#/$defs/uuid" },
+    "run_spec": {},
+    "revision": { "$ref": "#/$defs/revision" },
+    "engine_input": { "$ref": "#/$defs/engineInput" },
+    "market_input": { "$ref": "#/$defs/engineInput" },
+    "strategy_execution": {},
+    "resolved_engine_input": { "$ref": "#/$defs/engineInput" },
+    "checkpoint": {},
+    "engine_result": {},
+    "gates": { "$ref": "#/$defs/gates" },
+    "logs": { "$ref": "#/$defs/logs" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["manifest_version"],
+        "properties": { "manifest_version": { "const": "m3-v1" } }
+      },
+      "then": {
+        "required": ["engine_input"],
+        "properties": {
+          "engine_input": {},
+          "run_spec": { "$ref": "#/$defs/runSpec" },
+          "strategy_execution": { "$ref": "#/$defs/strategyExecution" },
+          "engine_result": { "$ref": "#/$defs/engineResult" }
+        },
+        "not": {
+          "anyOf": [
+            { "required": ["market_input"], "properties": { "market_input": {} } },
+            { "required": ["resolved_engine_input"], "properties": { "resolved_engine_input": {} } },
+            { "required": ["checkpoint"], "properties": { "checkpoint": {} } }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["manifest_version"],
+        "properties": { "manifest_version": { "const": "m5-v1" } }
+      },
+      "then": {
+        "required": ["market_input", "resolved_engine_input", "checkpoint"],
+        "properties": {
+          "market_input": {},
+          "resolved_engine_input": {},
+          "run_spec": { "$ref": "#/$defs/runSpecM5" },
+          "strategy_execution": { "$ref": "#/$defs/strategyExecutionM5" },
+          "checkpoint": { "$ref": "#/$defs/checkpoint" },
+          "engine_result": { "$ref": "#/$defs/engineResult" }
+        },
+        "not": {
+          "required": ["engine_input"],
+          "properties": { "engine_input": {} }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["manifest_version"],
+        "properties": { "manifest_version": { "const": "m8-v1" } }
+      },
+      "then": {
+        "required": ["market_input", "resolved_engine_input", "checkpoint"],
+        "properties": {
+          "market_input": {},
+          "resolved_engine_input": {},
+          "run_spec": { "$ref": "#/$defs/runSpecM8" },
+          "strategy_execution": { "$ref": "#/$defs/strategyExecutionM8" },
+          "checkpoint": { "$ref": "#/$defs/checkpointM8" },
+          "engine_result": { "$ref": "#/$defs/engineResultM8" }
+        },
+        "not": {
+          "required": ["engine_input"],
+          "properties": { "engine_input": {} }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id",
+        "spec_hash",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "data_snapshot_id",
+        "data_snapshot_sha256",
+        "strategy_tree_oid",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "environment_lock_sha256",
+        "engine_version",
+        "price_basis",
+        "cutoff",
+        "timezone",
+        "sample_start",
+        "sample_end",
+        "random_seed",
+        "output_schema_version",
+        "gate_policy_version"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "spec_hash": { "$ref": "#/$defs/sha256" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "const": 1 },
+        "gate_policy_version": { "const": "m3-v1" }
+      }
+    },
+    "runSpecM5": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id",
+        "spec_hash",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "market_input_artifact_id",
+        "data_snapshot_id",
+        "data_snapshot_sha256",
+        "strategy_tree_oid",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "environment_lock_sha256",
+        "engine_version",
+        "price_basis",
+        "cutoff",
+        "timezone",
+        "sample_start",
+        "sample_end",
+        "random_seed",
+        "output_schema_version",
+        "gate_policy_version",
+        "strategy_protocol_version",
+        "checkpoint_batch_size",
+        "engine_checkpoint_abi"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "spec_hash": { "$ref": "#/$defs/sha256" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "market_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "const": 1 },
+        "gate_policy_version": { "const": "m5-v1" },
+        "strategy_protocol_version": { "const": "oqs-strategy-host/m5-stream-v2" },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v1" }
+      }
+    },
+    "runSpecM8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id",
+        "spec_hash",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "market_input_artifact_id",
+        "data_snapshot_id",
+        "data_snapshot_sha256",
+        "strategy_tree_oid",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "environment_lock_sha256",
+        "engine_version",
+        "price_basis",
+        "cutoff",
+        "timezone",
+        "sample_start",
+        "sample_end",
+        "random_seed",
+        "output_schema_version",
+        "gate_policy_version",
+        "strategy_protocol_version",
+        "checkpoint_batch_size",
+        "engine_checkpoint_abi"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "spec_hash": { "$ref": "#/$defs/sha256" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "market_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "const": "oqs-quant-engine/0.2.0" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "const": 2 },
+        "gate_policy_version": { "const": "m8-v1" },
+        "strategy_protocol_version": { "const": "oqs-strategy-host/m8-portfolio-v1" },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v2" }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_revision_id",
+        "git_commit_oid",
+        "git_tree_oid",
+        "strategy_path",
+        "strategy_artifact_id",
+        "strategy_sha256",
+        "strategy_git_blob_oid",
+        "project_parent_revision_id",
+        "variant_parent_revision_id",
+        "expected_project_head_version",
+        "expected_variant_head_version"
+      ],
+      "properties": {
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "git_commit_oid": { "$ref": "#/$defs/gitOid" },
+        "git_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "strategy_path": { "const": "strategy.py" },
+        "strategy_artifact_id": { "$ref": "#/$defs/uuid" },
+        "strategy_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_git_blob_oid": { "$ref": "#/$defs/gitOid" },
+        "project_parent_revision_id": { "$ref": "#/$defs/uuid" },
+        "variant_parent_revision_id": { "$ref": "#/$defs/uuid" },
+        "expected_project_head_version": { "type": "integer", "minimum": 0 },
+        "expected_variant_head_version": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "engineInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "media_type",
+        "byte_size",
+        "storage_uri"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "const": "application/json" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "storage_uri": { "$ref": "#/$defs/storageUri" }
+      }
+    },
+    "strategyExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_tape_artifact_id",
+        "intent_tape_sha256",
+        "intent_tape_byte_size",
+        "intent_tape_storage_uri",
+        "timing_authority"
+      ],
+      "properties": {
+        "intent_tape_artifact_id": { "$ref": "#/$defs/uuid" },
+        "intent_tape_sha256": { "$ref": "#/$defs/sha256" },
+        "intent_tape_byte_size": { "type": "integer", "minimum": 0 },
+        "intent_tape_storage_uri": { "$ref": "#/$defs/storageUri" },
+        "timing_authority": { "const": "oqs-strategy-host/m3-v1" }
+      }
+    },
+    "strategyExecutionM5": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_tape_artifact_id",
+        "intent_tape_sha256",
+        "intent_tape_byte_size",
+        "intent_tape_storage_uri",
+        "timing_authority",
+        "frozen"
+      ],
+      "properties": {
+        "intent_tape_artifact_id": { "$ref": "#/$defs/uuid" },
+        "intent_tape_sha256": { "$ref": "#/$defs/sha256" },
+        "intent_tape_byte_size": { "type": "integer", "minimum": 0 },
+        "intent_tape_storage_uri": { "$ref": "#/$defs/storageUri" },
+        "timing_authority": { "const": "oqs-strategy-host/m5-stream-v2" },
+        "frozen": { "const": true }
+      }
+    },
+    "strategyExecutionM8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_tape_artifact_id",
+        "intent_tape_sha256",
+        "intent_tape_byte_size",
+        "intent_tape_storage_uri",
+        "timing_authority",
+        "frozen"
+      ],
+      "properties": {
+        "intent_tape_artifact_id": { "$ref": "#/$defs/uuid" },
+        "intent_tape_sha256": { "$ref": "#/$defs/sha256" },
+        "intent_tape_byte_size": { "type": "integer", "minimum": 0 },
+        "intent_tape_storage_uri": { "$ref": "#/$defs/storageUri" },
+        "timing_authority": { "const": "oqs-strategy-host/m8-portfolio-v1" },
+        "frozen": { "const": true }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_checkpoint_abi",
+        "checkpoint_batch_size",
+        "final_checkpoint_seq",
+        "final_next_bar_index",
+        "calculation_context_sha256"
+      ],
+      "properties": {
+        "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v1" },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "final_checkpoint_seq": { "type": "integer", "minimum": 1 },
+        "final_next_bar_index": { "type": "integer", "minimum": 0 },
+        "calculation_context_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "checkpointM8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_checkpoint_abi",
+        "checkpoint_batch_size",
+        "final_checkpoint_seq",
+        "final_next_session_index",
+        "calculation_context_sha256"
+      ],
+      "properties": {
+        "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v2" },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "final_checkpoint_seq": { "type": "integer", "minimum": 1 },
+        "final_next_session_index": { "type": "integer", "minimum": 0 },
+        "calculation_context_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "engineResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "media_type",
+        "byte_size",
+        "storage_uri",
+        "schema_version",
+        "engine_version"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "const": "application/json" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "storage_uri": { "$ref": "#/$defs/storageUri" },
+        "schema_version": { "const": 1 },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" }
+      }
+    },
+    "engineResultM8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "media_type",
+        "byte_size",
+        "storage_uri",
+        "schema_version",
+        "engine_version"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "const": "application/json" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "storage_uri": { "$ref": "#/$defs/storageUri" },
+        "schema_version": { "const": 2 },
+        "engine_version": { "const": "oqs-quant-engine/0.2.0" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "const": "passed" },
+        "strategy_import": { "const": "passed" },
+        "smoke_run": { "const": "passed" }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "deletable", "included_in_calculation_hash"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "deletable": { "const": true },
+        "included_in_calculation_hash": { "const": false }
+      }
+    },
+    "storageUri": {
+      "type": "string",
+      "pattern": "^cas://sha256/[a-f0-9]{64}$"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa06",
+  "schema_version": 1,
+  "command_type": "session.register",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "workbench_id": "canvas",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "pi_session_id": "pi-session-a",
+    "session_uri": "pi-jsonl://session/pi-session-b"
+  }
+}

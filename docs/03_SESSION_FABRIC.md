@@ -9,6 +9,12 @@ Session Fabric coordinates one Pi session across multiple workbenches and coordi
 - One `AgentSession` remains active while the user moves between canvas, code, model, backtest, Run Detail, and Forward Test workbenches.
 - Tool calls carry the current `activity_id` and `workbench_id`, but the session retains access to every project research tool.
 - The chat panel binds to the session, not the current route.
+- Provider, model, and Pi configuration surfaces reuse Pi's own implementation through the OQS adapter; OQS does not implement a second provider protocol.
+
+## Local tool boundary
+
+- Pi built-in shell/filesystem/edit/write tools are disabled by default.
+- Tool output remains diagnostic until a typed domain command validates and registers a durable business object.
 
 ## Cross-session operations
 
@@ -29,8 +35,6 @@ Active sessions use an in-process registry and router. Normal delivery uses Pi `
 3. Read a bounded window around an explicit entry anchor.
 4. Respect the remaining Pi context budget.
 5. Render retrieved material as quoted evidence, never as system instructions.
-
-Cross-project lookup requires an explicit project link or handoff.
 
 ## Message contract
 

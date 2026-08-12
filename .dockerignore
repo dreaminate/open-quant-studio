@@ -1,0 +1,16 @@
+.git
+.opencode
+graphify-out
+node_modules
+**/node_modules
+**/dist
+**/target
+**/.venv
+var
+test-results
+playwright-report
+coverage
+.env
+.env.*
+!.env.example
+.DS_Store

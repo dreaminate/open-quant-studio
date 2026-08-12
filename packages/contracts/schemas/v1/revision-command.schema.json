@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/revision-command.schema.json",
+  "title": "Open Quant Studio revision and variant commands v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": {
+          "enum": [
+            "workspace.revision_create",
+            "strategy.variant_create",
+            "workspace.merge_create",
+            "workspace.revision_promote"
+          ]
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "workspace.merge_create" },
+            "expected_revision_id": { "$ref": "#/$defs/uuid" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/mergeCreatePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "workspace.revision_create" },
+            "expected_revision_id": { "type": "null" },
+            "variant_id": { "type": "null" },
+            "base_revision_id": { "type": "null" },
+            "payload": { "$ref": "#/$defs/revisionCreatePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "workspace.revision_create" },
+            "expected_revision_id": { "$ref": "#/$defs/uuid" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/revisionCreatePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "strategy.variant_create" },
+            "expected_revision_id": { "type": "null" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/variantCreatePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "workspace.revision_promote" },
+            "expected_revision_id": { "$ref": "#/$defs/uuid" },
+            "variant_id": { "$ref": "#/$defs/uuid" },
+            "base_revision_id": { "$ref": "#/$defs/uuid" },
+            "payload": { "$ref": "#/$defs/revisionPromotePayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "revisionFilePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "revisionArtifact": {
+      "allOf": [
+        {
+          "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": { "const": "text/plain" },
+            "byte_size": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "revisionFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "artifact"],
+      "properties": {
+        "path": { "$ref": "#/$defs/revisionFilePath" },
+        "artifact": { "$ref": "#/$defs/revisionArtifact" }
+      }
+    },
+    "revisionCreatePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision_id", "message", "files"],
+      "properties": {
+        "revision_id": { "$ref": "#/$defs/uuid" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/revisionFile" }
+        },
+        "removed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/revisionFilePath" }
+        }
+      }
+    },
+    "variantCreatePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variant_id", "base_revision_id"],
+      "properties": {
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "base_revision_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "revisionPromotePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variant_id", "candidate_revision_id", "validation_id"],
+      "properties": {
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "mergeCreatePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_revision_id", "message", "files"],
+      "properties": {
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/revisionFile" }
+        }
+      }
+    }
+  }
+}

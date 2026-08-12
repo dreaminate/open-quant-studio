@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/diagnostic-log.schema.json",
+  "title": "Open Quant Studio diagnostic log v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "log_id",
+    "log_seq",
+    "timestamp",
+    "level",
+    "priority",
+    "component",
+    "event_code",
+    "project_id",
+    "activity_id",
+    "session_id",
+    "task_id",
+    "job_id",
+    "run_id",
+    "correlation_id",
+    "message"
+  ],
+  "properties": {
+    "log_id": { "$ref": "#/$defs/uuid" },
+    "log_seq": { "type": "integer", "minimum": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "level": { "enum": ["debug", "info", "warn", "error"] },
+    "priority": { "enum": ["p1", "p2", "p3", "p4"] },
+    "component": { "type": "string", "minLength": 1 },
+    "event_code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+    },
+    "project_id": { "$ref": "#/$defs/nullableUuid" },
+    "activity_id": { "$ref": "#/$defs/nullableUuid" },
+    "session_id": { "$ref": "#/$defs/nullableIdentity" },
+    "task_id": { "$ref": "#/$defs/nullableUuid" },
+    "job_id": { "$ref": "#/$defs/nullableUuid" },
+    "run_id": { "$ref": "#/$defs/nullableUuid" },
+    "correlation_id": { "$ref": "#/$defs/nullableUuid" },
+    "message": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "nullableUuid": {
+      "oneOf": [
+        { "$ref": "#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "nullableIdentity": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "null" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json",
+  "title": "Open Quant Studio immutable artifact reference v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_id",
+    "sha256",
+    "media_type",
+    "byte_size",
+    "storage_uri",
+    "producing_revision_id",
+    "producing_run_id",
+    "provenance"
+  ],
+  "properties": {
+    "artifact_id": { "$ref": "#/$defs/uuid" },
+    "sha256": { "$ref": "#/$defs/sha256" },
+    "media_type": {
+      "type": "string",
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$"
+    },
+    "byte_size": { "type": "integer", "minimum": 0 },
+    "storage_uri": {
+      "type": "string",
+      "pattern": "^cas://sha256/[a-f0-9]{64}$"
+    },
+    "producing_revision_id": { "$ref": "#/$defs/nullableUuid" },
+    "producing_run_id": { "$ref": "#/$defs/nullableUuid" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin_kind", "source_ref"],
+      "properties": {
+        "origin_kind": {
+          "enum": ["fixture", "user_upload", "service_generated"]
+        },
+        "source_ref": { "$ref": "#/$defs/uuid" }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableUuid": {
+      "oneOf": [
+        { "$ref": "#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

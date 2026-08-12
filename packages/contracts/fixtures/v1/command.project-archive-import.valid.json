@@ -1,0 +1,29 @@
+{
+  "command_id": "46464646-4646-4646-8646-464646464646",
+  "schema_version": 1,
+  "command_type": "project.archive_import",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "projects",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "expected_project_id": "22222222-2222-4222-8222-222222222222",
+    "archive": {
+      "artifact_id": "47474747-4747-4747-8747-474747474747",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "media_type": "application/vnd.open-quant-studio.project-archive+zip",
+      "byte_size": 8192,
+      "storage_uri": "cas://sha256/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "producing_revision_id": null,
+      "producing_run_id": null,
+      "provenance": {
+        "origin_kind": "user_upload",
+        "source_ref": "49494949-4949-4949-8949-494949494949"
+      }
+    }
+  }
+}

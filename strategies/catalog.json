@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "strategies": [
+    {
+      "strategy_id": "a_share_trend_breakout",
+      "title": "A-share trend breakout",
+      "market": "a_share_daily",
+      "source": "strategies/a_share_trend_breakout/strategy.py",
+      "notebook": "strategies/a_share_trend_breakout/notebook.ipynb",
+      "summary": "Buys a completed-close breakout and exits on a trailing trend reversal or fixed loss limit.",
+      "assumptions": [
+        "One A-share daily symbol is released one completed bar at a time.",
+        "Orders are requested for the next bar open by the strategy host.",
+        "The quantity is a 100-share lot."
+      ],
+      "parameters": [
+        { "name": "BREAKOUT_WINDOW", "value": 3, "meaning": "completed closes used for the breakout high" },
+        { "name": "TREND_WINDOW", "value": 3, "meaning": "completed closes used for the exit average" },
+        { "name": "STOP_LOSS_BPS", "value": 600, "meaning": "loss limit measured from the highest observed close" },
+        { "name": "LOT_SIZE", "value": 100, "meaning": "A-share order quantity" }
+      ],
+      "tags": ["a_share", "trend", "breakout", "long"]
+    },
+    {
+      "strategy_id": "a_share_research_short",
+      "title": "A-share research short",
+      "market": "a_share_daily",
+      "source": "strategies/a_share_research_short/strategy.py",
+      "notebook": "strategies/a_share_research_short/notebook.ipynb",
+      "summary": "A labelled research-only short strategy that opens after a completed-close downside break and covers on reversal or loss limit.",
+      "assumptions": [
+        "This is labelled research_short and requires an A-share account that explicitly enables that simulation mode.",
+        "One daily symbol is released one completed bar at a time.",
+        "Orders are requested for the next bar open by the strategy host."
+      ],
+      "parameters": [
+        { "name": "BREAKDOWN_WINDOW", "value": 3, "meaning": "completed closes used for the breakdown low" },
+        { "name": "COVER_WINDOW", "value": 3, "meaning": "completed closes used for the cover average" },
+        { "name": "STOP_LOSS_BPS", "value": 600, "meaning": "loss limit measured above the short entry close" },
+        { "name": "LOT_SIZE", "value": 100, "meaning": "A-share order quantity" }
+      ],
+      "tags": ["a_share", "research_short", "breakdown"]
+    },
+    {
+      "strategy_id": "a_share_rotation",
+      "title": "A-share three-symbol rotation",
+      "market": "a_share_daily",
+      "source": "strategies/a_share_rotation/strategy.py",
+      "notebook": "strategies/a_share_rotation/notebook.ipynb",
+      "summary": "Ranks completed-session momentum across a fixed three-symbol universe and rotates the shared-cash position into the leader.",
+      "assumptions": [
+        "Every session streams AAA.XSHG, BBB.XSHG, and CCC.XSHG before the next session begins, with session_end true on the final bar.",
+        "The strategy ranks only when session_end marks a completed session containing all three symbols.",
+        "The engine executes rotation intents against one shared-cash account; a rotation emits close before open."
+      ],
+      "parameters": [
+        { "name": "UNIVERSE", "value": "AAA.XSHG, BBB.XSHG, CCC.XSHG", "meaning": "fixed symbols ranked at every completed session" },
+        { "name": "MIN_MOMENTUM_BPS", "value": 10100, "meaning": "risk floor below which the strategy holds cash" },
+        { "name": "LOT_SIZE", "value": 100, "meaning": "A-share order quantity per selected symbol" },
+        { "name": "MOMENTUM_PERIODS", "value": 1, "meaning": "completed-session close-to-close momentum period" }
+      ],
+      "tags": ["a_share", "rotation", "multi_symbol", "shared_cash"]
+    },
+    {
+      "strategy_id": "crypto_trend",
+      "title": "Crypto trend crossover",
+      "market": "crypto_linear_perp",
+      "source": "strategies/crypto_trend/strategy.py",
+      "notebook": "strategies/crypto_trend/notebook.ipynb",
+      "summary": "Opens a linear-perpetual long when a fast completed-close average leads a slow average and exits on reversal or loss limit.",
+      "assumptions": [
+        "One crypto linear-perpetual symbol is released one completed bar at a time.",
+        "Orders are requested for the next bar open by the strategy host.",
+        "The strategy uses whole contract quantities."
+      ],
+      "parameters": [
+        { "name": "FAST_WINDOW", "value": 3, "meaning": "completed closes used for the fast average" },
+        { "name": "SLOW_WINDOW", "value": 4, "meaning": "completed closes used for the slow average" },
+        { "name": "STOP_LOSS_BPS", "value": 500, "meaning": "loss limit measured from entry close" },
+        { "name": "CONTRACTS", "value": 1, "meaning": "linear-perpetual order quantity" }
+      ],
+      "tags": ["crypto", "trend", "crossover", "long"]
+    },
+    {
+      "strategy_id": "crypto_mean_reversion",
+      "title": "Crypto mean reversion",
+      "market": "crypto_linear_perp",
+      "source": "strategies/crypto_mean_reversion/strategy.py",
+      "notebook": "strategies/crypto_mean_reversion/notebook.ipynb",
+      "summary": "Buys a completed-close discount to its rolling mean and exits at a recovery target or loss limit.",
+      "assumptions": [
+        "One crypto linear-perpetual symbol is released one completed bar at a time.",
+        "Orders are requested for the next bar open by the strategy host.",
+        "The strategy uses whole contract quantities."
+      ],
+      "parameters": [
+        { "name": "MEAN_WINDOW", "value": 3, "meaning": "completed closes used for the reference mean" },
+        { "name": "ENTRY_DISCOUNT_BPS", "value": 500, "meaning": "discount below the mean needed to enter" },
+        { "name": "RECOVERY_BPS", "value": 500, "meaning": "gain from entry close needed to exit" },
+        { "name": "STOP_LOSS_BPS", "value": 700, "meaning": "loss limit from entry close" },
+        { "name": "CONTRACTS", "value": 1, "meaning": "linear-perpetual order quantity" }
+      ],
+      "tags": ["crypto", "mean_reversion", "long"]
+    },
+    {
+      "strategy_id": "crypto_breakout",
+      "title": "Crypto breakout",
+      "market": "crypto_linear_perp",
+      "source": "strategies/crypto_breakout/strategy.py",
+      "notebook": "strategies/crypto_breakout/notebook.ipynb",
+      "summary": "Buys a completed-close high breakout and exits after a trend reversal or fixed loss limit.",
+      "assumptions": [
+        "One crypto linear-perpetual symbol is released one completed bar at a time.",
+        "Orders are requested for the next bar open by the strategy host.",
+        "The strategy uses whole contract quantities."
+      ],
+      "parameters": [
+        { "name": "BREAKOUT_WINDOW", "value": 3, "meaning": "completed closes used for the breakout high" },
+        { "name": "EXIT_WINDOW", "value": 3, "meaning": "completed closes used for the exit average" },
+        { "name": "STOP_LOSS_BPS", "value": 500, "meaning": "loss limit measured from the highest observed close" },
+        { "name": "CONTRACTS", "value": 1, "meaning": "linear-perpetual order quantity" }
+      ],
+      "tags": ["crypto", "breakout", "long"]
+    }
+  ]
+}

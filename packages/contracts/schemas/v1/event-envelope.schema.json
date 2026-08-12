@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json",
+  "title": "Open Quant Studio event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "stream_seq",
+    "schema_version",
+    "event_type",
+    "project_id",
+    "activity_id",
+    "session_id",
+    "workbench_id",
+    "correlation_id",
+    "causation_id",
+    "recorded_at",
+    "variant_id",
+    "base_revision_id",
+    "payload"
+  ],
+  "properties": {
+    "event_id": { "$ref": "#/$defs/uuid" },
+    "stream_seq": { "type": "integer", "minimum": 1 },
+    "schema_version": { "const": 1 },
+    "event_type": { "$ref": "#/$defs/namespacedType" },
+    "project_id": { "$ref": "#/$defs/uuid" },
+    "activity_id": { "$ref": "#/$defs/uuid" },
+    "session_id": { "$ref": "#/$defs/nullableIdentity" },
+    "workbench_id": { "$ref": "#/$defs/nullableIdentity" },
+    "correlation_id": { "$ref": "#/$defs/uuid" },
+    "causation_id": { "$ref": "#/$defs/uuid" },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "variant_id": {
+      "oneOf": [
+        { "$ref": "#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "base_revision_id": {
+      "oneOf": [
+        { "$ref": "#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "namespacedType": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+    },
+    "nullableIdentity": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "null" }
+      ]
+    }
+  }
+}

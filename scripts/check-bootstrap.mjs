@@ -1,8 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 
 const requiredFiles = [
+  ".env.example",
+  "LICENSE",
   "README.md",
   "AGENTS.md",
+  "apps/control-plane/package.json",
+  "apps/control-plane/src/browser-server.ts",
+  "apps/web/index.html",
+  "apps/web/package.json",
+  "crates/quant-engine/README.md",
   "docs/00_PROJECT_CHARTER.md",
   "docs/01_ARCHITECTURE.md",
   "docs/02_DOMAIN_MODEL.md",
@@ -12,8 +19,45 @@ const requiredFiles = [
   "docs/06_MIGRATION_MAP.md",
   "docs/07_POC_ACCEPTANCE.md",
   "docs/08_IMPLEMENTATION_PLAN.md",
+  "docs/09_M0_FOUNDATION_EVIDENCE.md",
+  "docs/10_M1_DURABLE_CORE_EVIDENCE.md",
+  "docs/11_M2_SESSION_FABRIC_EVIDENCE.md",
+  "docs/12_M3_REVISION_SLICE_EVIDENCE.md",
+  "docs/13_M4_UNIFIED_WORKBENCH_EVIDENCE.md",
+  "fixtures/backtests/m0-long-short-v1.json",
+  "fixtures/market/m0-long-short-v1.csv",
+  "packages/contracts/fixtures/v1/cases.json",
+  "packages/contracts/fixtures/v1/event.invalid-recorded-at.json",
+  "packages/contracts/package.json",
+  "packages/contracts/schemas/v1/command-envelope.schema.json",
+  "packages/contracts/schemas/v1/event-envelope.schema.json",
+  "packages/contracts/schemas/v1/session-command.schema.json",
+  "packages/contracts/schemas/v1/session-event.schema.json",
+  "packages/contracts/schemas/v1/revision-command.schema.json",
+  "packages/contracts/schemas/v1/revision-event.schema.json",
+  "packages/contracts/schemas/v1/artifact-read-model.schema.json",
+  "packages/contracts/schemas/v1/formal-engine-result.schema.json",
+  "packages/contracts/schemas/v1/formal-run-manifest.schema.json",
+  "packages/contracts/schemas/v1/formal-run-read-model.schema.json",
+  "packages/contracts/schemas/v1/project-read-model.schema.json",
+  "packages/contracts/src/index.ts",
+  "packages/research-ui/package.json",
+  "packages/research-ui/src/ResearchWorkbench.tsx",
   "prompts/START_DEVELOPMENT_PROMPT.md",
   "prompts/HANDOFF_PROMPT.md",
+  "scripts/check-data-root.mjs",
+  "scripts/run-m4-local.mjs",
+  "scripts/verify-golden-backtest.py",
+  "services/quant-domain/pyproject.toml",
+  "services/quant-domain/src/quant_domain/contract_probe.py",
+  "services/quant-domain/src/quant_domain/git_workspace.py",
+  "services/quant-domain/src/quant_domain/worker.py",
+  "services/quant-domain/uv.lock",
+  "third_party/M0_IMPORT_DECISIONS.md",
+  "third_party/M1_DEPENDENCY_DECISIONS.md",
+  "third_party/M2_DEPENDENCY_DECISIONS.md",
+  "third_party/licenses/PI_MIT.txt",
+  "tsconfig.base.json",
 ];
 
 const missing = requiredFiles.filter((path) => !existsSync(path));
@@ -22,5 +66,42 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-JSON.parse(readFileSync("package.json", "utf8"));
-process.stdout.write(`Bootstrap manifest valid: ${requiredFiles.length} required files present.\n`);
+const jsonFiles = [
+  "package.json",
+  "apps/control-plane/package.json",
+  "apps/web/package.json",
+  "fixtures/backtests/m0-long-short-v1.json",
+  "packages/contracts/fixtures/v1/cases.json",
+  "packages/contracts/package.json",
+  "packages/contracts/schemas/v1/command-envelope.schema.json",
+  "packages/contracts/schemas/v1/event-envelope.schema.json",
+  "packages/contracts/schemas/v1/session-command.schema.json",
+  "packages/contracts/schemas/v1/session-event.schema.json",
+  "packages/contracts/schemas/v1/revision-command.schema.json",
+  "packages/contracts/schemas/v1/revision-event.schema.json",
+  "packages/contracts/schemas/v1/artifact-read-model.schema.json",
+  "packages/contracts/schemas/v1/formal-engine-result.schema.json",
+  "packages/contracts/schemas/v1/formal-run-manifest.schema.json",
+  "packages/contracts/schemas/v1/formal-run-read-model.schema.json",
+  "packages/contracts/schemas/v1/project-read-model.schema.json",
+  "packages/research-ui/package.json",
+  "tsconfig.base.json",
+];
+
+for (const path of jsonFiles) {
+  JSON.parse(readFileSync(path, "utf8"));
+}
+
+const goldenSpec = JSON.parse(
+  readFileSync("fixtures/backtests/m0-long-short-v1.json", "utf8"),
+);
+if (
+  goldenSpec.status !== "test_oracle_only" ||
+  goldenSpec.formal_engine_integrated !== false
+) {
+  throw new Error("M0 golden fixture must remain a non-formal test oracle.");
+}
+
+process.stdout.write(
+  `Repository manifest valid: ${requiredFiles.length} required files present.\n`,
+);

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/context-captured-event.schema.json",
+  "title": "Open Quant Studio context captured event v1",
+  "allOf": [
+    {
+      "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": { "const": "context.captured" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["context_item_id", "title", "trust_state", "artifact"],
+          "properties": {
+            "context_item_id": { "$ref": "#/$defs/uuid" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "trust_state": { "const": "raw_evidence" },
+            "artifact": {
+              "allOf": [
+                {
+                  "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "producing_revision_id": { "type": "null" },
+                    "producing_run_id": { "type": "null" }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    }
+  }
+}

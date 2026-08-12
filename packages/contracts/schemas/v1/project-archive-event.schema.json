@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/project-archive-event.schema.json",
+  "title": "Open Quant Studio project archive imported event v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": { "const": "project.archive_imported" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "payload": { "$ref": "#/$defs/importedPayload" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "importedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive_artifact_id", "archive_sha256", "manifest_sha256", "restored_project_id", "run_count", "artifact_count", "git_ref_count"],
+      "properties": {
+        "archive_artifact_id": { "$ref": "#/$defs/uuid" },
+        "archive_sha256": { "$ref": "#/$defs/sha256" },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "restored_project_id": { "$ref": "#/$defs/uuid" },
+        "run_count": { "type": "integer", "minimum": 0 },
+        "artifact_count": { "type": "integer", "minimum": 0 },
+        "git_ref_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
