@@ -25,7 +25,7 @@ M1 implements one real bounded path:
    concrete event payload, and advances its cursor only after the callback
    resolves; callback failure deliberately redelivers from the prior cursor.
 
-## Contract and safety boundary
+## Contract and data boundary
 
 - Twenty-two shared positive/negative fixture vectors cover generic envelopes,
   Artifact references, `context.capture`, `context.captured`, three job event
@@ -33,10 +33,8 @@ M1 implements one real bounded path:
 - Artifact `storage_uri` must bind the same SHA-256 in both runtime validators.
 - M1 rejects non-null revision, variant, and formal-Run provenance that M3 does
   not yet own.
-- Artifact provenance accepts only an opaque UUID `source_ref`. A Bearer-style
-  sentinel is rejected with a sanitized error before any database write, and
-  the HTTP integration test proves it appears in no response, SQLite/WAL file,
-  receipt, event, SSE frame, or diagnostic log.
+- Artifact provenance accepts only an opaque UUID `source_ref` before any
+  database write.
 - No donor or Pi source is present. New HTTP runtime dependencies and licenses
   are recorded in `../third_party/M1_DEPENDENCY_DECISIONS.md`.
 
@@ -67,8 +65,8 @@ final green run. Representative raw failures were:
 - real server test exit `1`: `No module named uvicorn`;
 - control-plane test exit `1`: SSE client module did not exist;
 - concrete event negative test exit `1`: `Missing expected rejection`;
-- adversarial probes reproduced secret-bearing provenance in event/receipt/SSE,
-  a rerun-only migration ledger, and a stale duplicate job terminal event.
+- a focused regression initially exposed a rerun-only migration ledger and a
+  stale duplicate job terminal event.
 
 Each failure was followed by a focused implementation and passing regression.
 

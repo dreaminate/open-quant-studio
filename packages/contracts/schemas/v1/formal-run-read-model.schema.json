@@ -5,7 +5,12 @@
   "oneOf": [
     { "$ref": "#/$defs/listReadModel" },
     { "$ref": "#/$defs/succeededDetail" },
-    { "$ref": "#/$defs/failedDetail" }
+    { "$ref": "#/$defs/failedDetail" },
+    { "$ref": "#/$defs/m5SucceededDetail" },
+    { "$ref": "#/$defs/m8SucceededDetail" },
+    { "$ref": "#/$defs/m5FailedDetail" },
+    { "$ref": "#/$defs/activeDetail" },
+    { "$ref": "#/$defs/cancelledDetail" }
   ],
   "$defs": {
     "uuid": {
@@ -32,8 +37,11 @@
       "enum": [
         "contract_gate_failed",
         "strategy_import_failed",
+        "strategy_protocol_failed",
         "engine_input_missing",
         "engine_input_integrity_mismatch",
+        "checkpoint_integrity_mismatch",
+        "worker_interrupted_by_m5_upgrade",
         "smoke_run_failed",
         "engine_result_contract_failed"
       ]
@@ -56,6 +64,16 @@
         "contract": { "const": "passed" },
         "strategy_import": { "const": "passed" },
         "smoke_run": { "const": "passed" }
+      }
+    },
+    "notRunGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "const": "not_run" },
+        "strategy_import": { "const": "not_run" },
+        "smoke_run": { "const": "not_run" }
       }
     },
     "artifact": {
@@ -141,6 +159,109 @@
         "job_finished_at": { "$ref": "#/$defs/dateTime" }
       }
     },
+    "runActive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id", "run_spec_id", "project_id", "activity_id", "variant_id",
+        "candidate_revision_id", "status", "engine_result_artifact_id",
+        "manifest_artifact_id", "calculation_hash", "error_code", "queued_at",
+        "started_at", "finished_at", "execution_version", "checkpoint_seq",
+        "next_bar_index", "retry_of_run_id", "validation_id", "validation_outcome", "gates"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "enum": ["pending", "running"] },
+        "engine_result_artifact_id": { "type": "null" },
+        "manifest_artifact_id": { "type": "null" },
+        "calculation_hash": { "type": "null" },
+        "error_code": { "type": "null" },
+        "queued_at": { "$ref": "#/$defs/dateTime" },
+        "started_at": {
+          "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "finished_at": { "type": "null" },
+        "execution_version": { "type": "integer", "minimum": 0 },
+        "checkpoint_seq": { "type": "integer", "minimum": 0 },
+        "next_bar_index": { "type": "integer", "minimum": 0, "maximum": 250000 },
+        "retry_of_run_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "validation_outcome": { "const": "not_run" },
+        "gates": { "$ref": "#/$defs/notRunGates" }
+        ,
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "job_finished_at": { "type": "null" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "pending" } } },
+          "then": {
+            "properties": {
+              "started_at": { "type": "null" },
+              "execution_version": { "const": 0 },
+              "checkpoint_seq": { "const": 0 },
+              "next_bar_index": { "const": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "started_at": { "$ref": "#/$defs/dateTime" },
+              "execution_version": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "runCancelled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id", "run_spec_id", "project_id", "activity_id", "variant_id",
+        "candidate_revision_id", "status", "engine_result_artifact_id",
+        "manifest_artifact_id", "calculation_hash", "error_code", "queued_at",
+        "started_at", "finished_at", "execution_version", "checkpoint_seq",
+        "next_bar_index", "retry_of_run_id", "validation_id", "validation_outcome",
+        "gates", "cancel_reason"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "cancelled" },
+        "engine_result_artifact_id": { "type": "null" },
+        "manifest_artifact_id": { "type": "null" },
+        "calculation_hash": { "type": "null" },
+        "error_code": { "type": "null" },
+        "queued_at": { "$ref": "#/$defs/dateTime" },
+        "started_at": {
+          "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "finished_at": { "$ref": "#/$defs/dateTime" },
+        "execution_version": { "type": "integer", "minimum": 1 },
+        "checkpoint_seq": { "type": "integer", "minimum": 0 },
+        "next_bar_index": { "type": "integer", "minimum": 0, "maximum": 250000 },
+        "retry_of_run_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "validation_outcome": { "const": "not_run" },
+        "gates": { "$ref": "#/$defs/notRunGates" },
+        "cancel_reason": { "const": "user_requested" }
+        ,
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "job_finished_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
     "runSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -195,6 +316,71 @@
         "created_at": { "$ref": "#/$defs/dateTime" }
       }
     },
+    "m5RunSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id", "project_id", "activity_id", "variant_id", "candidate_revision_id",
+        "market_input_artifact_id", "data_snapshot_id", "data_snapshot_sha256",
+        "strategy_tree_oid", "parameters_sha256", "cost_model_sha256",
+        "environment_lock_sha256", "engine_version", "price_basis", "cutoff",
+        "timezone", "sample_start", "sample_end", "random_seed", "output_schema_version",
+        "gate_policy_version", "strategy_protocol_version", "checkpoint_batch_size",
+        "engine_checkpoint_abi", "spec_hash", "created_at"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "market_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0"] },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "enum": [1, 2] },
+        "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
+        "strategy_protocol_version": { "enum": ["oqs-strategy-host/m5-stream-v2", "oqs-strategy-host/m8-portfolio-v1"] },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "engine_checkpoint_abi": { "enum": ["oqs-quant-engine/checkpoint-v1", "oqs-quant-engine/checkpoint-v2"] },
+        "spec_hash": { "$ref": "#/$defs/sha256" },
+        "created_at": { "$ref": "#/$defs/dateTime" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+                "output_schema_version": { "const": 1 },
+                "gate_policy_version": { "const": "m5-v1" },
+                "strategy_protocol_version": { "const": "oqs-strategy-host/m5-stream-v2" },
+                "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v1" }
+              }
+            },
+            {
+              "properties": {
+                "engine_version": { "const": "oqs-quant-engine/0.2.0" },
+                "output_schema_version": { "const": 2 },
+                "gate_policy_version": { "const": "m8-v1" },
+                "strategy_protocol_version": { "const": "oqs-strategy-host/m8-portfolio-v1" },
+                "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v2" }
+              }
+            }
+          ]
+        }
+      ]
+    },
     "validation": {
       "type": "object",
       "additionalProperties": false,
@@ -218,6 +404,45 @@
         },
         "created_at": { "$ref": "#/$defs/dateTime" }
       }
+    },
+    "m5Validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation_id", "gate_policy_version", "engine_version", "gates", "outcome", "manifest_artifact_id", "created_at"],
+      "properties": {
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
+        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0"] },
+        "gates": {
+          "oneOf": [
+            { "$ref": "#/$defs/gateOutcomes" },
+            { "$ref": "#/$defs/notRunGates" }
+          ]
+        },
+        "outcome": { "enum": ["passed", "failed", "not_run"] },
+        "manifest_artifact_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "created_at": { "$ref": "#/$defs/dateTime" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "gate_policy_version": { "const": "m5-v1" },
+                "engine_version": { "const": "oqs-quant-engine/0.1.0" }
+              }
+            },
+            {
+              "properties": {
+                "gate_policy_version": { "const": "m8-v1" },
+                "engine_version": { "const": "oqs-quant-engine/0.2.0" }
+              }
+            }
+          ]
+        }
+      ]
     },
     "intentEventKey": {
       "type": "object",
@@ -370,6 +595,8 @@
           "maxItems": 4096,
           "items": {
             "oneOf": [
+              { "$ref": "#/$defs/runActive" },
+              { "$ref": "#/$defs/runCancelled" },
               { "$ref": "#/$defs/listEntrySucceeded" },
               { "$ref": "#/$defs/listEntryFailed" }
             ]
@@ -428,7 +655,9 @@
               "properties": {
                 "intent_tape": { "$ref": "#/$defs/artifact" },
                 "engine_result": { "$ref": "#/$defs/artifact" },
-                "manifest": { "$ref": "#/$defs/artifact" }
+                "manifest": { "$ref": "#/$defs/artifact" },
+                "report_json": { "$ref": "#/$defs/artifact" },
+                "report_html": { "$ref": "#/$defs/artifact" }
               }
             },
             "manifest": {
@@ -464,6 +693,219 @@
             "manifest": { "type": "null" },
             "engine_result": { "type": "null" },
             "intent_tape": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "m5TerminalDetailCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run", "run_spec", "validation", "artifacts", "manifest",
+        "engine_result", "intent_tape", "logs"
+      ],
+      "properties": {
+        "run": {
+          "oneOf": [
+            { "$ref": "#/$defs/runSucceeded" },
+            { "$ref": "#/$defs/runFailed" }
+          ]
+        },
+        "run_spec": { "$ref": "#/$defs/m5RunSpec" },
+        "validation": { "$ref": "#/$defs/m5Validation" },
+        "artifacts": { "type": "object" },
+        "manifest": { "type": ["object", "null"] },
+        "engine_result": { "type": ["object", "null"] },
+        "intent_tape": { "type": ["array", "null"] },
+        "logs": { "$ref": "#/$defs/logs" }
+      }
+    },
+    "m5SucceededDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5TerminalDetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runSucceeded" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "gate_policy_version": { "const": "m5-v1" },
+                "outcome": { "const": "passed" },
+                "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+                "gates": { "$ref": "#/$defs/passedGates" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["intent_tape", "engine_result", "manifest"],
+              "properties": {
+                "intent_tape": { "$ref": "#/$defs/artifact" },
+                "engine_result": { "$ref": "#/$defs/artifact" },
+                "manifest": { "$ref": "#/$defs/artifact" },
+                "report_json": { "$ref": "#/$defs/artifact" },
+                "report_html": { "$ref": "#/$defs/artifact" }
+              }
+            },
+            "manifest": {
+              "allOf": [
+                { "$ref": "https://open-quant-studio.local/schemas/v1/formal-run-manifest.schema.json" },
+                { "type": "object", "properties": { "manifest_version": { "const": "m5-v1" } } }
+              ]
+            },
+            "engine_result": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json"
+            },
+            "intent_tape": { "$ref": "#/$defs/intentTape" }
+          }
+        }
+      ]
+    },
+    "m8SucceededDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5TerminalDetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runSucceeded" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "gate_policy_version": { "const": "m8-v1" },
+                "outcome": { "const": "passed" },
+                "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+                "gates": { "$ref": "#/$defs/passedGates" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["intent_tape", "engine_result", "manifest"],
+              "properties": {
+                "intent_tape": { "$ref": "#/$defs/artifact" },
+                "engine_result": { "$ref": "#/$defs/artifact" },
+                "manifest": { "$ref": "#/$defs/artifact" },
+                "report_json": { "$ref": "#/$defs/artifact" },
+                "report_html": { "$ref": "#/$defs/artifact" }
+              }
+            },
+            "manifest": {
+              "allOf": [
+                { "$ref": "https://open-quant-studio.local/schemas/v1/formal-run-manifest.schema.json" },
+                { "type": "object", "properties": { "manifest_version": { "const": "m8-v1" } } }
+              ]
+            },
+            "engine_result": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result-v2.schema.json"
+            },
+            "intent_tape": { "$ref": "#/$defs/intentTape" }
+          }
+        }
+      ]
+    },
+    "m5FailedDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5TerminalDetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runFailed" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
+                "outcome": { "const": "failed" },
+                "manifest_artifact_id": { "type": "null" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            },
+            "manifest": { "type": "null" },
+            "engine_result": { "type": "null" },
+            "intent_tape": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "m5DetailCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "run_spec", "validation", "artifacts", "manifest", "engine_result", "intent_tape", "logs"],
+      "properties": {
+        "run": { "type": "object" },
+        "run_spec": { "$ref": "#/$defs/m5RunSpec" },
+        "validation": { "$ref": "#/$defs/m5Validation" },
+        "artifacts": { "type": "object", "additionalProperties": false, "maxProperties": 0 },
+        "manifest": { "type": "null" },
+        "engine_result": { "type": "null" },
+        "intent_tape": { "type": "null" },
+        "logs": { "$ref": "#/$defs/logs" }
+      }
+    },
+    "runActiveDetailRecord": {
+      "allOf": [
+        { "$ref": "#/$defs/runActive" },
+        {
+          "type": "object",
+          "required": ["job_id", "job_finished_at"],
+          "properties": {
+            "job_id": { "$ref": "#/$defs/uuid" },
+            "job_finished_at": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "runCancelledDetailRecord": {
+      "allOf": [
+        { "$ref": "#/$defs/runCancelled" },
+        {
+          "type": "object",
+          "required": ["job_id", "job_finished_at"],
+          "properties": {
+            "job_id": { "$ref": "#/$defs/uuid" },
+            "job_finished_at": { "$ref": "#/$defs/dateTime" }
+          }
+        }
+      ]
+    },
+    "activeDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5DetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runActiveDetailRecord" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "outcome": { "const": "not_run" },
+                "gates": { "$ref": "#/$defs/notRunGates" },
+                "manifest_artifact_id": { "type": "null" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "cancelledDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5DetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runCancelledDetailRecord" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "outcome": { "const": "not_run" },
+                "gates": { "$ref": "#/$defs/notRunGates" },
+                "manifest_artifact_id": { "type": "null" }
+              }
+            }
           }
         }
       ]

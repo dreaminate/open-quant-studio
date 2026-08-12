@@ -67,24 +67,28 @@ def create_revision_command(
     files: list[tuple[str, bytes, str]],
     variant_id: str | None = None,
     base_revision_id: str | None = None,
+    removed_paths: list[str] | None = None,
 ) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "revision_id": revision_id,
+        "message": f"Create {revision_id}",
+        "files": [
+            {
+                "path": path,
+                "artifact": artifact_for(body, artifact_id),
+            }
+            for path, body, artifact_id in files
+        ],
+    }
+    if removed_paths is not None:
+        payload["removed_paths"] = removed_paths
     return revision_command(
         "workspace.revision_create",
         command_id=command_id,
         expected_revision_id=base_revision_id,
         variant_id=variant_id,
         base_revision_id=base_revision_id,
-        payload={
-            "revision_id": revision_id,
-            "message": f"Create {revision_id}",
-            "files": [
-                {
-                    "path": path,
-                    "artifact": artifact_for(body, artifact_id),
-                }
-                for path, body, artifact_id in files
-            ],
-        },
+        payload=payload,
     )
 
 
@@ -323,6 +327,40 @@ class M3RevisionDomainTest(unittest.TestCase):
                 f"refs/oqs/revisions/{revision_id}"
                 for revision_id in [ROOT_REVISION_ID, REVISION_A_ID, REVISION_B_ID]
             ),
+        )
+
+    def test_child_revision_removes_one_inherited_file_and_keeps_the_new_source(self) -> None:
+        self.create_root()
+        self.domain.submit_command(
+            create_variant_command(
+                command_id="72727272-7272-4272-8272-727272727272",
+                variant_id=VARIANT_A_ID,
+            )
+        )
+        source = b"signal = close > moving_average\n"
+        files = [
+            (
+                "strategy.py",
+                source,
+                "73737373-7373-4373-8373-737373737373",
+            )
+        ]
+        self.stage_files(files)
+        self.domain.submit_command(
+            create_revision_command(
+                command_id="74747474-7474-4474-8474-747474747474",
+                revision_id=REVISION_A_ID,
+                files=files,
+                variant_id=VARIANT_A_ID,
+                base_revision_id=ROOT_REVISION_ID,
+                removed_paths=["config/costs.json"],
+            )
+        )
+
+        revision = self.domain.revision(PROJECT_ID, REVISION_A_ID)
+        self.assertEqual(
+            [(file["path"], file["sha256"]) for file in revision["files"]],
+            [("strategy.py", hashlib.sha256(source).hexdigest())],
         )
 
     def test_raw_variant_heads_cannot_bypass_merge_validation(self) -> None:

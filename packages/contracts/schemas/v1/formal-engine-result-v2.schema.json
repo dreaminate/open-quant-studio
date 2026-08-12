@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-engine-result-v2.schema.json",
+  "title": "Formal Rust portfolio engine result v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "engine_version", "account_model", "orders", "trades",
+    "positions", "cash_ledger", "funding_ledger", "equity_curve",
+    "drawdown_curve", "metrics", "costs", "assumptions"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "engine_version": { "const": "oqs-quant-engine/0.2.0" },
+    "account_model": { "const": "a_share_portfolio_cash" },
+    "orders": { "$ref": "#/$defs/orders" },
+    "trades": { "$ref": "#/$defs/trades" },
+    "positions": { "$ref": "#/$defs/positions" },
+    "cash_ledger": { "$ref": "#/$defs/cashLedger" },
+    "funding_ledger": { "type": "array", "maxItems": 0 },
+    "equity_curve": { "$ref": "#/$defs/equityCurve" },
+    "drawdown_curve": {
+      "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json#/$defs/drawdown_curve"
+    },
+    "metrics": {
+      "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json#/$defs/metrics"
+    },
+    "costs": {
+      "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json#/$defs/costs"
+    },
+    "assumptions": { "$ref": "#/$defs/assumptions" }
+  },
+  "$defs": {
+    "atom": { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "symbol": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "side": { "enum": ["buy", "sell"] },
+    "positionEffect": { "enum": ["open", "close"] },
+    "orders": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id", "intent_seq", "symbol", "status", "side",
+          "position_effect", "order_type", "quantity", "filled_session_seq",
+          "filled_phase"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_seq": { "$ref": "#/$defs/seq" },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "status": { "enum": ["filled", "expired"] },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/positionEffect" },
+          "order_type": { "const": "market" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "filled_session_seq": {
+            "oneOf": [{ "$ref": "#/$defs/seq" }, { "type": "null" }]
+          },
+          "filled_phase": {
+            "oneOf": [{ "const": "open" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "trades": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "trade_id", "intent_id", "symbol", "session_seq", "side",
+          "position_effect", "quantity", "fill_price_atoms", "notional_atoms",
+          "fee_atoms", "stamp_duty_atoms", "slippage_atoms", "liquidity"
+        ],
+        "properties": {
+          "trade_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/positionEffect" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "fill_price_atoms": { "$ref": "#/$defs/atom" },
+          "notional_atoms": { "$ref": "#/$defs/atom" },
+          "fee_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+          "slippage_atoms": { "$ref": "#/$defs/atom" },
+          "liquidity": { "const": "taker" }
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id", "symbol", "session_seq", "signed_quantity",
+          "eligible_quantity"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "signed_quantity": { "$ref": "#/$defs/atom" },
+          "eligible_quantity": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "cashLedger": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id", "symbol", "session_seq", "notional_delta_atoms",
+          "fee_delta_atoms", "stamp_duty_delta_atoms", "realized_pnl_delta_atoms",
+          "funding_delta_atoms", "resulting_cash_atoms"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "notional_delta_atoms": { "$ref": "#/$defs/atom" },
+          "fee_delta_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_delta_atoms": { "$ref": "#/$defs/atom" },
+          "realized_pnl_delta_atoms": { "$ref": "#/$defs/atom" },
+          "funding_delta_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_cash_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "equityCurve": {
+      "type": "array",
+      "maxItems": 250000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_seq", "timestamp", "cash_atoms", "market_value_atoms",
+          "equity_atoms"
+        ],
+        "properties": {
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "cash_atoms": { "$ref": "#/$defs/atom" },
+          "market_value_atoms": { "$ref": "#/$defs/atom" },
+          "equity_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fill_model", "partial_fills", "liquidate_on_end", "research_short",
+        "research_short_notice", "one_x_notional", "shared_cash",
+        "per_symbol_t_plus_one"
+      ],
+      "properties": {
+        "fill_model": { "const": "portfolio_ohlc_market_open_v2" },
+        "partial_fills": { "const": false },
+        "liquidate_on_end": { "const": false },
+        "research_short": { "const": false },
+        "research_short_notice": { "type": "null" },
+        "one_x_notional": { "const": false },
+        "shared_cash": { "const": true },
+        "per_symbol_t_plus_one": { "const": true }
+      }
+    }
+  }
+}

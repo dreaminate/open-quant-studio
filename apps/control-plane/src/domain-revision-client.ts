@@ -4,12 +4,28 @@ import {
   type ActivityListReadModel,
   type ArtifactRef,
   type ArtifactMetadataReadModel,
+  type DataImportPreviewReadModel,
+  type DataSnapshotCreateCommand,
+  type DataSnapshotListReadModel,
+  type DataSnapshotMapping,
+  type DataSnapshotMarket,
+  type DataSnapshotPriceBasis,
+  type DataSnapshotReadModel,
+  type DataSnapshotSourceArtifact,
+  type DataSnapshotSourceFormat,
+  type DiagnosticCommand,
+  type DiagnosticLog,
+  type DiagnosticLogListReadModel,
   type FormalRunCommand,
+  type FormalRunRequestPayload,
   type FormalRunDetailReadModel,
   type FormalRunListReadModel,
+  type ForwardTestCommand,
+  type ForwardTestReadModel,
   type M3ArtifactRef,
+  type ProjectArchiveCommand,
   type ProjectListReadModel,
-  type RevisionCommand,
+  type RunReportReadModel,
   type RevisionCreatePayload,
   type StrategyVariantCreateCommand,
   type WorkspaceMergeCreateCommand,
@@ -19,10 +35,20 @@ import {
   type WorkspaceRevisionPromoteCommand,
   validateActivityListReadModel,
   validateArtifactMetadataReadModel,
+  validateDataImportPreviewReadModel,
+  validateDataSnapshotCommand,
+  validateDataSnapshotListReadModel,
+  validateDataSnapshotReadModel,
+  validateDiagnosticCommand,
+  validateDiagnosticLogListReadModel,
   validateFormalRunCommand,
   validateFormalRunDetailReadModel,
   validateFormalRunListReadModel,
+  validateForwardTestCommand,
+  validateForwardTestReadModel,
+  validateProjectArchiveCommand,
   validateProjectListReadModel,
+  validateRunReportReadModel,
   validateStrategyVariantCreateCommand,
   validateWorkspaceMergeCreateCommand,
   validateWorkspaceRevisionCreateCommand,
@@ -47,6 +73,11 @@ const MAX_CHANGES = 64;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const GIT_OID_PATTERN = /^[a-f0-9]{40}$/;
+
+export const PROJECT_ARCHIVE_MEDIA_TYPE =
+  "application/vnd.open-quant-studio.project-archive+zip";
+export const PROJECT_ARCHIVE_MAX_BYTES = 10 * 1024 * 1024 * 1024;
+export type ProjectArchiveLogSelection = "full" | "warn_error" | "none";
 
 export type RevisionFetchImplementation = (
   input: RequestInfo | URL,
@@ -73,6 +104,7 @@ export interface RevisionFileInput {
 export interface RevisionCreateRequest extends RevisionCommandContext {
   message: string;
   files: RevisionFileInput[];
+  removedPaths?: string[];
   revisionId?: string;
   variantId?: string;
   baseRevisionId?: string;
@@ -104,7 +136,7 @@ export interface MergeCreateRequest extends RevisionCommandContext {
 export interface FormalRunRequest extends RevisionCommandContext {
   candidateRevisionId: string;
   variantId: string;
-  engineInputJson: string;
+  marketInputJson: string;
   dataSnapshotId: string;
   dataSnapshotSha256: string;
   strategyTreeOid: string;
@@ -117,11 +149,100 @@ export interface FormalRunRequest extends RevisionCommandContext {
   sampleStart: string;
   sampleEnd: string;
   randomSeed: number;
-  engineInputOriginKind?: "fixture" | "service_generated";
-  engineInputSourceRef?: string;
+  marketInputOriginKind?: "fixture" | "service_generated";
+  marketInputSourceRef?: string;
+  checkpointBatchSize?: number;
   runSpecId?: string;
   runId?: string;
   validationId?: string;
+}
+
+export interface DataSnapshotCreateRequest extends RevisionCommandContext {
+  source: DataSnapshotSourceArtifact;
+  sourceFormat: DataSnapshotSourceFormat;
+  fileName: string;
+  mapping: DataSnapshotMapping;
+  market: DataSnapshotMarket;
+  timezone: string;
+  priceBasis: DataSnapshotPriceBasis;
+  cutoff: string;
+  snapshotId?: string;
+}
+
+export interface DataImportRowError {
+  row_number: number;
+  field: string;
+  message: string;
+}
+
+export interface LocalDataImportFile {
+  file_name: string;
+  source_format: DataSnapshotSourceFormat;
+  byte_size: number;
+}
+
+export interface BuiltInStrategyParameter {
+  name: string;
+  value: string | number;
+  meaning: string;
+}
+
+export interface BuiltInStrategy {
+  strategy_id: string;
+  title: string;
+  market: "a_share_daily" | "crypto_linear_perp";
+  source: string;
+  notebook: string;
+  summary: string;
+  assumptions: string[];
+  parameters: BuiltInStrategyParameter[];
+  tags: string[];
+  source_body: string;
+  source_sha256: string;
+}
+
+export interface RenderedStrategyNotebook {
+  strategy_id: string;
+  file_name: "strategy.ipynb";
+  body: string;
+  sha256: string;
+}
+
+export class DataImportPreviewHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly details: DataImportRowError[],
+  ) {
+    super(`quant-domain data import preview returned HTTP ${status} (${code})`);
+    this.name = "DataImportPreviewHttpError";
+  }
+}
+
+export interface ForwardTestRequest extends RevisionCommandContext {
+  sourceRunId: string;
+  sourceRevisionId: string;
+  variantId: string;
+  forwardTestId?: string;
+}
+
+export interface ProjectArchiveImportRequest extends RevisionCommandContext {
+  archive: Uint8Array<ArrayBuffer>;
+}
+
+export interface DiagnosticLogListFilters {
+  runId?: string;
+  activityId?: string;
+  sessionId?: string;
+  level?: DiagnosticLog["level"];
+  priority?: DiagnosticLog["priority"];
+  query?: string;
+  afterLogSeq?: number;
+  limit?: number;
+}
+
+export interface DiagnosticLogDeleteRequest extends RevisionCommandContext {
+  logIds: string[];
 }
 
 export interface RevisionDetail {
@@ -198,7 +319,12 @@ interface PreparedMerge {
 
 interface PreparedFormalRun {
   command: FormalRunCommand;
-  engineInput: ArtifactRef;
+  marketInput: ArtifactRef;
+}
+
+interface PreparedProjectArchiveImport {
+  command: ProjectArchiveCommand;
+  archive: ArtifactRef;
 }
 
 /**
@@ -296,6 +422,41 @@ export class FetchQuantDomainRevisionClient {
     return this.#prepareFormalRun(request).command;
   }
 
+  buildDataSnapshotCreateCommand(
+    request: DataSnapshotCreateRequest,
+  ): DataSnapshotCreateCommand {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const command: DataSnapshotCreateCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "data.snapshot_create",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: null,
+      variant_id: null,
+      base_revision_id: null,
+      payload: {
+        snapshot_id: request.snapshotId ?? stableIdentityUuid(`${commandId}:data-snapshot`),
+        source: request.source,
+        source_format: request.sourceFormat,
+        file_name: request.fileName,
+        mapping: request.mapping,
+        market: request.market,
+        timezone: request.timezone,
+        price_basis: request.priceBasis,
+        cutoff: request.cutoff,
+      },
+    };
+    return assertValidCommand(
+      validateDataSnapshotCommand(command),
+      "data.snapshot_create",
+    );
+  }
+
   buildRevisionPromoteCommand(
     request: RevisionPromoteRequest,
   ): WorkspaceRevisionPromoteCommand {
@@ -364,8 +525,33 @@ export class FetchQuantDomainRevisionClient {
 
   async requestFormalRun(request: FormalRunRequest): Promise<CommandReceipt> {
     const prepared = this.#prepareFormalRun(request);
-    const staged = await this.#sessionClient.stageJson(request.engineInputJson);
-    assertStagedJsonIdentity(staged, prepared.engineInput);
+    const staged = await this.#sessionClient.stageJson(request.marketInputJson);
+    assertStagedJsonIdentity(staged, prepared.marketInput);
+    return this.#sessionClient.postCommand(prepared.command);
+  }
+
+  async createDataSnapshot(
+    request: DataSnapshotCreateRequest,
+  ): Promise<CommandReceipt> {
+    return this.#sessionClient.postCommand(
+      this.buildDataSnapshotCreateCommand(request),
+    );
+  }
+
+  async requestForwardTest(request: ForwardTestRequest): Promise<CommandReceipt> {
+    return this.#sessionClient.postCommand(this.#prepareForwardTest(request));
+  }
+
+  async deleteLogs(request: DiagnosticLogDeleteRequest): Promise<CommandReceipt> {
+    return this.#sessionClient.postCommand(this.#prepareDiagnosticLogDelete(request));
+  }
+
+  async importProjectArchive(
+    request: ProjectArchiveImportRequest,
+  ): Promise<CommandReceipt> {
+    const prepared = this.#prepareProjectArchiveImport(request);
+    const staged = await this.#stageProjectArchive(request.archive, prepared.archive);
+    assertStagedProjectArchiveIdentity(staged, prepared.archive);
     return this.#sessionClient.postCommand(prepared.command);
   }
 
@@ -381,6 +567,8 @@ export class FetchQuantDomainRevisionClient {
   createVariant = this.createStrategyVariant.bind(this);
   createMerge = this.createMergeCandidate.bind(this);
   runFormal = this.requestFormalRun.bind(this);
+  runForwardTest = this.requestForwardTest.bind(this);
+  importArchive = this.importProjectArchive.bind(this);
   promote = this.promoteRevision.bind(this);
 
   async getRevision(projectId: string, revisionId: string): Promise<RevisionDetail> {
@@ -461,6 +649,39 @@ export class FetchQuantDomainRevisionClient {
     return activities;
   }
 
+  async listBuiltInStrategies(): Promise<BuiltInStrategy[]> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/strategies`,
+      { headers: { Accept: "application/json" } },
+    );
+    const payload = asRecord(
+      await this.#jsonResponse(response),
+      "strategy catalog response",
+    );
+    if (!Array.isArray(payload.strategies)) {
+      throw new Error("quant-domain strategy catalog response has an invalid shape");
+    }
+    return payload.strategies as BuiltInStrategy[];
+  }
+
+  async renderStrategyNotebook(
+    strategyId: string,
+    source: string,
+  ): Promise<RenderedStrategyNotebook> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/strategies/${encodeURIComponent(strategyId)}/notebook`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ source }),
+      },
+    );
+    return await this.#jsonResponse(response) as RenderedStrategyNotebook;
+  }
+
   async listRuns(
     projectId: string,
     activityId: string,
@@ -482,6 +703,187 @@ export class FetchQuantDomainRevisionClient {
       throw new Error("quant-domain Formal Run list crossed request identity");
     }
     return runs;
+  }
+
+  async previewDataImport(
+    projectId: string,
+    fileName: string,
+    sourceFormat: DataSnapshotSourceFormat,
+    body: Uint8Array<ArrayBuffer>,
+  ): Promise<DataImportPreviewReadModel> {
+    const query = new URLSearchParams({ file_name: fileName, source_format: sourceFormat });
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-imports/preview?${query}`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": sourceFormat === "csv"
+            ? "text/csv"
+            : "application/vnd.apache.parquet",
+        },
+        body,
+      },
+    );
+    if (!response.ok) {
+      throw await dataImportPreviewError(response);
+    }
+    return assertReadContract(
+      validateDataImportPreviewReadModel(await response.json()),
+      "data import preview response",
+    );
+  }
+
+  async listLocalDataImports(projectId: string): Promise<LocalDataImportFile[]> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-imports/local-files`,
+      { headers: { Accept: "application/json" } },
+    );
+    const record = asRecord(await this.#jsonResponse(response), "local data imports response");
+    if (!Array.isArray(record.files)) {
+      throw new Error("quant-domain local data imports response has an invalid shape");
+    }
+    return record.files.map((file) => {
+      const item = asRecord(file, "local data import file");
+      if (
+        typeof item.file_name !== "string"
+        || (item.source_format !== "csv" && item.source_format !== "parquet")
+        || !Number.isInteger(item.byte_size)
+      ) {
+        throw new Error("quant-domain local data import file has an invalid shape");
+      }
+      return {
+        file_name: item.file_name,
+        source_format: item.source_format,
+        byte_size: item.byte_size as number,
+      };
+    });
+  }
+
+  async previewLocalDataImport(
+    projectId: string,
+    fileName: string,
+  ): Promise<DataImportPreviewReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-imports/local-preview`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: fileName }),
+      },
+    );
+    if (!response.ok) {
+      throw await dataImportPreviewError(response);
+    }
+    return assertReadContract(
+      validateDataImportPreviewReadModel(await response.json()),
+      "local data import preview response",
+    );
+  }
+
+  async listDataSnapshots(projectId: string): Promise<DataSnapshotListReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-snapshots`,
+      { headers: { Accept: "application/json" } },
+    );
+    const snapshots = assertReadContract(
+      validateDataSnapshotListReadModel(await this.#jsonResponse(response)),
+      "data snapshot list response",
+    );
+    if (snapshots.snapshots.some((snapshot) => snapshot.project_id !== projectId)) {
+      throw new Error("quant-domain data snapshot list crossed project identity");
+    }
+    return snapshots;
+  }
+
+  async getDataSnapshot(
+    projectId: string,
+    snapshotId: string,
+  ): Promise<DataSnapshotReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-snapshots/${encodeURIComponent(snapshotId)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const snapshot = assertReadContract(
+      validateDataSnapshotReadModel(await this.#jsonResponse(response)),
+      "data snapshot response",
+    );
+    if (snapshot.project_id !== projectId || snapshot.snapshot_id !== snapshotId) {
+      throw new Error("quant-domain data snapshot response crossed request identity");
+    }
+    return snapshot;
+  }
+
+  async getDataSnapshotMarketInput(
+    projectId: string,
+    snapshot: DataSnapshotReadModel,
+  ): Promise<string> {
+    if (snapshot.project_id !== projectId) {
+      throw new Error("quant-domain data snapshot crossed request identity");
+    }
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/data-snapshots/${encodeURIComponent(snapshot.snapshot_id)}/market-input`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) {
+      throw new QuantDomainHttpError({
+        status: response.status,
+        code: await boundedResponseCode(response),
+      });
+    }
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
+    if (mediaType !== "application/json") {
+      throw new Error("quant-domain data snapshot market input returned the wrong media type");
+    }
+    const marketInputJson = await response.text();
+    JSON.parse(marketInputJson);
+    if (createHash("sha256").update(marketInputJson).digest("hex") !== snapshot.market_input_sha256) {
+      throw new Error("quant-domain data snapshot market input failed identity verification");
+    }
+    return marketInputJson;
+  }
+
+  async listLogs(
+    projectId: string,
+    filters: DiagnosticLogListFilters = {},
+  ): Promise<DiagnosticLogListReadModel> {
+    const query = new URLSearchParams({ project_id: projectId });
+    if (filters.runId !== undefined) {
+      query.set("run_id", filters.runId);
+    }
+    if (filters.activityId !== undefined) {
+      query.set("activity_id", filters.activityId);
+    }
+    if (filters.sessionId !== undefined) {
+      query.set("session_id", filters.sessionId);
+    }
+    if (filters.level !== undefined) {
+      query.set("level", filters.level);
+    }
+    if (filters.priority !== undefined) {
+      query.set("priority", filters.priority);
+    }
+    if (filters.query !== undefined) {
+      query.set("query", filters.query);
+    }
+    if (filters.afterLogSeq !== undefined) {
+      query.set("after_log_seq", String(filters.afterLogSeq));
+    }
+    if (filters.limit !== undefined) {
+      query.set("limit", String(filters.limit));
+    }
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/logs?${query}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const logs = assertReadContract(
+      validateDiagnosticLogListReadModel(await this.#jsonResponse(response)),
+      "diagnostic log list response",
+    );
+    if (logs.logs.some((log) => log.project_id !== projectId)) {
+      throw new Error("quant-domain diagnostic log list crossed project identity");
+    }
+    return logs;
   }
 
   async getRun(projectId: string, runId: string): Promise<FormalRunDetailReadModel> {
@@ -519,6 +921,64 @@ export class FetchQuantDomainRevisionClient {
       );
     }
     return run;
+  }
+
+  async getRunReport(projectId: string, runId: string): Promise<RunReportReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/report`,
+      { headers: { Accept: "application/json" } },
+    );
+    const report = assertReadContract(
+      validateRunReportReadModel(await this.#jsonResponse(response)),
+      "Formal Run report response",
+    );
+    if (report.report.run.project_id !== projectId || report.report.run.run_id !== runId) {
+      throw new Error("quant-domain Formal Run report crossed request identity");
+    }
+    return report;
+  }
+
+  async getForwardTest(
+    projectId: string,
+    forwardTestId: string,
+  ): Promise<ForwardTestReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/forward-tests/${encodeURIComponent(forwardTestId)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const forwardTest = assertReadContract(
+      validateForwardTestReadModel(await this.#jsonResponse(response)),
+      "Forward Test response",
+    );
+    if (
+      forwardTest.project_id !== projectId
+      || forwardTest.forward_test_id !== forwardTestId
+    ) {
+      throw new Error("quant-domain Forward Test response crossed request identity");
+    }
+    return forwardTest;
+  }
+
+  async getProjectArchive(
+    projectId: string,
+    selectedLogs: ProjectArchiveLogSelection = "full",
+  ): Promise<Uint8Array> {
+    const query = new URLSearchParams({ selected_logs: selectedLogs });
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/archive?${query}`,
+      { headers: { Accept: PROJECT_ARCHIVE_MEDIA_TYPE } },
+    );
+    if (!response.ok) {
+      throw new QuantDomainHttpError({
+        status: response.status,
+        code: await boundedResponseCode(response),
+      });
+    }
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
+    if (mediaType !== PROJECT_ARCHIVE_MEDIA_TYPE) {
+      throw new Error("quant-domain project archive returned the wrong media type");
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   async getArtifact(
@@ -576,6 +1036,7 @@ export class FetchQuantDomainRevisionClient {
   getProjects = this.listProjects.bind(this);
   getActivities = this.listActivities.bind(this);
   getRuns = this.listRuns.bind(this);
+  getDataSnapshots = this.listDataSnapshots.bind(this);
 
   #prepareRevision(
     request: RevisionCreateRequest,
@@ -593,6 +1054,9 @@ export class FetchQuantDomainRevisionClient {
       revision_id: revisionId,
       message: request.message,
       files: files.map(({ path, artifact }) => ({ path, artifact })),
+      ...(request.removedPaths === undefined
+        ? {}
+        : { removed_paths: request.removedPaths }),
     };
     const command = {
       command_id: commandId,
@@ -651,11 +1115,51 @@ export class FetchQuantDomainRevisionClient {
   #prepareFormalRun(request: FormalRunRequest): PreparedFormalRun {
     const commandId = this.#commandId(request.commandId);
     const correlationId = this.#correlationId(request.correlationId, commandId);
-    const engineInput = canonicalJsonArtifactRef(
-      request.engineInputJson,
-      request.engineInputOriginKind,
-      request.engineInputSourceRef,
+    const marketInput = canonicalJsonArtifactRef(
+      request.marketInputJson,
+      request.marketInputOriginKind,
+      request.marketInputSourceRef,
     );
+    const inputSchemaVersion = asRecord(
+      JSON.parse(request.marketInputJson),
+      "Formal Run market input",
+    ).schema_version;
+    const engineProfile = inputSchemaVersion === 2
+      ? {
+          engine_version: "oqs-quant-engine/0.2.0" as const,
+          output_schema_version: 2 as const,
+          gate_policy_version: "m8-v1" as const,
+          strategy_protocol_version: "oqs-strategy-host/m8-portfolio-v1" as const,
+          engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v2" as const,
+        }
+      : {
+          engine_version: "oqs-quant-engine/0.1.0" as const,
+          output_schema_version: 1 as const,
+          gate_policy_version: "m5-v1" as const,
+          strategy_protocol_version: "oqs-strategy-host/m5-stream-v2" as const,
+          engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v1" as const,
+        };
+    const payload: FormalRunRequestPayload = {
+      run_spec_id: request.runSpecId ?? stableIdentityUuid(`${commandId}:run-spec`),
+      run_id: request.runId ?? stableIdentityUuid(`${commandId}:run`),
+      validation_id: request.validationId ?? stableIdentityUuid(`${commandId}:validation`),
+      candidate_revision_id: request.candidateRevisionId,
+      market_input: marketInput,
+      data_snapshot_id: request.dataSnapshotId,
+      data_snapshot_sha256: request.dataSnapshotSha256,
+      strategy_tree_oid: request.strategyTreeOid,
+      parameters_sha256: request.parametersSha256,
+      cost_model_sha256: request.costModelSha256,
+      environment_lock_sha256: request.environmentLockSha256,
+      price_basis: request.priceBasis,
+      cutoff: request.cutoff,
+      timezone: request.timezone,
+      sample_start: request.sampleStart,
+      sample_end: request.sampleEnd,
+      random_seed: request.randomSeed,
+      checkpoint_batch_size: request.checkpointBatchSize ?? 4096,
+      ...engineProfile,
+    };
     const command: FormalRunCommand = {
       command_id: commandId,
       schema_version: 1,
@@ -668,36 +1172,104 @@ export class FetchQuantDomainRevisionClient {
       expected_revision_id: request.candidateRevisionId,
       variant_id: request.variantId,
       base_revision_id: request.candidateRevisionId,
-      payload: {
-        run_spec_id: request.runSpecId ?? stableIdentityUuid(`${commandId}:run-spec`),
-        run_id: request.runId ?? stableIdentityUuid(`${commandId}:run`),
-        validation_id: request.validationId ??
-          stableIdentityUuid(`${commandId}:validation`),
-        candidate_revision_id: request.candidateRevisionId,
-        engine_input: engineInput,
-        data_snapshot_id: request.dataSnapshotId,
-        data_snapshot_sha256: request.dataSnapshotSha256,
-        strategy_tree_oid: request.strategyTreeOid,
-        parameters_sha256: request.parametersSha256,
-        cost_model_sha256: request.costModelSha256,
-        environment_lock_sha256: request.environmentLockSha256,
-        engine_version: "oqs-quant-engine/0.1.0",
-        price_basis: request.priceBasis,
-        cutoff: request.cutoff,
-        timezone: request.timezone,
-        sample_start: request.sampleStart,
-        sample_end: request.sampleEnd,
-        random_seed: request.randomSeed,
-        output_schema_version: 1,
-        gate_policy_version: "m3-v1",
-      },
+      payload,
     };
     return {
       command: assertFormalRunCommand(
         validateFormalRunCommand(command),
         "formal.run_request",
       ),
-      engineInput,
+      marketInput,
+    };
+  }
+
+  #prepareForwardTest(request: ForwardTestRequest): ForwardTestCommand {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const forwardTestId = request.forwardTestId ??
+      stableIdentityUuid(`${commandId}:forward-test`);
+    const command: ForwardTestCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "forward_test.request",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: request.sourceRevisionId,
+      variant_id: request.variantId,
+      base_revision_id: request.sourceRevisionId,
+      payload: {
+        forward_test_id: forwardTestId,
+        source_run_id: request.sourceRunId,
+        protocol_version: "oqs-forward-replay/m5-v1",
+      },
+    };
+    return assertValidCommand(
+      validateForwardTestCommand(command),
+      "forward_test.request",
+    );
+  }
+
+  #prepareDiagnosticLogDelete(
+    request: DiagnosticLogDeleteRequest,
+  ): DiagnosticCommand {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const command: DiagnosticCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "diagnostic.log_delete",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: null,
+      variant_id: null,
+      base_revision_id: null,
+      payload: {
+        selection: {
+          log_ids: request.logIds,
+        },
+      },
+    };
+    return assertValidCommand(
+      validateDiagnosticCommand(command),
+      "diagnostic.log_delete",
+    );
+  }
+
+  #prepareProjectArchiveImport(
+    request: ProjectArchiveImportRequest,
+  ): PreparedProjectArchiveImport {
+    const commandId = this.#commandId(request.commandId);
+    const correlationId = this.#correlationId(request.correlationId, commandId);
+    const archive = projectArchiveArtifact(request.archive, commandId);
+    const command: ProjectArchiveCommand = {
+      command_id: commandId,
+      schema_version: 1,
+      command_type: "project.archive_import",
+      project_id: request.projectId,
+      activity_id: request.activityId,
+      session_id: request.sessionId,
+      workbench_id: request.workbenchId,
+      correlation_id: correlationId,
+      expected_revision_id: null,
+      variant_id: null,
+      base_revision_id: null,
+      payload: {
+        expected_project_id: request.projectId,
+        archive,
+      },
+    };
+    return {
+      command: assertValidCommand(
+        validateProjectArchiveCommand(command),
+        "project.archive_import",
+      ),
+      archive,
     };
   }
 
@@ -706,6 +1278,21 @@ export class FetchQuantDomainRevisionClient {
       const staged = await this.#sessionClient.stageText(file.body);
       assertStagedIdentity(staged, file.artifact);
     }
+  }
+
+  async #stageProjectArchive(
+    body: Uint8Array<ArrayBuffer>,
+    archive: ArtifactRef,
+  ): Promise<ArtifactBlobReceipt> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/artifact-blobs/${archive.sha256}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": PROJECT_ARCHIVE_MEDIA_TYPE },
+        body,
+      },
+    );
+    return await this.#jsonResponse(response) as ArtifactBlobReceipt;
   }
 
   #commandId(value: string | undefined): string {
@@ -769,7 +1356,20 @@ function assertStagedJsonIdentity(
     staged.byte_size !== artifact.byte_size ||
     staged.storage_uri !== artifact.storage_uri
   ) {
-    throw new Error("staged formal engine input identity changed before command submission");
+    throw new Error("staged formal market input identity changed before command submission");
+  }
+}
+
+function assertStagedProjectArchiveIdentity(
+  staged: ArtifactBlobReceipt,
+  archive: ArtifactRef,
+): void {
+  if (
+    staged.sha256 !== archive.sha256
+    || staged.byte_size !== archive.byte_size
+    || staged.storage_uri !== archive.storage_uri
+  ) {
+    throw new Error("staged project archive identity changed before command submission");
   }
 }
 
@@ -780,12 +1380,12 @@ function canonicalJsonArtifactRef(
 ): ArtifactRef {
   const bytes = new TextEncoder().encode(body);
   if (bytes.byteLength < 2 || bytes.byteLength > 5 * 1024 * 1024) {
-    throw new Error("formal engine input must contain between 2 and 5242880 UTF-8 bytes");
+    throw new Error("formal market input must contain between 2 and 5242880 UTF-8 bytes");
   }
   JSON.parse(body);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   return {
-    artifact_id: stableIdentityUuid(`${sha256}:formal-engine-input-artifact`),
+    artifact_id: stableIdentityUuid(`${sha256}:formal-market-input-artifact`),
     sha256,
     media_type: "application/json",
     byte_size: bytes.byteLength,
@@ -795,7 +1395,27 @@ function canonicalJsonArtifactRef(
     provenance: {
       origin_kind: originKind,
       source_ref: sourceRef
-        ?? stableIdentityUuid(`${sha256}:formal-engine-input-provenance`),
+        ?? stableIdentityUuid(`${sha256}:formal-market-input-provenance`),
+    },
+  };
+}
+
+function projectArchiveArtifact(body: Uint8Array<ArrayBuffer>, commandId: string): ArtifactRef {
+  if (body.byteLength < 1 || body.byteLength > PROJECT_ARCHIVE_MAX_BYTES) {
+    throw new Error("project archive must contain between 1 and 10737418240 bytes");
+  }
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  return {
+    artifact_id: stableIdentityUuid(`${sha256}:project-archive-artifact`),
+    sha256,
+    media_type: PROJECT_ARCHIVE_MEDIA_TYPE,
+    byte_size: body.byteLength,
+    storage_uri: `cas://sha256/${sha256}`,
+    producing_revision_id: null,
+    producing_run_id: null,
+    provenance: {
+      origin_kind: "user_upload",
+      source_ref: stableIdentityUuid(`${commandId}:project-archive-upload`),
     },
   };
 }
@@ -836,7 +1456,7 @@ function canonicalJsonValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function assertValidCommand<T extends RevisionCommand>(
+function assertValidCommand<T>(
   result: { valid: true; value: T } | { valid: false; errors: string[] },
   commandType: string,
 ): T {
@@ -1051,6 +1671,30 @@ function assertNoSourceBody(record: Record<string, unknown>): void {
       throw new Error("quant-domain revision response must not include source bodies");
     }
   }
+}
+
+async function dataImportPreviewError(
+  response: Response,
+): Promise<DataImportPreviewHttpError> {
+  const record = asRecord(
+    JSON.parse(await response.text()),
+    "data import preview error response",
+  );
+  const details = Array.isArray(record.details)
+    ? record.details.map((detail) => {
+        const item = asRecord(detail, "data import preview row error");
+        return {
+          row_number: item.row_number as number,
+          field: item.field as string,
+          message: item.message as string,
+        };
+      })
+    : [];
+  return new DataImportPreviewHttpError(
+    response.status,
+    typeof record.error === "string" ? record.error : `http_${response.status}`,
+    details,
+  );
 }
 
 function isUuid(value: unknown): value is string {

@@ -52,7 +52,7 @@ test("M3 registries expose every revision and variant command/event type", () =>
 test("M3 validates typed merge candidates and Formal Run lifecycle envelopes", () => {
   const merge = fixture("command.merge-create.valid.json");
   const mergeCreated = fixture("event.merge-candidate-created.valid.json");
-  const run = fixture("command.formal-run-request.valid.json");
+  const run = fixture("command.formal-run-request-m5.valid.json");
   const runQueued = fixture("event.formal-run-queued.valid.json");
   const runStarted = fixture("event.formal-run-started.valid.json");
   const runSucceeded = fixture("event.formal-run-completed-succeeded.valid.json");
@@ -68,6 +68,11 @@ test("M3 validates typed merge candidates and Formal Run lifecycle envelopes", (
   assert.equal(validateTypedCommandEnvelope(run).valid, true);
   assert.equal(validateTypedEventEnvelope(runQueued).valid, true);
   assert.equal(validateTypedEventEnvelope(runSucceeded).valid, true);
+  assert.equal(
+    validateFormalRunCommand(fixture("command.formal-run-request.valid.json")).valid,
+    false,
+    "the historical all-bars command is not an executable M5 request",
+  );
 });
 
 test("M3 rejects a Formal Run calculation hash that is not the engine result identity", () => {
@@ -86,6 +91,7 @@ test("M3 rejects a Formal Run calculation hash that is not the engine result ide
 test("M3 commands validate root/child revision creation and CAS promotion", () => {
   const root = fixture("command.revision-create-root.valid.json");
   const child = fixture("command.revision-create-child.valid.json");
+  child.payload.removed_paths = ["strategy.ipynb"];
   const variant = fixture("command.valid.json");
   const promote = fixture("command.revision-promote.valid.json");
 
@@ -96,6 +102,16 @@ test("M3 commands validate root/child revision creation and CAS promotion", () =
   assert.equal(validateRevisionCommand(root).valid, true);
   assert.equal(validateTypedCommandEnvelope(promote).valid, true);
   assert.equal(validateCommandEnvelope(variant).valid, true);
+});
+
+test("M3 child revisions can remove inherited files without overlapping replacements", () => {
+  const root = fixture("command.revision-create-root.valid.json");
+  root.payload.removed_paths = ["strategy.ipynb"];
+  assert.equal(validateWorkspaceRevisionCreateCommand(root).valid, false);
+
+  const child = fixture("command.revision-create-child.valid.json");
+  child.payload.removed_paths = [child.payload.files[0].path];
+  assert.equal(validateWorkspaceRevisionCreateCommand(child).valid, false);
 });
 
 test("M3 command validators reject invalid paths, duplicate paths, artifact bounds, and CAS identities", () => {

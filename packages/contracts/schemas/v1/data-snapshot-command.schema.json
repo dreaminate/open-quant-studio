@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/data-snapshot-command.schema.json",
+  "title": "Open Quant Studio data snapshot creation command v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": { "const": "data.snapshot_create" },
+        "expected_revision_id": { "type": "null" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "payload": { "$ref": "#/$defs/createPayload" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "sourceArtifact": {
+      "allOf": [
+        { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": { "enum": ["text/csv", "application/vnd.apache.parquet"] },
+            "byte_size": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" },
+            "provenance": {
+              "type": "object",
+              "properties": { "origin_kind": { "const": "user_upload" } }
+            }
+          }
+        }
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
+      "properties": {
+        "timestamp": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 },
+        "open": { "type": "string", "minLength": 1 },
+        "high": { "type": "string", "minLength": 1 },
+        "low": { "type": "string", "minLength": 1 },
+        "close": { "type": "string", "minLength": 1 },
+        "volume": { "type": "string", "minLength": 1 }
+      }
+    },
+    "createPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_id",
+        "source",
+        "source_format",
+        "file_name",
+        "mapping",
+        "market",
+        "timezone",
+        "price_basis",
+        "cutoff"
+      ],
+      "properties": {
+        "snapshot_id": { "$ref": "#/$defs/uuid" },
+        "source": { "$ref": "#/$defs/sourceArtifact" },
+        "source_format": { "enum": ["csv", "parquet"] },
+        "file_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "mapping": { "$ref": "#/$defs/mapping" },
+        "market": { "enum": ["a_share_daily", "crypto_linear_perp"] },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" }
+      }
+    }
+  }
+}

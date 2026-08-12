@@ -497,6 +497,7 @@ function assertReceiptBinding(
 ): void {
   const event = receipt.event as unknown as Record<string, unknown>;
   const eventTypeByCommand: Record<string, string> = {
+    "context.capture": "context.captured",
     "session.register": "session.registered",
     "session.workbench_bind": "session.workbench_bound",
     "session.message_send": "session.message_queued",
@@ -509,6 +510,13 @@ function assertReceiptBinding(
     "workspace.merge_create": "workspace.merge_candidate_created",
     "workspace.revision_promote": "workspace.revision_promoted",
     "formal.run_request": "formal.run_queued",
+    "formal.run_cancel": "formal.run_cancelled",
+    "formal.run_retry": "formal.run_retried",
+    "forward_test.request": "forward_test.completed",
+    "diagnostic.log_delete": "diagnostic.logs_deleted",
+    "diagnostic.log_retention_configure": "diagnostic.retention_applied",
+    "project.archive_import": "project.archive_imported",
+    "data.snapshot_create": "data.snapshot_created",
   };
   if (
     receipt.command_id !== command.command_id ||
@@ -563,6 +571,24 @@ function assertReceiptBinding(
       payload.candidate_revision_id !== commandPayload.candidate_revision_id)
   ) {
     throw new Error("quant-domain command response event did not preserve formal Run identity");
+  }
+  if (
+    command.command_type === "data.snapshot_create" &&
+    (payload.snapshot_id !== commandPayload.snapshot_id ||
+      payload.source_artifact_id !==
+        (commandPayload.source as Record<string, unknown>).artifact_id)
+  ) {
+    throw new Error("quant-domain command response event did not preserve data snapshot identity");
+  }
+  if (
+    command.command_type === "project.archive_import" &&
+    (payload.restored_project_id !== commandPayload.expected_project_id ||
+      payload.archive_artifact_id !==
+        (commandPayload.archive as Record<string, unknown>).artifact_id ||
+      payload.archive_sha256 !==
+        (commandPayload.archive as Record<string, unknown>).sha256)
+  ) {
+    throw new Error("quant-domain command response event did not preserve project archive identity");
   }
   if (
     command.command_type.startsWith("session.") &&

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/project-archive-manifest.schema.json",
+  "title": "Open Quant Studio project archive manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "archive_schema_version", "project_id", "activity_ids", "selected_logs",
+    "created_at", "git", "run_spec_ids", "run_ids", "report_artifact_ids", "cas_objects"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "archive_schema_version": { "const": "oqs-project-archive/v1" },
+    "project_id": { "$ref": "#/$defs/uuid" },
+    "activity_ids": { "$ref": "#/$defs/uuidList" },
+    "selected_logs": { "enum": ["full", "warn_error", "none"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "git": { "$ref": "#/$defs/gitBundle" },
+    "run_spec_ids": { "$ref": "#/$defs/uuidList" },
+    "run_ids": { "$ref": "#/$defs/uuidList" },
+    "report_artifact_ids": { "$ref": "#/$defs/uuidList" },
+    "cas_objects": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 1000000,
+      "items": { "$ref": "#/$defs/casObject" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "uuidList": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 1000000,
+      "items": { "$ref": "#/$defs/uuid" }
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "gitOid": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "gitRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "oid"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^refs/oqs/revisions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        },
+        "oid": { "$ref": "#/$defs/gitOid" }
+      }
+    },
+    "gitBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle_path", "sha256", "byte_size", "object_format", "refs"],
+      "properties": {
+        "bundle_path": { "const": "git/project.bundle" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_size": { "type": "integer", "minimum": 1 },
+        "object_format": { "const": "sha1" },
+        "refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/gitRef" }
+        }
+      }
+    },
+    "casObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "path", "byte_size"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "path": {
+          "type": "string",
+          "pattern": "^cas/sha256/[a-f0-9]{2}/[a-f0-9]{64}$"
+        },
+        "byte_size": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

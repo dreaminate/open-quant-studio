@@ -1,0 +1,18 @@
+{
+  "command_id": "41414141-4141-4141-8141-414141414141",
+  "schema_version": 1,
+  "command_type": "diagnostic.log_delete",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "logs",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": null,
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "selection": {
+      "log_ids": ["91919191-9191-4191-8191-919191919191"]
+    }
+  }
+}

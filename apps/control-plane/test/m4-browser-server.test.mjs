@@ -177,18 +177,18 @@ async function withServer(setup, run) {
 
 test("trusted Formal Run fixture is canonical and hash-bound at server startup", async (t) => {
   const fixture = await loadM4FormalRunFixture(FIXTURE_PATH);
-  assert.equal(new TextEncoder().encode(fixture.engineInputJson).byteLength, 2470);
+  assert.equal(new TextEncoder().encode(fixture.marketInputJson).byteLength, 1027);
   assert.equal(
     fixture.dataSnapshotSha256,
-    "520d7c4b4faecbd63b21fa761a741f76e8aa961c09af244348441236ea854699",
+    "0ce7e17050007248fc0e21074873cad48390651f163d9720f41a0d7d2934d57f",
   );
   assert.equal(fixture.priceBasis, "raw");
   assert.equal(fixture.randomSeed, 0);
-  const engineInputJson = fixture.engineInputJson;
+  const marketInputJson = fixture.marketInputJson;
   assert.throws(() => {
-    fixture.engineInputJson = "{}";
+    fixture.marketInputJson = "{}";
   }, TypeError);
-  assert.equal(fixture.engineInputJson, engineInputJson);
+  assert.equal(fixture.marketInputJson, marketInputJson);
 
   const tempDirectory = await mkdtemp(join(tmpdir(), "oqs-m4-fixture-"));
   t.after(() => rm(tempDirectory, { recursive: true, force: true }));
@@ -344,7 +344,7 @@ test("Formal Run accepts no browser authority and injects the trusted fixture", 
     const rejected = await fetch(`${baseUrl}/api/v1/revisions/${CANDIDATE_REVISION_ID}/runs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ engineInputJson: "{}" }),
+      body: JSON.stringify({ marketInputJson: "{}" }),
     });
     assert.equal(rejected.status, 422);
     assert.equal(setup.calls.length, 1);
@@ -446,7 +446,7 @@ test("read scope and public surface fail closed", async () => {
     const crossed = await fetch(`${baseUrl}/api/v1/runs/${RUN_ID}`);
     assert.equal(crossed.status, 404);
     assert.deepEqual(await crossed.json(), { error: "resource_not_found" });
-    for (const path of ["commands", "artifact-blobs", "jobs", "logs", "pi-state"]) {
+    for (const path of ["commands", "artifact-blobs", "jobs", "pi-state"]) {
       const response = await fetch(`${baseUrl}/api/v1/${path}`);
       assert.equal(response.status, 404);
     }

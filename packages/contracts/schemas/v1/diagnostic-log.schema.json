@@ -5,6 +5,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "log_id",
+    "log_seq",
     "timestamp",
     "level",
     "priority",
@@ -20,6 +22,8 @@
     "message"
   ],
   "properties": {
+    "log_id": { "$ref": "#/$defs/uuid" },
+    "log_seq": { "type": "integer", "minimum": 1 },
     "timestamp": { "type": "string", "format": "date-time" },
     "level": { "enum": ["debug", "info", "warn", "error"] },
     "priority": { "enum": ["p1", "p2", "p3", "p4"] },

@@ -73,7 +73,9 @@
       "required": ["run_id", "kind"],
       "properties": {
         "run_id": { "$ref": "#/$defs/uuid" },
-        "kind": { "enum": ["intent_tape", "engine_result", "manifest"] }
+        "kind": {
+          "enum": ["intent_tape", "engine_result", "manifest", "report_json", "report_html"]
+        }
       }
     }
   }

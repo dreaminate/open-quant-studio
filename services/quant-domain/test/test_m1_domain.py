@@ -113,6 +113,10 @@ class M1DomainTest(unittest.TestCase):
                 ("004_m3_revision_graph",),
                 ("005_m3_formal_runs",),
                 ("006_m4_single_active_formal_run",),
+                ("007_m5_lifecycle_and_logs",),
+                ("008_m5_forward_tests",),
+                ("009_m7_data_snapshots",),
+                ("010_m9_run_reports",),
             ],
         )
 
@@ -238,6 +242,235 @@ class M1DomainTest(unittest.TestCase):
             tuple(job),
             (job_id, "artifact.verify_sha256", "pending", 0, None, None, None, None),
         )
+        self.assertEqual(foreign_key_errors, [])
+
+    def test_m5_migration_terminalizes_a_legacy_running_formal_job(self) -> None:
+        source_migrations = (
+            Path(__file__).parents[1] / "src" / "quant_domain" / "migrations"
+        )
+        staged_migrations = self.data_root / "m5-upgrade-migrations"
+        staged_migrations.mkdir()
+        for migration in sorted(source_migrations.glob("00[1-5]_*.sql")):
+            shutil.copyfile(migration, staged_migrations / migration.name)
+        database_path = self.data_root / "m5-upgrade.sqlite3"
+        scenario = Database(database_path, migrations_dir=staged_migrations)
+        recorded_at = "2026-08-12T00:00:00Z"
+        identifiers = {
+            "project": PROJECT_ID,
+            "activity": ACTIVITY_ID,
+            "session": "pi:session:m5-upgrade",
+            "revision": "10101010-1010-4010-8010-101010101010",
+            "variant": "20202020-2020-4020-8020-202020202020",
+            "variant_revision": "21212121-2121-4121-8121-212121212121",
+            "candidate": "30303030-3030-4030-8030-303030303030",
+            "artifact": "40404040-4040-4040-8040-404040404040",
+            "command": "50505050-5050-4050-8050-505050505050",
+            "event": "60606060-6060-4060-8060-606060606060",
+            "job": "70707070-7070-4070-8070-707070707070",
+            "spec": "71717171-7171-4171-8171-717171717171",
+            "run": "72727272-7272-4272-8272-727272727272",
+            "validation": "73737373-7373-4373-8373-737373737373",
+        }
+        with scenario.connect() as connection:
+            connection.execute(
+                "INSERT INTO research_projects(project_id, created_at) VALUES (?, ?)",
+                (identifiers["project"], recorded_at),
+            )
+            connection.execute(
+                "INSERT INTO activities(activity_id, project_id, created_at) VALUES (?, ?, ?)",
+                (identifiers["activity"], identifiers["project"], recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO agent_sessions(
+                    session_id, project_id, activity_id, pi_session_id,
+                    session_uri, created_at
+                ) VALUES (?, ?, ?, 'm5-upgrade', 'pi-jsonl://session/m5-upgrade', ?)
+                """,
+                (
+                    identifiers["session"], identifiers["project"],
+                    identifiers["activity"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO artifacts(
+                    artifact_id, sha256, media_type, byte_size, storage_uri,
+                    producing_revision_id, producing_run_id, origin_kind,
+                    source_ref, created_at
+                ) VALUES (?, ?, 'application/json', 2, ?, NULL, NULL,
+                          'fixture', ?, ?)
+                """,
+                (
+                    identifiers["artifact"],
+                    "0" * 64,
+                    f"cas://sha256/{'0' * 64}",
+                    identifiers["artifact"],
+                    recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO domain_events(
+                    event_id, schema_version, event_type, project_id, activity_id,
+                    session_id, workbench_id, correlation_id, causation_id,
+                    recorded_at, variant_id, base_revision_id, payload_json
+                ) VALUES (?, 1, 'formal.run_started', ?, ?, NULL, NULL, ?, ?, ?,
+                          NULL, NULL, '{}')
+                """,
+                (
+                    identifiers["event"],
+                    identifiers["project"],
+                    identifiers["activity"],
+                    CORRELATION_ID,
+                    identifiers["job"],
+                    recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO command_receipts(
+                    command_id, command_hash, event_id, receipt_json, recorded_at
+                ) VALUES (?, ?, ?, '{}', ?)
+                """,
+                (identifiers["command"], "1" * 64, identifiers["event"], recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO workspace_revisions(
+                    revision_id, project_id, activity_id, variant_id,
+                    base_revision_id, git_commit_oid, git_tree_oid, message,
+                    created_by_session_id, created_at
+                ) VALUES (?, ?, ?, NULL, NULL, ?, ?, 'root', ?, ?)
+                """,
+                (
+                    identifiers["revision"], identifiers["project"],
+                    identifiers["activity"], "a" * 40, "b" * 40,
+                    identifiers["session"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO strategy_variants(
+                    variant_id, project_id, activity_id, base_revision_id,
+                    created_by_session_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    identifiers["variant"], identifiers["project"],
+                    identifiers["activity"], identifiers["revision"],
+                    identifiers["session"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO workspace_revisions(
+                    revision_id, project_id, activity_id, variant_id,
+                    base_revision_id, git_commit_oid, git_tree_oid, message,
+                    created_by_session_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'variant', ?, ?)
+                """,
+                (
+                    identifiers["variant_revision"], identifiers["project"],
+                    identifiers["activity"], identifiers["variant"],
+                    identifiers["revision"], "c" * 40, "d" * 40,
+                    identifiers["session"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO workspace_revisions(
+                    revision_id, project_id, activity_id, variant_id,
+                    base_revision_id, git_commit_oid, git_tree_oid, message,
+                    created_by_session_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?)
+                """,
+                (
+                    identifiers["candidate"], identifiers["project"],
+                    identifiers["activity"], identifiers["variant"],
+                    identifiers["variant_revision"], "e" * 40, "f" * 40,
+                    identifiers["session"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO workspace_merge_candidates(
+                    candidate_revision_id, project_id, activity_id, variant_id,
+                    project_parent_revision_id, variant_parent_revision_id,
+                    expected_project_head_version, expected_variant_head_version,
+                    created_by_command_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+                """,
+                (
+                    identifiers["candidate"], identifiers["project"],
+                    identifiers["activity"], identifiers["variant"],
+                    identifiers["revision"], identifiers["variant_revision"],
+                    identifiers["command"], recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO run_specs(
+                    run_spec_id, project_id, activity_id, variant_id,
+                    candidate_revision_id, engine_input_artifact_id,
+                    data_snapshot_id, data_snapshot_sha256, strategy_tree_oid,
+                    parameters_sha256, cost_model_sha256,
+                    environment_lock_sha256, engine_version, price_basis,
+                    cutoff, timezone, sample_start, sample_end, random_seed,
+                    output_schema_version, gate_policy_version, spec_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?,
+                          'UTC', ?, ?, 0, 1, 'm3-v1', ?, ?)
+                """,
+                (
+                    identifiers["spec"], identifiers["project"],
+                    identifiers["activity"], identifiers["variant"],
+                    identifiers["candidate"], identifiers["artifact"],
+                    identifiers["artifact"], "0" * 64, "d" * 40,
+                    "2" * 64, "3" * 64, "4" * 64,
+                    "oqs-quant-engine/0.1.0", recorded_at, recorded_at,
+                    recorded_at, "5" * 64, recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO jobs(
+                    job_id, command_id, job_type, project_id, activity_id,
+                    correlation_id, artifact_id, run_spec_id, run_id,
+                    validation_id, candidate_revision_id, status, attempts,
+                    created_at, started_at
+                ) VALUES (?, ?, 'formal.run', ?, ?, ?, ?, ?, ?, ?, ?,
+                          'running', 1, ?, ?)
+                """,
+                (
+                    identifiers["job"], identifiers["command"],
+                    identifiers["project"], identifiers["activity"],
+                    CORRELATION_ID, identifiers["artifact"], identifiers["spec"],
+                    identifiers["run"], identifiers["validation"],
+                    identifiers["candidate"], recorded_at, recorded_at,
+                ),
+            )
+
+        for migration in sorted(source_migrations.glob("00[6-7]_*.sql")):
+            shutil.copyfile(migration, staged_migrations / migration.name)
+        upgraded = Database(database_path, migrations_dir=staged_migrations)
+        with upgraded.connect() as connection:
+            job = connection.execute(
+                "SELECT status, error_code, claim_token FROM jobs WHERE job_id = ?",
+                (identifiers["job"],),
+            ).fetchone()
+            run = connection.execute(
+                "SELECT status, error_code FROM formal_runs WHERE run_id = ?",
+                (identifiers["run"],),
+            ).fetchone()
+            validation = connection.execute(
+                "SELECT outcome FROM merge_validations WHERE validation_id = ?",
+                (identifiers["validation"],),
+            ).fetchone()
+            foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+
+        self.assertEqual(tuple(job), ("failed", "worker_interrupted_by_m5_upgrade", None))
+        self.assertEqual(tuple(run), ("failed", "worker_interrupted_by_m5_upgrade"))
+        self.assertEqual(tuple(validation), ("failed",))
         self.assertEqual(foreign_key_errors, [])
 
     def test_context_capture_is_atomic_idempotent_and_immutable(self) -> None:
@@ -406,6 +639,8 @@ class M1DomainTest(unittest.TestCase):
 
         logs = self.domain.logs(project_id=PROJECT_ID)
         required = {
+            "log_id",
+            "log_seq",
             "timestamp",
             "level",
             "priority",

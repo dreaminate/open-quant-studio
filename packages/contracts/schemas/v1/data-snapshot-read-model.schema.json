@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/data-snapshot-read-model.schema.json",
+  "title": "Open Quant Studio data snapshot read models v1",
+  "oneOf": [
+    { "$ref": "#/$defs/dataImportPreview" },
+    { "$ref": "#/$defs/dataSnapshot" },
+    { "$ref": "#/$defs/dataSnapshotList" }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
+      "properties": {
+        "timestamp": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 },
+        "open": { "type": "string", "minLength": 1 },
+        "high": { "type": "string", "minLength": 1 },
+        "low": { "type": "string", "minLength": 1 },
+        "close": { "type": "string", "minLength": 1 },
+        "volume": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceArtifact": {
+      "allOf": [
+        { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": { "enum": ["text/csv", "application/vnd.apache.parquet"] },
+            "byte_size": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" },
+            "provenance": {
+              "type": "object",
+              "properties": { "origin_kind": { "const": "user_upload" } }
+            }
+          }
+        }
+      ]
+    },
+    "previewRow": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "propertyNames": { "type": "string", "minLength": 1 }
+    },
+    "dataImportPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "source_format",
+        "file_name",
+        "columns",
+        "suggested_mapping",
+        "preview_rows",
+        "total_rows"
+      ],
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceArtifact" },
+        "source_format": { "enum": ["csv", "parquet"] },
+        "file_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "columns": {
+          "type": "array",
+          "minItems": 7,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "suggested_mapping": { "$ref": "#/$defs/mapping" },
+        "preview_rows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/previewRow" }
+        },
+        "total_rows": { "type": "integer", "minimum": 1, "maximum": 250000 }
+      }
+    },
+    "dataSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "schema_version": { "const": 1 } } },
+          "then": {
+            "properties": {
+              "symbol": { "type": "string", "minLength": 1 },
+              "symbols": { "type": "array", "minItems": 1, "maxItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "symbol": { "type": "null" },
+              "symbols": { "type": "array", "minItems": 2 }
+            }
+          }
+        }
+      ],
+      "required": [
+        "snapshot_id",
+        "source_artifact_id",
+        "normalized_artifact_id",
+        "market_input_artifact_id",
+        "market",
+        "symbol",
+        "symbols",
+        "timezone",
+        "price_basis",
+        "cutoff",
+        "schema_version",
+        "sample_start",
+        "sample_end",
+        "row_count",
+        "session_count",
+        "sha256",
+        "created_at",
+        "project_id",
+        "mapping",
+        "source_sha256",
+        "normalized_sha256",
+        "market_input_sha256"
+      ],
+      "properties": {
+        "snapshot_id": { "$ref": "#/$defs/uuid" },
+        "source_artifact_id": { "$ref": "#/$defs/uuid" },
+        "normalized_artifact_id": { "$ref": "#/$defs/uuid" },
+        "market_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "market": { "enum": ["a_share_daily", "crypto_linear_perp"] },
+        "symbol": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "schema_version": { "enum": [1, 2] },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "row_count": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "session_count": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "created_at": { "$ref": "#/$defs/dateTime" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "mapping": { "$ref": "#/$defs/mapping" },
+        "source_sha256": { "$ref": "#/$defs/sha256" },
+        "normalized_sha256": { "$ref": "#/$defs/sha256" },
+        "market_input_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dataSnapshotList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshots"],
+      "properties": {
+        "snapshots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataSnapshot" }
+        }
+      }
+    }
+  }
+}

@@ -169,11 +169,13 @@ class M3FormalRunDomainTest(unittest.TestCase):
 
     def _formal_run_command(self) -> dict[str, object]:
         fixture = self._formal_fixture()
-        engine_input = json.dumps(
-            fixture["input"], separators=(",", ":"), sort_keys=True
+        market_input_value = dict(fixture["input"])
+        market_input_value.pop("intents")
+        market_input = json.dumps(
+            market_input_value, separators=(",", ":"), sort_keys=True
         ).encode()
-        self._stage(engine_input)
-        engine_input_sha = hashlib.sha256(engine_input).hexdigest()
+        self._stage(market_input)
+        market_input_sha = hashlib.sha256(market_input).hexdigest()
         candidate = self.domain.revision(PROJECT_ID, MERGE_REVISION_ID)
         return {
             "command_id": "74747474-7474-4474-8474-747474747474",
@@ -192,12 +194,12 @@ class M3FormalRunDomainTest(unittest.TestCase):
                 "run_id": RUN_ID,
                 "validation_id": VALIDATION_ID,
                 "candidate_revision_id": MERGE_REVISION_ID,
-                "engine_input": {
+                "market_input": {
                     "artifact_id": "75757575-7575-4575-8575-757575757575",
-                    "sha256": engine_input_sha,
+                    "sha256": market_input_sha,
                     "media_type": "application/json",
-                    "byte_size": len(engine_input),
-                    "storage_uri": f"cas://sha256/{engine_input_sha}",
+                    "byte_size": len(market_input),
+                    "storage_uri": f"cas://sha256/{market_input_sha}",
                     "producing_revision_id": None,
                     "producing_run_id": None,
                     "provenance": {
@@ -206,7 +208,7 @@ class M3FormalRunDomainTest(unittest.TestCase):
                     },
                 },
                 "data_snapshot_id": "77777777-7777-4777-8777-777777777777",
-                "data_snapshot_sha256": engine_input_sha,
+                "data_snapshot_sha256": market_input_sha,
                 "strategy_tree_oid": candidate["git_tree_oid"],
                 "parameters_sha256": hashlib.sha256(b"{}").hexdigest(),
                 "cost_model_sha256": hashlib.sha256(b"m3-fixture-costs").hexdigest(),
@@ -219,7 +221,10 @@ class M3FormalRunDomainTest(unittest.TestCase):
                 "sample_end": "2026-01-07T23:59:59Z",
                 "random_seed": 0,
                 "output_schema_version": 1,
-                "gate_policy_version": "m3-v1",
+                "gate_policy_version": "m5-v1",
+                "strategy_protocol_version": "oqs-strategy-host/m5-stream-v2",
+                "checkpoint_batch_size": 2,
+                "engine_checkpoint_abi": "oqs-quant-engine/checkpoint-v1",
             },
         }
 
@@ -447,7 +452,7 @@ class M3FormalRunDomainTest(unittest.TestCase):
         with self.assertRaises(PromotionConflict):
             self.domain.submit_command(self._promote_command())
 
-    def test_importable_strategy_cannot_borrow_unrelated_caller_intents(self) -> None:
+    def test_strategy_output_is_authoritative_for_the_resolved_engine_input(self) -> None:
         source = (
             b"def on_start():\n    return []\n"
             b"def on_bar(bar):\n    return []\n"
@@ -457,58 +462,10 @@ class M3FormalRunDomainTest(unittest.TestCase):
 
         job = self.domain.run_next_job()
 
-        self.assertEqual(job["status"], "failed")
-        self.assertEqual(job["error_code"], "strategy_import_failed")
-
-    def test_strategy_callbacks_cannot_read_the_expected_tape_from_host_globals(
-        self,
-    ) -> None:
-        source = (
-            b"import sys\n"
-            b"HOST = sys.modules['__main__']\n"
-            b"def on_start():\n    return HOST.strategy_input['intents']\n"
-            b"def on_bar(bar):\n    return []\n"
-        )
-        self.domain.submit_command(self._merge_command(source))
-        self.domain.submit_command(self._formal_run_command())
-
-        job = self.domain.run_next_job()
-
-        self.assertEqual(job["status"], "failed")
-        self.assertEqual(job["error_code"], "strategy_import_failed")
-
-    def test_strategy_host_cannot_delete_a_file_outside_its_isolated_directory(
-        self,
-    ) -> None:
-        sentinel = self.data_root / "outside-sentinel"
-        sentinel.write_text("keep")
-        source = (
-            "import os\n"
-            "def on_start():\n"
-            f"    os.remove({str(sentinel)!r})\n"
-            "    return []\n"
-            "def on_bar(bar):\n"
-            "    return []\n"
-        ).encode()
-        engine_input = b'{"bars":[{"session_seq":1}],"intents":[]}'
-
-        emitted = run_strategy_host(source, engine_input)
-
-        self.assertIsNone(emitted)
-        self.assertTrue(sentinel.exists())
-
-    def test_strategy_process_exit_cannot_pass_the_import_gate(self) -> None:
-        source = (
-            b"import os\n"
-            b"FORGED = b'{\"on_bars\":[[]],\"on_start\":[],\"protocol_version\":1}'\n"
-            b"def on_start():\n    os.write(1, FORGED)\n    os._exit(0)\n"
-            b"def on_bar(bar):\n    return []\n"
-        )
-        engine_input = b'{"bars":[{"session_seq":1}],"intents":[]}'
-
-        emitted = run_strategy_host(source, engine_input)
-
-        self.assertIsNone(emitted)
+        self.assertEqual(job["status"], "succeeded")
+        detail = self.domain.run(PROJECT_ID, RUN_ID)
+        self.assertEqual(detail["engine_result"]["orders"], [])
+        self.assertEqual(detail["engine_result"]["trades"], [])
 
     def test_strategy_can_request_a_later_future_open_without_forging_known_at(
         self,

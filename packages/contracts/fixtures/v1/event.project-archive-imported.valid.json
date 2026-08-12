@@ -1,0 +1,24 @@
+{
+  "event_id": "48484848-4848-4848-8848-484848484848",
+  "stream_seq": 18,
+  "schema_version": 1,
+  "event_type": "project.archive_imported",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "projects",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "46464646-4646-4646-8646-464646464646",
+  "recorded_at": "2026-08-12T02:04:00+08:00",
+  "variant_id": null,
+  "base_revision_id": null,
+  "payload": {
+    "archive_artifact_id": "47474747-4747-4747-8747-474747474747",
+    "archive_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "manifest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "restored_project_id": "22222222-2222-4222-8222-222222222222",
+    "run_count": 1,
+    "artifact_count": 1,
+    "git_ref_count": 1
+  }
+}

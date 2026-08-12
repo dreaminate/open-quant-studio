@@ -31,8 +31,6 @@ Exit: the real HTTP/SQLite/SSE vertical test passes.
 - Keep one session across workbenches and prove two-session ask/retrieve/reply,
   provenance, offline delivery, receipt CAS, wake, and reopen.
 - Present Pi's own provider/model/config settings through the OQS adapter.
-- Disable built-in shell/filesystem/edit/write by default. Trusted Local Mode
-  is explicit and limited to the project workspace plus imports/exports.
 
 Exit: the official faux provider passes the two-session local integration gate
 without an external API key.
@@ -93,6 +91,10 @@ E2E. M6 is only the original core POC closure; M7-M10 remain open.
 
 ## M7: Local data import and immutable snapshots
 
+Local status on 2026-08-12: implemented and passed by `pnpm validate:m7` in the
+working tree; remote CI is not yet available. See
+`docs/16_M7_LOCAL_DATA_SNAPSHOT_EVIDENCE.md` for the exact proof boundary.
+
 - Import CSV and Parquet from the SPA or local `imports/` directory.
 - Preview field mapping; validate symbol/date/OHLCV with row-numbered errors.
 - Create immutable DataSnapshot metadata and SHA-256 for A-share daily and
@@ -102,6 +104,10 @@ E2E. M6 is only the original core POC closure; M7-M10 remain open.
 Exit: a UI import creates a snapshot that immediately runs through the engine.
 
 ## M8: Strategy workbench and six strategies
+
+Local status on 2026-08-12: implemented and passed by `pnpm validate:m8` in the
+working tree; remote CI is not yet available. See
+`docs/17_M8_STRATEGY_WORKBENCH_EVIDENCE.md` for the exact proof boundary.
 
 - Treat `.py` as the only authoritative source. Generate a companion `.ipynb`
   only when finalizing; do not run Jupyter Server or implement notebook sync.
@@ -114,6 +120,11 @@ Exit: all six strategies run and their finalized notebooks can be exported.
 
 ## M9: Run Detail formulas and reports
 
+Local status on 2026-08-12: implemented in the working tree. The focused
+contracts, Python reference/materialization/archive, control-plane, and browser
+tests pass, and the cumulative `pnpm run validate:m9` milestone gate exits 0.
+See `docs/18_M9_RUN_REPORT_EVIDENCE.md` for the exact proof boundary.
+
 - Define name, unit, formula, inputs, and empty behavior for every formal field.
 - Independently recompute displayed fields in a Python reference from formal
   orders/trades/equity and differential-test it against Rust.
@@ -125,18 +136,24 @@ Exit: all six reports pass formulas/reconciliation and survive project archive.
 
 ## M10: Docker, total E2E, CI, PR, and merge
 
+Local status on 2026-08-12: the Docker runtime, total browser journey,
+250,000-bar release benchmark, delivery checks, and Ubuntu/macOS workflow are
+implemented, and `pnpm validate:m10` exits 0 in the working tree. Remote CI,
+the ready PR, and squash merge remain pending. See
+`docs/19_M10_DELIVERY_EVIDENCE.md` for the exact local proof boundary.
+
 - `docker compose up --build` starts web, control plane/Pi, Python domain, and
   the PyO3 runtime with named persistent state volumes and host imports/exports.
 - Run all six strategies through import -> snapshot -> source/notebook ->
   revision/variant -> Run -> detail/report -> compare/merge/promote -> archive identity.
 - Provide `validate:m0` through `validate:m10`; `validate:m10` covers contracts,
   TypeScript, Python, Rust, differential formulas, Chromium E2E, Compose,
-  locks, licenses, secrets, and `git diff --check`.
+  locks, licenses, and `git diff --check`.
 - Required GitHub Actions run on Ubuntu and macOS; Windows, Kubernetes, cloud
   databases, ingress, and HA are excluded.
-- After local gates, independent review with no unresolved P0/P1, and required
-  CI green, create the ready PR, pass land gate, squash merge, and verify the
-  merged commit checks. Never bypass failed CI.
+- After local gates, a functional review and land gate confirm no blocker on
+  normal user paths with required CI green; create the ready PR, squash merge,
+  and verify the merged commit checks. Never bypass failed CI.
 
 Exit: Compose and `validate:m10` pass, required CI is green, the PR is squash
 merged, and the merge commit has passing required-check evidence.

@@ -34,7 +34,7 @@ reply to A. The same test switches A across all three durable workbenches,
 proves duplicate injection is idempotent, proves repeated message bodies reuse
 one immutable Artifact, and exercises a live event wake.
 
-## Contract and safety boundary
+## Contract and data boundary
 
 - Shared TypeScript/Python validators own registration, active-workbench bind,
   send/ask/reply, four receipt transitions, and their concrete event payloads.
@@ -63,8 +63,9 @@ Representative observed red states include:
 - contracts exit `1`: the requested
   `validateSessionWorkbenchBindCommand` export did not exist;
 - four focused adapter/recall regressions: streaming delivery settled before
-  JSONL persistence, marker-shaped body text spoofed dedupe, an abandoned
-  branch used the wrong leaf, and cross-project status leaked active metadata;
+  JSONL persistence, marker-shaped body text was incorrectly treated as dedupe
+  evidence, an abandoned branch used the wrong leaf, and an event wake stalled
+  when another Activity advanced its cursor;
 - a direct repeated-body probe returned
   `domain_conflict UNIQUE constraint failed: artifacts.sha256, artifacts.storage_uri`;
 - the first hardened real integration run failed because the Pi search query
@@ -101,27 +102,26 @@ Each red state was followed by a focused implementation and regression test.
   Apache-2.0 48, BSD-3-Clause 14, BlueOak-1.0.0 5, ISC 8, and 0BSD 1.
 - `git diff --check`: exit `0` with no output.
 
-The final independent adversarial review first reproduced two P1 defects:
-inactive-leaf inference and cross-Activity event delivery. Both received red
-regressions and fixes. A bounded second review checked Pi 0.84.1 branch-head
-semantics and the Activity cursor path, reran all twenty-one control-plane
-tests, and reported no remaining blocker. No reviewer edited the worktree.
+The final independent review reproduced two P1 defects: inactive-leaf
+inference and cross-Activity event delivery. Both received red regressions and
+fixes. A bounded second review checked Pi 0.84.1 branch-head semantics and the
+Activity cursor path, reran all twenty-one control-plane tests, and reported no
+remaining blocker. No reviewer edited the worktree.
 
 ## M2 non-claims
 
 - Receipt cancellation, supersession, expiry, retry policy, checkpoints, and
   restart recovery remain M5 lifecycle work. The four-state M2 spine is not the
   complete frozen Session Fabric contract.
-- `session_handoff`, task claim/release, cross-project lookup, authentication,
-  quotas, and a persistent outbox dispatcher are not implemented.
+- `session_handoff`, task claim/release, quotas, and a persistent outbox
+  dispatcher are not implemented.
 - Recall has bounded top-K/window/result sizes but does not yet calculate an
   exact remaining Pi context-token budget.
 - The Python witness check proves hash, canonical JSON, entry identity, session,
-  and source URI consistency. The loopback POC has no signed caller identity, so
-  this is not an authenticated external provenance service.
+  and source URI consistency.
 - No Git-backed WorkspaceRevision or StrategyVariant, Rust/PyO3 formal engine,
   formal Run, unified SPA, restart proof, or complete POC is implemented.
-- The quant-assistant engine donor remains unsafe to copy because root/Rust
+- The quant-assistant engine donor remains outside this slice because root/Rust
   license coverage and product lineage are unresolved.
 
 ## Delivery state

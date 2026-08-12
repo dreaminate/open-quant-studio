@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/data-snapshot-event.schema.json",
+  "title": "Open Quant Studio data snapshot created event v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": { "const": "data.snapshot_created" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "payload": { "$ref": "#/$defs/createdPayload" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "createdPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "schema_version": { "const": 1 } } },
+          "then": {
+            "properties": {
+              "symbol": { "type": "string", "minLength": 1 },
+              "symbols": { "type": "array", "minItems": 1, "maxItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "symbol": { "type": "null" },
+              "symbols": { "type": "array", "minItems": 2 }
+            }
+          }
+        }
+      ],
+      "required": [
+        "snapshot_id",
+        "source_artifact_id",
+        "normalized_artifact_id",
+        "market_input_artifact_id",
+        "market",
+        "symbol",
+        "symbols",
+        "timezone",
+        "price_basis",
+        "cutoff",
+        "schema_version",
+        "sample_start",
+        "sample_end",
+        "row_count",
+        "session_count",
+        "sha256",
+        "created_at"
+      ],
+      "properties": {
+        "snapshot_id": { "$ref": "#/$defs/uuid" },
+        "source_artifact_id": { "$ref": "#/$defs/uuid" },
+        "normalized_artifact_id": { "$ref": "#/$defs/uuid" },
+        "market_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "market": { "enum": ["a_share_daily", "crypto_linear_perp"] },
+        "symbol": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "schema_version": { "enum": [1, 2] },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "row_count": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "session_count": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "created_at": { "$ref": "#/$defs/dateTime" }
+      }
+    }
+  }
+}

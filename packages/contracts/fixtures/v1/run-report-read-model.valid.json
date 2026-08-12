@@ -1,0 +1,104 @@
+{
+  "report": {
+    "report_version": "m9-v1",
+    "run": {
+      "run_id": "18181818-1818-4181-8181-181818181818",
+      "run_spec_id": "19191919-1919-4191-8191-191919191919",
+      "project_id": "20202020-2020-4202-8202-202020202020",
+      "activity_id": "21212121-2121-4212-8212-212121212121",
+      "variant_id": "22222222-2222-4222-8222-222222222222",
+      "candidate_revision_id": "23232323-2323-4232-8232-232323232323",
+      "status": "succeeded",
+      "calculation_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "finished_at": "2026-08-12T08:00:00Z"
+    },
+    "identities": {
+      "engine_result_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "engine_version": "oqs-quant-engine/0.2.0",
+      "engine_schema_version": 2,
+      "account_model": "a_share_portfolio_cash",
+      "data_snapshot_id": "24242424-2424-4242-8242-242424242424",
+      "data_snapshot_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "strategy_tree_oid": "0123456789abcdef0123456789abcdef01234567",
+      "parameters_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "cost_model_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "environment_lock_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "price_basis": "raw",
+      "cutoff": "2026-08-01T00:00:00Z",
+      "timezone": "Asia/Shanghai",
+      "sample_start": "2026-08-01T00:00:00Z",
+      "sample_end": "2026-08-11T23:59:59Z"
+    },
+    "period": {
+      "start_at": "2026-08-01T01:30:00Z",
+      "end_at": "2026-08-11T07:00:00Z",
+      "session_count": 6
+    },
+    "summary": {
+      "starting_equity_atoms": "1000000",
+      "ending_equity_atoms": "1012500",
+      "net_pnl_atoms": "12500",
+      "total_return_rate_atoms": "12500",
+      "max_drawdown_atoms": "-3500",
+      "max_drawdown_rate_atoms": "-350",
+      "gross_exposure_atoms": "200000",
+      "net_exposure_atoms": "100000",
+      "total_fees_atoms": "120",
+      "total_stamp_duty_atoms": "40",
+      "total_funding_atoms": "0",
+      "total_slippage_atoms": "200",
+      "order_count": 4,
+      "fill_count": 4,
+      "closed_trade_count": 2,
+      "open_position_count": 0
+    },
+    "reconciliation": {
+      "passed": true,
+      "checks": [
+        { "field": "starting_equity_atoms", "expected": "1000000", "actual": "1000000", "passed": true },
+        { "field": "ending_equity_atoms", "expected": "1012500", "actual": "1012500", "passed": true },
+        { "field": "order_count", "expected": 4, "actual": 4, "passed": true },
+        { "field": "session_count", "expected": 6, "actual": 6, "passed": true }
+      ]
+    },
+    "definitions": [
+      { "field": "start_at", "name": "Period start", "unit": "RFC3339", "formula": "first equity timestamp", "inputs": ["equity_curve.timestamp"], "empty_behavior": "null when the equity curve is empty" },
+      { "field": "end_at", "name": "Period end", "unit": "RFC3339", "formula": "last equity timestamp", "inputs": ["equity_curve.timestamp"], "empty_behavior": "null when the equity curve is empty" },
+      { "field": "session_count", "name": "Sessions", "unit": "count", "formula": "count(equity_curve)", "inputs": ["equity_curve"], "empty_behavior": "zero when the equity curve is empty" },
+      { "field": "starting_equity_atoms", "name": "Starting equity", "unit": "atoms", "formula": "first equity_curve.equity_atoms", "inputs": ["equity_curve.equity_atoms"], "empty_behavior": "zero when the equity curve is empty" },
+      { "field": "ending_equity_atoms", "name": "Ending equity", "unit": "atoms", "formula": "last equity_curve.equity_atoms", "inputs": ["equity_curve.equity_atoms"], "empty_behavior": "zero when the equity curve is empty" },
+      { "field": "net_pnl_atoms", "name": "Net PnL", "unit": "atoms", "formula": "ending_equity_atoms - starting_equity_atoms", "inputs": ["starting_equity_atoms", "ending_equity_atoms"], "empty_behavior": "zero when the equity curve is empty" },
+      { "field": "total_return_rate_atoms", "name": "Total return", "unit": "rate atoms", "formula": "net_pnl_atoms / starting_equity_atoms", "inputs": ["net_pnl_atoms", "starting_equity_atoms"], "empty_behavior": "zero when starting equity is zero" },
+      { "field": "max_drawdown_atoms", "name": "Maximum drawdown", "unit": "atoms", "formula": "minimum drawdown_curve.drawdown_atoms", "inputs": ["drawdown_curve.drawdown_atoms"], "empty_behavior": "zero when the drawdown curve is empty" },
+      { "field": "max_drawdown_rate_atoms", "name": "Maximum drawdown rate", "unit": "rate atoms", "formula": "minimum drawdown_curve.drawdown_rate_atoms", "inputs": ["drawdown_curve.drawdown_rate_atoms"], "empty_behavior": "zero when the drawdown curve is empty" },
+      { "field": "gross_exposure_atoms", "name": "Gross exposure", "unit": "atoms", "formula": "sum(abs(position market value))", "inputs": ["positions", "equity_curve"], "empty_behavior": "zero when there are no positions" },
+      { "field": "net_exposure_atoms", "name": "Net exposure", "unit": "atoms", "formula": "sum(signed position market value)", "inputs": ["positions", "equity_curve"], "empty_behavior": "zero when there are no positions" },
+      { "field": "total_fees_atoms", "name": "Total fees", "unit": "atoms", "formula": "sum(trades.fee_atoms)", "inputs": ["trades.fee_atoms"], "empty_behavior": "zero when there are no trades" },
+      { "field": "total_stamp_duty_atoms", "name": "Total stamp duty", "unit": "atoms", "formula": "sum(trades.stamp_duty_atoms)", "inputs": ["trades.stamp_duty_atoms"], "empty_behavior": "zero when there are no trades" },
+      { "field": "total_funding_atoms", "name": "Total funding", "unit": "atoms", "formula": "negative sum(funding_ledger.wallet_delta_atoms)", "inputs": ["funding_ledger.wallet_delta_atoms"], "empty_behavior": "zero when there are no funding events" },
+      { "field": "total_slippage_atoms", "name": "Total slippage", "unit": "atoms", "formula": "sum(trades.slippage_atoms)", "inputs": ["trades.slippage_atoms"], "empty_behavior": "zero when there are no trades" },
+      { "field": "order_count", "name": "Orders", "unit": "count", "formula": "count(orders)", "inputs": ["orders"], "empty_behavior": "zero when there are no orders" },
+      { "field": "fill_count", "name": "Fills", "unit": "count", "formula": "count(orders where status = filled)", "inputs": ["orders.status"], "empty_behavior": "zero when there are no filled orders" },
+      { "field": "closed_trade_count", "name": "Closed trades", "unit": "count", "formula": "count(closed trades)", "inputs": ["trades.position_effect"], "empty_behavior": "zero when there are no closed trades" },
+      { "field": "open_position_count", "name": "Open positions", "unit": "count", "formula": "count(non-zero positions)", "inputs": ["positions.signed_quantity"], "empty_behavior": "zero when all positions are flat" }
+    ],
+    "source": {
+      "engine_result_artifact_id": "25252525-2525-4252-8252-252525252525",
+      "manifest_artifact_id": "26262626-2626-4262-8262-262626262626"
+    }
+  },
+  "json_artifact": {
+    "artifact_id": "27272727-2727-4272-8272-272727272727",
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "media_type": "application/vnd.open-quant-studio.run-report+json",
+    "byte_size": 4096,
+    "storage_uri": "cas://sha256/1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "html_artifact": {
+    "artifact_id": "28282828-2828-4282-8282-282828282828",
+    "sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+    "media_type": "application/vnd.open-quant-studio.run-report+html",
+    "byte_size": 8192,
+    "storage_uri": "cas://sha256/1212121212121212121212121212121212121212121212121212121212121212"
+  }
+}

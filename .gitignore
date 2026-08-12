@@ -27,3 +27,6 @@ worktrees/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+/.opencode/
+/graphify-out/

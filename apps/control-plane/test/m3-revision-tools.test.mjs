@@ -216,6 +216,7 @@ test("root and child commands are contract-valid, bounded, staged after validati
     baseRevisionId: ROOT_REVISION_ID,
     message: "A child",
     files: [{ path: "strategy.py", body: "signal = close > moving_average\n" }],
+    removedPaths: ["strategy.ipynb"],
   });
   const childB = await revisionClient.createRevisionChild({
     ...actor,
@@ -229,6 +230,7 @@ test("root and child commands are contract-valid, bounded, staged after validati
   assert.equal(validateTypedCommandEnvelope(commands[1]).valid, true);
   assert.equal(validateTypedCommandEnvelope(commands[2]).valid, true);
   assert.equal(commands[1].base_revision_id, ROOT_REVISION_ID);
+  assert.deepEqual(commands[1].payload.removed_paths, ["strategy.ipynb"]);
   assert.equal(commands[2].base_revision_id, ROOT_REVISION_ID);
   assert.notEqual(commands[1].variant_id, commands[2].variant_id);
   assert.notEqual(commands[1].payload.revision_id, commands[2].payload.revision_id);
@@ -272,17 +274,17 @@ test("merge, Formal Run, and Promote commands preserve one typed gate lineage", 
     message: "resolved merge",
     files: [{ path: "strategy.py", body: "def on_bar(bar):\n    return []\n" }],
   });
-  const engineInputJson = "{}";
-  const engineInputHash = (await import("node:crypto"))
-    .createHash("sha256").update(engineInputJson).digest("hex");
+  const marketInputJson = "{}";
+  const marketInputHash = (await import("node:crypto"))
+    .createHash("sha256").update(marketInputJson).digest("hex");
   const formal = await revisionClient.requestFormalRun({
     ...actor,
     commandId: "69696969-6969-4969-8969-696969696969",
     candidateRevisionId: REVISION_B_ID,
     variantId: VARIANT_A_ID,
-    engineInputJson,
+    marketInputJson,
     dataSnapshotId: "70707070-7070-4070-8070-707070707070",
-    dataSnapshotSha256: engineInputHash,
+    dataSnapshotSha256: marketInputHash,
     strategyTreeOid: "a".repeat(40),
     parametersSha256: "b".repeat(64),
     costModelSha256: "c".repeat(64),
@@ -314,7 +316,7 @@ test("merge, Formal Run, and Promote commands preserve one typed gate lineage", 
   assert.equal(formal.event.payload.validation_id, VALIDATION_ID);
   assert.equal(promote.event.payload.validation_id, VALIDATION_ID);
   assert.deepEqual(staged, ["def on_bar(bar):\n    return []\n"]);
-  assert.deepEqual(stagedJson, [engineInputJson]);
+  assert.deepEqual(stagedJson, [marketInputJson]);
 });
 
 test("stale promotion HTTP conflict is surfaced", async () => {
@@ -465,9 +467,9 @@ test("real Python HTTP reuses canonical text artifact identity from an M2 messag
 
 test("an official faux Pi AgentSession executes the typed merge, Formal Run, and gated Promote chain", async () => {
   const root = await mkdtemp(join(tmpdir(), "oqs-m3-pi-"));
-  const engineInputJson = "{}";
-  const engineInputHash = (await import("node:crypto"))
-    .createHash("sha256").update(engineInputJson).digest("hex");
+  const marketInputJson = "{}";
+  const marketInputHash = (await import("node:crypto"))
+    .createHash("sha256").update(marketInputJson).digest("hex");
   const faux = registerFauxProvider({
     provider: "oqs-m3-faux",
     models: [{ id: "m3-faux", name: "M3 faux", reasoning: false, input: ["text"] }],
@@ -485,9 +487,9 @@ test("an official faux Pi AgentSession executes the typed merge, Formal Run, and
     fauxAssistantMessage(fauxToolCall("formal_run_request", {
       candidate_revision_id: REVISION_B_ID,
       variant_id: VARIANT_A_ID,
-      engine_input_json: engineInputJson,
+      market_input_json: marketInputJson,
       data_snapshot_id: "70707070-7070-4070-8070-707070707070",
-      data_snapshot_sha256: engineInputHash,
+      data_snapshot_sha256: marketInputHash,
       strategy_tree_oid: "a".repeat(40),
       parameters_sha256: "b".repeat(64),
       cost_model_sha256: "c".repeat(64),

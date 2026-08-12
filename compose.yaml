@@ -1,0 +1,44 @@
+name: open-quant-studio
+
+services:
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    ports:
+      - "${OQS_WEB_PORT:-4173}:4173"
+    environment:
+      OQS_DATA_ROOT: var/m10-compose
+      OQS_PORT: "4173"
+      OQS_DOMAIN_PORT: "8765"
+      OQS_HOST: 0.0.0.0
+    volumes:
+      - type: volume
+        source: oqs-data
+        target: /app/var/m10-compose
+      - type: bind
+        source: ${OQS_HOST_IMPORTS_DIR:-./var/compose-imports}
+        target: /app/var/m10-compose/imports
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${OQS_HOST_EXPORTS_DIR:-./var/compose-exports}
+        target: /app/var/m10-compose/exports
+        bind:
+          create_host_path: true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4173/api/v1/context').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 15s
+
+volumes:
+  oqs-data:
+    name: ${OQS_DATA_VOLUME:-oqs-m10-data}

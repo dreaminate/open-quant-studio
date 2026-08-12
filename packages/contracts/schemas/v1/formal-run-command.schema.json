@@ -1,20 +1,44 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-quant-studio.local/schemas/v1/formal-run-command.schema.json",
-  "title": "Open Quant Studio Formal Run command v1",
+  "title": "Open Quant Studio M5 Formal Run commands v1",
   "allOf": [
-    {
-      "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json"
-    },
+    { "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json" },
     {
       "type": "object",
       "properties": {
-        "command_type": { "const": "formal.run_request" },
+        "command_type": {
+          "enum": ["formal.run_request", "formal.run_cancel", "formal.run_retry"]
+        },
         "expected_revision_id": { "$ref": "#/$defs/uuid" },
         "variant_id": { "$ref": "#/$defs/uuid" },
-        "base_revision_id": { "$ref": "#/$defs/uuid" },
-        "payload": { "$ref": "#/$defs/runRequestPayload" }
+        "base_revision_id": { "$ref": "#/$defs/uuid" }
       }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "formal.run_request" },
+            "payload": { "$ref": "#/$defs/runRequestPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "formal.run_cancel" },
+            "payload": { "$ref": "#/$defs/runCancelPayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "formal.run_retry" },
+            "payload": { "$ref": "#/$defs/runRetryPayload" }
+          }
+        }
+      ]
     }
   ],
   "$defs": {
@@ -22,24 +46,16 @@
       "type": "string",
       "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "gitOid": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{40}$"
-    },
-    "engineInputArtifact": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "gitOid": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "marketInputArtifact": {
       "allOf": [
-        {
-          "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json"
-        },
+        { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
         {
           "type": "object",
           "properties": {
             "media_type": { "const": "application/json" },
-            "byte_size": { "type": "integer", "minimum": 2, "maximum": 5242880 },
+            "byte_size": { "type": "integer", "minimum": 2, "maximum": 268435456 },
             "producing_revision_id": { "type": "null" },
             "producing_run_id": { "type": "null" }
           }
@@ -49,12 +65,32 @@
     "runRequestPayload": {
       "type": "object",
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+            "output_schema_version": { "const": 1 },
+            "gate_policy_version": { "const": "m5-v1" },
+            "strategy_protocol_version": { "const": "oqs-strategy-host/m5-stream-v2" },
+            "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v1" }
+          }
+        },
+        {
+          "properties": {
+            "engine_version": { "const": "oqs-quant-engine/0.2.0" },
+            "output_schema_version": { "const": 2 },
+            "gate_policy_version": { "const": "m8-v1" },
+            "strategy_protocol_version": { "const": "oqs-strategy-host/m8-portfolio-v1" },
+            "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v2" }
+          }
+        }
+      ],
       "required": [
         "run_spec_id",
         "run_id",
         "validation_id",
         "candidate_revision_id",
-        "engine_input",
+        "market_input",
         "data_snapshot_id",
         "data_snapshot_sha256",
         "strategy_tree_oid",
@@ -69,29 +105,57 @@
         "sample_end",
         "random_seed",
         "output_schema_version",
-        "gate_policy_version"
+        "gate_policy_version",
+        "strategy_protocol_version",
+        "checkpoint_batch_size",
+        "engine_checkpoint_abi"
       ],
       "properties": {
         "run_spec_id": { "$ref": "#/$defs/uuid" },
         "run_id": { "$ref": "#/$defs/uuid" },
         "validation_id": { "$ref": "#/$defs/uuid" },
         "candidate_revision_id": { "$ref": "#/$defs/uuid" },
-        "engine_input": { "$ref": "#/$defs/engineInputArtifact" },
+        "market_input": { "$ref": "#/$defs/marketInputArtifact" },
         "data_snapshot_id": { "$ref": "#/$defs/uuid" },
         "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
         "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
         "parameters_sha256": { "$ref": "#/$defs/sha256" },
         "cost_model_sha256": { "$ref": "#/$defs/sha256" },
         "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
-        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0"] },
         "price_basis": { "enum": ["raw", "qfq", "hfq"] },
         "cutoff": { "type": "string", "format": "date-time" },
         "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
         "sample_start": { "type": "string", "format": "date-time" },
         "sample_end": { "type": "string", "format": "date-time" },
         "random_seed": { "type": "integer", "minimum": 0 },
-        "output_schema_version": { "const": 1 },
-        "gate_policy_version": { "const": "m3-v1" }
+        "output_schema_version": { "enum": [1, 2] },
+        "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
+        "strategy_protocol_version": { "enum": ["oqs-strategy-host/m5-stream-v2", "oqs-strategy-host/m8-portfolio-v1"] },
+        "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "engine_checkpoint_abi": { "enum": ["oqs-quant-engine/checkpoint-v1", "oqs-quant-engine/checkpoint-v2"] }
+      }
+    },
+    "runCancelPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "expected_status", "expected_execution_version", "reason"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "expected_status": { "enum": ["pending", "running"] },
+        "expected_execution_version": { "type": "integer", "minimum": 0 },
+        "reason": { "const": "user_requested" }
+      }
+    },
+    "runRetryPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_run_id", "source_execution_version", "run_id", "validation_id"],
+      "properties": {
+        "source_run_id": { "$ref": "#/$defs/uuid" },
+        "source_execution_version": { "type": "integer", "minimum": 0 },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "validation_id": { "$ref": "#/$defs/uuid" }
       }
     }
   }

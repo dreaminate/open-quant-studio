@@ -6,6 +6,7 @@ license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
     "jsonschema==4.26.0",
+    "pyarrow==25.0.0",
     "rfc3339-validator==0.1.4",
     "starlette==1.6.0",
     "uvicorn==0.52.1",

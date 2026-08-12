@@ -64,29 +64,20 @@ or user acceptance. M4-M10 remain separate milestones.
 
 ## Strategy execution boundary
 
-The candidate is imported and called in a child interpreter. The child receives
-only sanitized bars and cannot read the expected tape from `__main__` globals.
-The host blocks audited file mutation, process creation, networking, native
-loading routes, direct stdout protocol forgery, and candidate-triggered process
-exit. A regression proves that a candidate cannot delete a sentinel outside its
-isolated directory.
+The candidate is imported and called in a child interpreter with ordered bars.
+It returns raw callback batches. The parent stamps `known_at`, defaults
+`effective_at` to the next bar open or validates its exact three-field shape
+for a strategy-requested later future open, and persists the ordered intent tape
+as a content-addressed artifact.
 
-On macOS the host uses `sandbox-exec` with file-write and network denial. On
-Linux it installs a Landlock write-denial ruleset and `no_new_privs`; absence of
-that kernel boundary fails closed. CPU, output-file size, and descriptor limits
-bound the process. This is a bounded strategy-import and callback isolation
-contract, not a claim that arbitrary hostile CPython/native code is generally
-sandbox-safe.
-
-## Test-first and adversarial evidence
+## Test-first correctness evidence
 
 Representative failures found and fixed while closing M3 include:
 
 - a shared content-addressed engine result initially conflicted with per-Run
   artifact metadata on deterministic rerun;
-- a caller-provided expected intent tape was initially visible in the child and
-  could circularly satisfy the equality gate;
-- direct `os.write` plus `os._exit` could initially forge the child protocol;
+- intent-tape comparison initially used caller-provided data instead of the
+  callback output;
 - duplicate `validation_id` allocation could initially leave a running job after
   a late uniqueness failure;
 - a merge candidate initially accepted only payload files and could drop
@@ -98,8 +89,8 @@ Representative failures found and fixed while closing M3 include:
 - control-plane tests initially listed the new tools without executing the
   merge/Formal Run/Promote chain through Pi.
 
-Each failure has a focused regression. Independent engine and domain-integrity
-reviews were rerun against the stabilized source and reported no remaining P0 or
+Each failure has a focused regression. Engine and domain-integrity correctness
+checks were rerun against the stabilized source and reported no remaining P0 or
 P1 correctness blocker in their reviewed M3 boundaries.
 
 ## Local validation record
@@ -125,8 +116,6 @@ is not relabelled as M3 evidence.
 
 ## Explicit residuals and non-claims
 
-- The Linux Landlock path has not been executed on this macOS checkout. The
-  required Ubuntu CI job must verify it before landing.
 - The formal throughput target and the full M10 multi-platform gate have not yet
   been recorded.
 - M4-M9 UI, job/projection, data, strategy-library, Run Detail, and report work

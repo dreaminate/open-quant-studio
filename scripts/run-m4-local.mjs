@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { access, mkdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, copyFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -135,8 +136,20 @@ async function stopChild(child) {
   await once(child, "exit");
 }
 
+async function installSampleImport(importsRoot, fileName) {
+  try {
+    await copyFile(
+      join(REPO_ROOT, "fixtures/market", fileName),
+      join(importsRoot, fileName),
+      constants.COPYFILE_EXCL,
+    );
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+}
+
 async function main() {
-  const host = "127.0.0.1";
+  const host = process.env.OQS_HOST ?? "127.0.0.1";
   const port = Number(process.env.OQS_PORT ?? "4173");
   const domainPort = Number(process.env.OQS_DOMAIN_PORT ?? "8765");
   const dataRoot = resolveM4DataRoot(process.env.OQS_DATA_ROOT);
@@ -146,12 +159,21 @@ async function main() {
   const fixturePath = join(REPO_ROOT, "fixtures/backtests/m3-a-share-long-short-v1.json");
   const controlledCwd = join(dataRoot, "pi-workspace");
   const controlledSessionDir = join(dataRoot, "pi-sessions");
+  const importsRoot = join(dataRoot, "imports");
+  const exportsRoot = join(dataRoot, "exports");
   const formalRunFixture = await loadM4FormalRunFixture(fixturePath);
-  const strategy = formalStrategySource(formalRunFixture.engineInputJson);
+  const strategy = formalStrategySource(formalRunFixture.strategyInputJson);
 
   await access(join(webRoot, "index.html"));
   await mkdir(controlledCwd, { recursive: true });
   await mkdir(controlledSessionDir, { recursive: true });
+  await mkdir(importsRoot, { recursive: true });
+  await mkdir(exportsRoot, { recursive: true });
+  await Promise.all([
+    installSampleImport(importsRoot, "m7-a-share-daily.csv"),
+    installSampleImport(importsRoot, "m7-crypto-linear.csv"),
+    installSampleImport(importsRoot, "m8-a-share-rotation.csv"),
+  ]);
 
   const domain = startPython([
     "run",
@@ -248,8 +270,10 @@ async function main() {
     await Promise.race([stop, unexpectedDomainExit, unexpectedWorkerExit]);
   } finally {
     if (browserServer?.listening) {
+      const browserClosed = once(browserServer, "close");
       browserServer.close();
-      await once(browserServer, "close");
+      browserServer.closeAllConnections();
+      await browserClosed;
     }
     registry?.dispose();
     localPiModel?.dispose();

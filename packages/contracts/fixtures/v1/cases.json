@@ -97,10 +97,16 @@
       "valid": true
     },
     {
-      "name": "valid Formal Run request command",
+      "name": "valid M5 Formal Run request command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-request-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "historical all-bars Formal Run request is not executable in M5",
       "kind": "formal_run_command",
       "fixture": "command.formal-run-request.valid.json",
-      "valid": true
+      "valid": false
     },
     {
       "name": "revision create rejects unsafe file paths",
@@ -322,6 +328,138 @@
       "name": "valid artifact verification failure event",
       "kind": "artifact_verification_event",
       "fixture": "event.artifact-verification-failed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run cancel command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-cancel.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run retry command",
+      "kind": "formal_run_command",
+      "fixture": "command.formal-run-retry.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run checkpoint event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-checkpointed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Formal Run cancelled event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-cancelled.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid M5 Formal Run completed event",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-completed-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "Formal Run retry event requires a new Run identity",
+      "kind": "formal_run_event",
+      "fixture": "event.formal-run-retried.invalid-same-run.json",
+      "valid": false
+    },
+    {
+      "name": "valid M5 Formal Run manifest",
+      "kind": "formal_run_manifest",
+      "fixture": "formal-run-manifest-m5.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic delete command",
+      "kind": "diagnostic_command",
+      "fixture": "command.diagnostic-log-delete.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic retention command",
+      "kind": "diagnostic_command",
+      "fixture": "command.diagnostic-retention-configure.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid diagnostic deletion event",
+      "kind": "diagnostic_event",
+      "fixture": "event.diagnostic-logs-deleted.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive manifest",
+      "kind": "project_archive_manifest",
+      "fixture": "project-archive-manifest.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive import command",
+      "kind": "project_archive_command",
+      "fixture": "command.project-archive-import.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid project archive imported event",
+      "kind": "project_archive_event",
+      "fixture": "event.project-archive-imported.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test request",
+      "kind": "forward_test_command",
+      "fixture": "command.forward-test-request.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test completion",
+      "kind": "forward_test_event",
+      "fixture": "event.forward-test-completed.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid Forward Test read model",
+      "kind": "forward_test_read_model",
+      "fixture": "forward-test-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot creation command",
+      "kind": "data_snapshot_command",
+      "fixture": "command.data-snapshot-create.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot created event",
+      "kind": "data_snapshot_event",
+      "fixture": "event.data-snapshot-created.valid.json",
+      "valid": true
+    },
+    {
+      "name": "data snapshot created event requires a positive row count",
+      "kind": "data_snapshot_event",
+      "fixture": "event.data-snapshot-created.invalid-row-count.json",
+      "valid": false
+    },
+    {
+      "name": "valid data import preview read model",
+      "kind": "data_snapshot_import_preview_read_model",
+      "fixture": "data-import-preview-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot read model",
+      "kind": "data_snapshot_read_model",
+      "fixture": "data-snapshot-read-model.valid.json",
+      "valid": true
+    },
+    {
+      "name": "valid data snapshot list read model",
+      "kind": "data_snapshot_list_read_model",
+      "fixture": "data-snapshot-list-read-model.valid.json",
       "valid": true
     }
   ]

@@ -1,0 +1,28 @@
+{
+  "event_id": "53535353-5353-4353-8353-535353535353",
+  "stream_seq": 19,
+  "schema_version": 1,
+  "event_type": "forward_test.completed",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "forward-test",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "causation_id": "51515151-5151-4151-8151-515151515151",
+  "recorded_at": "2026-08-12T02:05:00+08:00",
+  "variant_id": "55555555-5555-4555-8555-555555555555",
+  "base_revision_id": "77777777-7777-4777-8777-777777777777",
+  "payload": {
+    "forward_test_id": "52525252-5252-4252-8252-525252525252",
+    "source_run_id": "18181818-1818-4181-8181-181818181818",
+    "source_revision_id": "77777777-7777-4777-8777-777777777777",
+    "data_snapshot_id": "23232323-2323-4232-8232-232323232323",
+    "protocol_version": "oqs-forward-replay/m5-v1",
+    "released_bar_count": 1024,
+    "transcript_artifact_id": "54545454-5454-4454-8454-545454545454",
+    "transcript_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "intent_tape_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "status": "passed",
+    "error_code": null
+  }
+}

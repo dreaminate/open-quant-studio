@@ -34,4 +34,8 @@ M4's single-SPA React/Vite boundary, React Flow projection, CodeMirror editor,
 Playwright browser oracle, exact versions, and licenses are recorded in
 `M4_DEPENDENCY_DECISIONS.md`.
 
+M7's local CSV/Parquet boundary, exact PyArrow version and wheel hashes,
+Apache-2.0 metadata, and snapshot validation oracle are recorded in
+`M7_DEPENDENCY_DECISIONS.md`.
+
 PSM/byteowlz material may not be copied from the reviewed unlicensed snapshots. MCP Agent Mail may not be copied, run, tested, or integrated because of its restrictive license rider. See `docs/06_MIGRATION_MAP.md`.

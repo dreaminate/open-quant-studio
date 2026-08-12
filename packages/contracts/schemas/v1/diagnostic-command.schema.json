@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/diagnostic-command.schema.json",
+  "title": "Open Quant Studio diagnostic commands v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": { "enum": ["diagnostic.log_delete", "diagnostic.log_retention_configure"] },
+        "expected_revision_id": { "type": "null" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "diagnostic.log_delete" },
+            "payload": { "$ref": "#/$defs/deletePayload" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_type": { "const": "diagnostic.log_retention_configure" },
+            "payload": { "$ref": "#/$defs/retentionPayload" }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "session_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "from": { "$ref": "#/$defs/dateTime" },
+        "to": { "$ref": "#/$defs/dateTime" },
+        "levels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["debug", "info", "warn", "error"] }
+        },
+        "priorities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["p1", "p2", "p3", "p4"] }
+        },
+        "query": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "selection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["log_ids"],
+          "properties": {
+            "log_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/uuid" }
+            }
+          }
+        },
+        { "$ref": "#/$defs/filters" }
+      ]
+    },
+    "deletePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selection"],
+      "properties": { "selection": { "$ref": "#/$defs/selection" } }
+    },
+    "retentionPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["debug_days", "info_days", "warn_days", "quota_bytes"],
+      "properties": {
+        "debug_days": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "info_days": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "warn_days": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "quota_bytes": { "type": "integer", "minimum": 1048576, "maximum": 1099511627776 }
+      }
+    }
+  }
+}

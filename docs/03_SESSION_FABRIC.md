@@ -14,8 +14,7 @@ Session Fabric coordinates one Pi session across multiple workbenches and coordi
 ## Local tool boundary
 
 - Pi built-in shell/filesystem/edit/write tools are disabled by default.
-- Trusted Local Mode requires an explicit user action and exposes only the active OQS project workspace plus its `imports/` and `exports/` directories.
-- Trusted Local Mode never exposes all of HOME. Tool output remains diagnostic until a typed domain command validates and registers a durable business object.
+- Tool output remains diagnostic until a typed domain command validates and registers a durable business object.
 
 ## Cross-session operations
 
@@ -36,8 +35,6 @@ Active sessions use an in-process registry and router. Normal delivery uses Pi `
 3. Read a bounded window around an explicit entry anchor.
 4. Respect the remaining Pi context budget.
 5. Render retrieved material as quoted evidence, never as system instructions.
-
-Cross-project lookup requires an explicit project link or handoff.
 
 ## Message contract
 

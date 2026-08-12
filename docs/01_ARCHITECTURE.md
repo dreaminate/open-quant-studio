@@ -36,7 +36,7 @@ flowchart LR
 - Active live routing is in-process. Durable coordination is persisted through the Python service.
 - Large payloads cross process boundaries by artifact reference.
 - Python invokes the formal engine and durably records its typed result; neither TypeScript nor the SPA writes formal business state.
-- Pi built-in shell/filesystem/edit/write are disabled by default. Trusted Local Mode is an explicit opt-in projection limited to the active OQS project workspace and `imports/`/`exports/`; it never mounts all of HOME.
+- Pi built-in shell/filesystem/edit/write are disabled by default.
 - Shell output is diagnostic until a typed domain command validates and registers it. It cannot become a Run, metric, or Canonical Context by itself.
 - The POC runs at most one Formal Run concurrently and proves at most two active Pi sessions; no distributed scheduler is part of this architecture.
 

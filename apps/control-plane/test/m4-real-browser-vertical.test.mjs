@@ -251,14 +251,14 @@ test("real browser facade completes Project to immutable Run Detail and Promote"
   assert.equal(run.engine_result.trades.length, 4);
   assert.equal(run.validation.outcome, "passed");
   assert.equal(run.run.calculation_hash, run.manifest.engine_result.sha256);
-  const engineInputArtifact = await revisionClient.getArtifact(
+  const marketInputArtifact = await revisionClient.getArtifact(
     PROJECT_ID,
-    run.run_spec.engine_input_artifact_id,
+    run.run_spec.market_input_artifact_id,
   );
-  assert.equal(engineInputArtifact.project_id, PROJECT_ID);
-  assert.equal(engineInputArtifact.origin_kind, "fixture");
+  assert.equal(marketInputArtifact.project_id, PROJECT_ID);
+  assert.equal(marketInputArtifact.origin_kind, "fixture");
   assert.equal(
-    engineInputArtifact.source_ref,
+    marketInputArtifact.source_ref,
     "76767676-7676-4676-8676-767676767676",
   );
 

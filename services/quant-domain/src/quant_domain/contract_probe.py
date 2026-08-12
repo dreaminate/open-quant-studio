@@ -59,6 +59,16 @@ validators = {
         registry=registry,
         format_checker=FormatChecker(),
     ),
+    "diagnostic_command": Draft202012Validator(
+        schemas["diagnostic-command"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "diagnostic_event": Draft202012Validator(
+        schemas["diagnostic-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
     "session_command": Draft202012Validator(
         schemas["session-command"],
         registry=registry,
@@ -86,6 +96,66 @@ validators = {
     ),
     "formal_run_event": Draft202012Validator(
         schemas["formal-run-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "formal_run_manifest": Draft202012Validator(
+        schemas["formal-run-manifest"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "forward_test_command": Draft202012Validator(
+        schemas["forward-test-command"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "forward_test_event": Draft202012Validator(
+        schemas["forward-test-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "forward_test_read_model": Draft202012Validator(
+        schemas["forward-test-read-model"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "project_archive_command": Draft202012Validator(
+        schemas["project-archive-command"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "project_archive_event": Draft202012Validator(
+        schemas["project-archive-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "project_archive_manifest": Draft202012Validator(
+        schemas["project-archive-manifest"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "data_snapshot_command": Draft202012Validator(
+        schemas["data-snapshot-command"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "data_snapshot_event": Draft202012Validator(
+        schemas["data-snapshot-event"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "data_snapshot_read_model": Draft202012Validator(
+        schemas["data-snapshot-read-model"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "data_snapshot_import_preview_read_model": Draft202012Validator(
+        schemas["data-snapshot-read-model"],
+        registry=registry,
+        format_checker=FormatChecker(),
+    ),
+    "data_snapshot_list_read_model": Draft202012Validator(
+        schemas["data-snapshot-read-model"],
         registry=registry,
         format_checker=FormatChecker(),
     ),
@@ -140,6 +210,13 @@ for contract_case in case_document["cases"]:
                 valid = valid and artifact["storage_uri"] == (
                     f"cas://sha256/{artifact['sha256']}"
                 )
+            if command_type == "workspace.revision_create":
+                removed_paths = payload.get("removed_paths", [])
+                valid = valid and (
+                    fixture["expected_revision_id"] is not None
+                    or not removed_paths
+                )
+                valid = valid and not set(removed_paths).intersection(paths)
             if (
                 command_type == "workspace.revision_create"
                 and fixture["expected_revision_id"] is not None
@@ -183,21 +260,103 @@ for contract_case in case_document["cases"]:
             )
     if valid and contract_case["kind"] == "formal_run_command":
         payload = fixture["payload"]
-        artifact = payload["engine_input"]
-        valid = (
-            artifact["storage_uri"] == f"cas://sha256/{artifact['sha256']}"
-            and fixture["expected_revision_id"] == fixture["base_revision_id"]
-            and payload["candidate_revision_id"] == fixture["base_revision_id"]
-        )
+        valid = fixture["expected_revision_id"] == fixture["base_revision_id"]
+        if fixture["command_type"] == "formal.run_request":
+            artifact = payload["market_input"]
+            valid = (
+                valid
+                and artifact["storage_uri"] == f"cas://sha256/{artifact['sha256']}"
+                and payload["candidate_revision_id"] == fixture["base_revision_id"]
+            )
+        elif fixture["command_type"] == "formal.run_retry":
+            valid = valid and payload["source_run_id"] != payload["run_id"]
     if valid and contract_case["kind"] == "formal_run_event":
         payload = fixture["payload"]
         valid = payload["candidate_revision_id"] == fixture["base_revision_id"]
+        if valid and fixture["event_type"] == "formal.run_retried":
+            valid = payload["source_run_id"] != payload["run_id"]
         if (
             valid
             and fixture["event_type"] == "formal.run_completed"
             and payload["status"] == "succeeded"
         ):
             valid = payload["calculation_hash"] == payload["engine_result_sha256"]
+    if valid and contract_case["kind"] == "formal_run_manifest":
+        manifest_version = fixture["manifest_version"]
+        source_name = "engine_input" if manifest_version == "m3-v1" else "market_input"
+        source = fixture[source_name]
+        intent_tape = fixture["strategy_execution"]
+        result = fixture["engine_result"]
+        valid = (
+            source["storage_uri"] == f"cas://sha256/{source['sha256']}"
+            and intent_tape["intent_tape_storage_uri"]
+            == f"cas://sha256/{intent_tape['intent_tape_sha256']}"
+            and result["storage_uri"] == f"cas://sha256/{result['sha256']}"
+        )
+        if valid and manifest_version != "m3-v1":
+            resolved = fixture["resolved_engine_input"]
+            valid = (
+                resolved["storage_uri"] == f"cas://sha256/{resolved['sha256']}"
+                and source["artifact_id"]
+                == fixture["run_spec"]["market_input_artifact_id"]
+                and fixture["checkpoint"]["checkpoint_batch_size"]
+                == fixture["run_spec"]["checkpoint_batch_size"]
+                and fixture["checkpoint"]["engine_checkpoint_abi"]
+                == fixture["run_spec"]["engine_checkpoint_abi"]
+            )
+    if valid and contract_case["kind"] == "project_archive_command":
+        payload = fixture["payload"]
+        archive = payload["archive"]
+        valid = (
+            payload["expected_project_id"] == fixture["project_id"]
+            and archive["storage_uri"] == f"cas://sha256/{archive['sha256']}"
+        )
+    if valid and contract_case["kind"] == "project_archive_event":
+        valid = fixture["payload"]["restored_project_id"] == fixture["project_id"]
+    if valid and contract_case["kind"] == "forward_test_command":
+        valid = fixture["expected_revision_id"] == fixture["base_revision_id"]
+    if valid and contract_case["kind"] == "forward_test_event":
+        valid = fixture["payload"]["source_revision_id"] == fixture["base_revision_id"]
+    if valid and contract_case["kind"] == "project_archive_manifest":
+        paths = [entry["path"] for entry in fixture["cas_objects"]]
+        hashes = [entry["sha256"] for entry in fixture["cas_objects"]]
+        valid = (
+            paths == sorted(paths)
+            and len(paths) == len(set(paths))
+            and len(hashes) == len(set(hashes))
+            and all(
+                entry["path"]
+                == f"cas/sha256/{entry['sha256'][:2]}/{entry['sha256']}"
+                for entry in fixture["cas_objects"]
+            )
+        )
+    if valid and contract_case["kind"] == "data_snapshot_command":
+        payload = fixture["payload"]
+        source = payload["source"]
+        expected_media_type = (
+            "text/csv"
+            if payload["source_format"] == "csv"
+            else "application/vnd.apache.parquet"
+        )
+        valid = (
+            source["storage_uri"] == f"cas://sha256/{source['sha256']}"
+            and source["media_type"] == expected_media_type
+        )
+    if (
+        valid
+        and contract_case["kind"] == "data_snapshot_import_preview_read_model"
+        and "source" in fixture
+    ):
+        source = fixture["source"]
+        expected_media_type = (
+            "text/csv"
+            if fixture["source_format"] == "csv"
+            else "application/vnd.apache.parquet"
+        )
+        valid = (
+            source["storage_uri"] == f"cas://sha256/{source['sha256']}"
+            and source["media_type"] == expected_media_type
+        )
     results[contract_case["name"]] = valid
 
 sys.stdout.write(json.dumps(results, sort_keys=True))

@@ -1,0 +1,50 @@
+{
+  "command_id": "30303030-3030-4030-8030-303030303030",
+  "schema_version": 1,
+  "command_type": "formal.run_request",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "run-detail",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": "77777777-7777-4777-8777-777777777777",
+  "variant_id": "55555555-5555-4555-8555-555555555555",
+  "base_revision_id": "77777777-7777-4777-8777-777777777777",
+  "payload": {
+    "run_spec_id": "17171717-1717-4171-8171-171717171717",
+    "run_id": "18181818-1818-4181-8181-181818181818",
+    "validation_id": "19191919-1919-4191-8191-191919191919",
+    "candidate_revision_id": "77777777-7777-4777-8777-777777777777",
+    "market_input": {
+      "artifact_id": "21212121-2121-4121-8121-212121212121",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "application/json",
+      "byte_size": 2048,
+      "storage_uri": "cas://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producing_revision_id": null,
+      "producing_run_id": null,
+      "provenance": {
+        "origin_kind": "fixture",
+        "source_ref": "22222222-2222-4222-8222-222222222221"
+      }
+    },
+    "data_snapshot_id": "23232323-2323-4232-8232-232323232323",
+    "data_snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "strategy_tree_oid": "cccccccccccccccccccccccccccccccccccccccc",
+    "parameters_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "cost_model_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "environment_lock_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "engine_version": "oqs-quant-engine/0.1.0",
+    "price_basis": "raw",
+    "cutoff": "2026-01-01T00:00:00Z",
+    "timezone": "Asia/Shanghai",
+    "sample_start": "2026-01-02T00:00:00Z",
+    "sample_end": "2026-01-07T23:59:59Z",
+    "random_seed": 0,
+    "output_schema_version": 1,
+    "gate_policy_version": "m5-v1",
+    "strategy_protocol_version": "oqs-strategy-host/m5-stream-v2",
+    "checkpoint_batch_size": 256,
+    "engine_checkpoint_abi": "oqs-quant-engine/checkpoint-v1"
+  }
+}

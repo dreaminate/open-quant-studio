@@ -71,12 +71,12 @@ Project / Activity -> Canvas -> Pi prompt / SSE reply
 The test verifies three React Flow edges, an HTTP 200 `text/event-stream` Pi
 subscription and visible assistant message, exact strategy edit persistence,
 comparison output, the formal engine identity, four orders, four trades, a
-promoted project head equal to the Run candidate, and a 404 for the forbidden
-raw browser jobs route. The mock browser vertical separately verifies exact
+promoted project head equal to the Run candidate, and a 404 for the raw browser
+jobs route. The mock browser vertical separately verifies exact
 sanitized child/merge request bodies and Run-detail polling after an initial
 404.
 
-## Test-first and adversarial evidence
+## Test-first correctness evidence
 
 Representative failures found and fixed while closing M4 include:
 
@@ -133,15 +133,15 @@ It scanned 12 files, exited `0`, and reported only the non-blocking large
 in the restricted environment, so no post-change numeric score is claimed.
 `git diff --check` also exited `0` with no output.
 
-Two independent post-implementation reviews reported no unresolved P0 or P1 in
-their final current-snapshot verdicts. One independently ran the frontend
-builds, real Playwright vertical, and cumulative M4 gate. The other reproduced
-the former two-data-root port collision after the instance-token fix: the
-launcher exited `1`, never exposed the browser as ready, and created no project
-in the incumbent data root. Its focused control-plane build and 11-test browser
-suite passed. Their remaining P2 observations are missing drag-then-reload and
-empty-catalog browser assertions, no forced first-404 in the real vertical, and
-the intentionally out-of-scope external-model/reconnect path.
+Two focused post-implementation correctness checks reported no unresolved P0 or
+P1 in their final current-snapshot verdicts. One ran the frontend builds, real
+Playwright vertical, and cumulative M4 gate. The other reproduced the former
+two-data-root port collision after the instance-token fix: the launcher exited
+`1`, never exposed the browser as ready, and created no project in the incumbent
+data root. Its focused control-plane build and 11-test browser suite passed.
+Their remaining P2 observations are missing drag-then-reload and empty-catalog
+browser assertions, no forced first-404 in the real vertical, and the
+intentionally out-of-scope external-model/reconnect path.
 
 ## Explicit residuals and non-claims
 

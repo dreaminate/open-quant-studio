@@ -82,6 +82,9 @@ pre { margin: 0; max-width: 100%; overflow: auto; white-space: pre-wrap; word-br
 
 .oqs-code-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; }
 .oqs-code-editor { overflow: hidden; }
+.oqs-strategy-picker { display: grid; grid-template-columns: minmax(220px, 360px) 1fr; gap: 20px; align-items: end; padding: 0 0 16px; border-bottom: 1px solid #e2e6e9; }
+.oqs-strategy-picker .oqs-field { margin-top: 14px; }
+.oqs-strategy-picker .oqs-muted { margin: 0 0 8px; font-size: 11px; line-height: 1.55; }
 .oqs-code-editor .oqs-action-row { padding: 14px 22px 18px; }
 .oqs-code-editor .cm-editor { border: 0; font-size: 12px; }
 .oqs-code-editor .cm-scroller { font-family: "SFMono-Regular", Consolas, monospace; }
@@ -105,6 +108,43 @@ pre { margin: 0; max-width: 100%; overflow: auto; white-space: pre-wrap; word-br
 .oqs-run-row:last-child { border-bottom: 0; }
 .oqs-run-row:hover, .oqs-run-row.is-active { color: #1c5161; background: #f1f7f6; }
 
+.oqs-forward-layout, .oqs-archive-layout { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+.oqs-forward-action, .oqs-forward-result, .oqs-archive-panel { padding-bottom: 22px; }
+.oqs-forward-action > p:not(.oqs-kicker), .oqs-archive-panel > p:not(.oqs-kicker):not(.oqs-muted) { max-width: 680px; color: #63717b; font-size: 12px; line-height: 1.65; }
+.oqs-forward-action .oqs-action-row, .oqs-archive-panel .oqs-action-row { margin-top: 22px; }
+.oqs-field { display: flex; flex-direction: column; gap: 7px; margin-top: 20px; color: #55636d; font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.oqs-field select, .oqs-field input { width: min(100%, 360px); padding: 9px 10px; border: 1px solid #cbd3d8; border-radius: 3px; background: #fff; color: #33414b; font-size: 12px; font-weight: 400; letter-spacing: normal; text-transform: none; }
+.oqs-archive-panel > .oqs-muted { margin-top: 12px; font-size: 11px; }
+
+.oqs-data-layout { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; max-width: 1180px; }
+.oqs-data-source, .oqs-data-preview, .oqs-data-snapshots { padding-bottom: 22px; }
+.oqs-data-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding: 18px 0 4px; }
+.oqs-data-source-grid > div + div { padding-left: 28px; border-left: 1px solid #e2e6e9; }
+.oqs-data-source-grid .oqs-field { margin-top: 12px; }
+.oqs-data-source-grid .oqs-muted { min-height: 18px; margin: 10px 0 14px; font-size: 11px; }
+.oqs-mapping-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; padding-top: 4px; }
+.oqs-data-config-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; margin-top: 2px; padding-top: 15px; border-top: 1px solid #e6eaed; }
+.oqs-mapping-grid .oqs-field select, .oqs-data-config-grid .oqs-field select, .oqs-data-config-grid .oqs-field input { width: 100%; }
+.oqs-data-preview > .oqs-action-row { margin-top: 20px; }
+.oqs-snapshot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 18px 0 0; }
+.oqs-snapshot-card { padding: 15px; border: 1px solid #dce2e6; background: #fafbfb; }
+.oqs-snapshot-card.is-selected { border-color: #4d918a; box-shadow: 0 0 0 2px rgb(77 145 138 / 12%); background: #f2f8f7; }
+.oqs-snapshot-card > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.oqs-snapshot-card h3 { margin: 0; color: #33414b; font-size: 14px; text-transform: none; letter-spacing: normal; }
+.oqs-snapshot-card .oqs-kv { grid-template-columns: 76px minmax(0, 1fr); margin: 15px 0; }
+.oqs-snapshot-card .oqs-button { width: 100%; }
+
+.oqs-logs-layout { max-width: 1180px; }
+.oqs-logs-panel { padding-bottom: 22px; }
+.oqs-log-filters { display: grid; grid-template-columns: 150px 150px minmax(220px, 1fr) auto; gap: 12px; align-items: end; padding: 18px 0; border-bottom: 1px solid #e2e6e9; }
+.oqs-log-filters .oqs-field { margin: 0; }
+.oqs-log-filters .oqs-field select, .oqs-log-filters .oqs-field input { width: 100%; }
+.oqs-log-filters .oqs-action-row { justify-content: flex-end; padding-bottom: 1px; }
+.oqs-log-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; padding: 12px; border: 1px solid #e1c58e; background: #fffaf0; color: #66512a; font-size: 12px; }
+.oqs-log-confirmation strong { color: #4e3e22; }
+.oqs-log-confirmation .oqs-action-row { margin-left: auto; }
+.oqs-logs-panel input[type="checkbox"] { width: 14px; height: 14px; margin: 0; vertical-align: middle; }
+
 .oqs-chat { min-height: 620px; display: flex; flex-direction: column; }
 .oqs-chat-history { flex: 1; min-height: 460px; padding: 16px 22px; overflow: auto; }
 .oqs-chat-history .oqs-empty { padding-left: 0; }
@@ -122,17 +162,21 @@ pre { margin: 0; max-width: 100%; overflow: auto; white-space: pre-wrap; word-br
 .oqs-metric { min-height: 60px; padding: 10px; border: 1px solid #e0e5e8; background: #fafbfb; }
 .oqs-metric span { display: block; margin-bottom: 8px; color: #77858e; font-size: 10px; text-transform: uppercase; }
 .oqs-metric strong { display: block; overflow-wrap: anywhere; color: #33414b; font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; }
+.oqs-run-report { border-top: 3px solid #6d9e94; }
+.oqs-run-report .oqs-panel-heading { align-items: flex-start; }
+.oqs-report-period { margin-bottom: 12px; }
+.oqs-report-reconciliation { margin: 8px 0 20px; padding-top: 12px; border-top: 1px solid #e0e5e8; }
+.oqs-report-reconciliation .oqs-panel-heading { margin-bottom: 8px; }
+.oqs-report-reconciliation h3 { margin: 0; color: #33414b; font-size: 14px; }
+.oqs-status-passed { color: #2f745b; }
+.oqs-status-failed { color: #a3483d; }
 .oqs-detail-block { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e5e9eb; }
 .oqs-detail-block .oqs-table-wrap { max-height: 290px; }
-.oqs-boundary { min-height: 280px; padding-bottom: 24px; }
-.oqs-boundary h2 { margin: 6px 0 15px; }
-.oqs-boundary p:not(.oqs-kicker):not(.oqs-muted) { max-width: 680px; color: #596872; font-size: 13px; line-height: 1.7; }
-.oqs-boundary .oqs-muted { font-size: 11px; }
-
 @media (max-width: 1280px) {
   body { min-width: 1024px; }
   .oqs-topbar { gap: 18px; padding: 0 20px; }
   .oqs-brand { min-width: 220px; }
   .oqs-main { padding-left: 22px; padding-right: 22px; }
   .oqs-canvas-layout, .oqs-code-layout { grid-template-columns: minmax(0, 1fr) 230px; }
+  .oqs-mapping-grid, .oqs-data-config-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
 }

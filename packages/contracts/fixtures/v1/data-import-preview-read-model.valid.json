@@ -1,0 +1,39 @@
+{
+  "source": {
+    "artifact_id": "63636363-6363-4363-8363-636363636363",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "media_type": "text/csv",
+    "byte_size": 4096,
+    "storage_uri": "cas://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "producing_revision_id": null,
+    "producing_run_id": null,
+    "provenance": {
+      "origin_kind": "user_upload",
+      "source_ref": "64646464-6464-4464-8464-646464646464"
+    }
+  },
+  "source_format": "csv",
+  "file_name": "000001.csv",
+  "columns": ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
+  "suggested_mapping": {
+    "timestamp": "timestamp",
+    "symbol": "symbol",
+    "open": "open",
+    "high": "high",
+    "low": "low",
+    "close": "close",
+    "volume": "volume"
+  },
+  "preview_rows": [
+    {
+      "timestamp": "2026-08-11T00:00:00+08:00",
+      "symbol": "000001.SZ",
+      "open": "10.00",
+      "high": "10.20",
+      "low": "9.90",
+      "close": "10.10",
+      "volume": "1000000"
+    }
+  ],
+  "total_rows": 156
+}

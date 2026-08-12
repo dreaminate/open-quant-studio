@@ -1,4 +1,7 @@
-use oqs_quant_engine::run_engine_v1;
+use oqs_quant_engine::{
+    finalize_engine_checkpoint_v1, run_engine_v1, start_engine_checkpoint_v1,
+    step_engine_checkpoint_v1,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -98,6 +101,224 @@ fn a_share_market_round_trip_uses_the_formal_fee_ledger() {
     assert_eq!(output["metrics"]["fill_count"], 2);
     assert_eq!(output["metrics"]["closed_trade_count"], 1);
     assert_eq!(output["metrics"]["open_position_count"], 0);
+}
+
+#[test]
+fn checkpoint_restart_at_every_bar_matches_legacy_bytes() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../fixtures/backtests/m3-a-share-long-short-v1.json"
+    ))
+    .unwrap();
+    let input = serde_json::to_vec(&fixture["input"]).unwrap();
+    let expected = run_engine_v1(&input).unwrap();
+    let context = "a".repeat(64);
+    let mut checkpoint = start_engine_checkpoint_v1(&input, &context, 1).unwrap();
+
+    loop {
+        let checkpoint_value: Value = serde_json::from_slice(&checkpoint).unwrap();
+        if checkpoint_value["status"] == "complete" {
+            break;
+        }
+        checkpoint = step_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    }
+
+    assert_eq!(
+        finalize_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap(),
+        expected
+    );
+    assert_eq!(
+        finalize_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn checkpoint_stopped_batch_resumes_and_complete_calls_are_idempotent() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../fixtures/backtests/m3-a-share-long-short-v1.json"
+    ))
+    .unwrap();
+    let input = serde_json::to_vec(&fixture["input"]).unwrap();
+    let expected = run_engine_v1(&input).unwrap();
+    let context = "d".repeat(64);
+    let checkpoint = start_engine_checkpoint_v1(&input, &context, 2).unwrap();
+    let stopped = step_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    let stopped_value: Value = serde_json::from_slice(&stopped).unwrap();
+    assert_eq!(stopped_value["status"], "running");
+    assert_eq!(stopped_value["next_unprocessed_bar_index"], 2);
+    assert_eq!(
+        stopped_value["state"]["equity_curve"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        finalize_engine_checkpoint_v1(&input, &context, &stopped)
+            .unwrap_err()
+            .to_string(),
+        "[checkpoint_v1:incomplete]"
+    );
+
+    let complete = step_engine_checkpoint_v1(&input, &context, &stopped).unwrap();
+    let complete_value: Value = serde_json::from_slice(&complete).unwrap();
+    assert_eq!(complete_value["status"], "complete");
+    let repeated_step = step_engine_checkpoint_v1(&input, &context, &complete).unwrap();
+    assert_eq!(repeated_step, complete);
+    let finalized = finalize_engine_checkpoint_v1(&input, &context, &complete).unwrap();
+    assert_eq!(finalized, expected);
+    assert_eq!(
+        finalize_engine_checkpoint_v1(&input, &context, &complete).unwrap(),
+        finalized
+    );
+}
+
+#[test]
+fn crypto_checkpoint_restart_preserves_funding_and_oco_bytes() {
+    let mut target = crypto_intent("target", 4, "buy", "close", "limit", 3, 4, Some("950"));
+    target["oco_group"] = json!("exit-1");
+    let mut stop = crypto_intent("stop", 5, "buy", "close", "stop", 3, 4, None);
+    stop["stop_price_atoms"] = json!("910");
+    stop["oco_group"] = json!("exit-1");
+    let input_value = json!({
+        "schema_version": 1,
+        "account": crypto_account(),
+        "bars": [
+            bar(1, "1000", "1120", "990", "1100"),
+            bar(2, "1200", "1210", "1180", "1200"),
+            bar(3, "1000", "1100", "980", "1000"),
+            bar(4, "900", "920", "880", "900")
+        ],
+        "funding_events": [
+            funding("funding-long", 1, "1000", "1100"),
+            funding("funding-short", 3, "1000", "1000")
+        ],
+        "intents": [
+            crypto_intent("long", 1, "buy", "open", "market", 0, 1, None),
+            crypto_intent("sell", 2, "sell", "close", "market", 1, 2, None),
+            crypto_intent("short", 3, "sell", "open", "limit", 2, 3, Some("1100")),
+            target,
+            stop
+        ]
+    });
+    let input = serde_json::to_vec(&input_value).unwrap();
+    let expected = run_engine_v1(&input).unwrap();
+    let context = "b".repeat(64);
+    let mut checkpoint = start_engine_checkpoint_v1(&input, &context, 1).unwrap();
+    loop {
+        let value: Value = serde_json::from_slice(&checkpoint).unwrap();
+        if value["status"] == "complete" {
+            break;
+        }
+        checkpoint = step_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    }
+    assert_eq!(
+        finalize_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap(),
+        expected
+    );
+    let output: Value = serde_json::from_slice(&expected).unwrap();
+    assert_eq!(output["trades"][3]["intent_id"], "stop");
+    assert_eq!(output["trades"][3]["fill_price_atoms"], "910");
+    assert_eq!(output["orders"][3]["intent_id"], "target");
+    assert_eq!(output["orders"][3]["status"], "cancelled");
+    assert_eq!(output["orders"][4]["intent_id"], "stop");
+    assert_eq!(output["orders"][4]["status"], "filled");
+    assert_eq!(output["funding_ledger"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn checkpoint_step_advances_one_bar_and_rejects_incompatible_resume_inputs() {
+    let input_value = json!({
+        "schema_version": 1,
+        "account": a_share_account("0", false),
+        "bars": [bar(1, "1000", "1010", "990", "1000"), bar(2, "1000", "1010", "990", "1000")],
+        "funding_events": [],
+        "intents": [intent("entry", 1, "buy", "open", "market", 0, 1, None, None)]
+    });
+    let input = serde_json::to_vec(&input_value).unwrap();
+    let context = "c".repeat(64);
+    let checkpoint = start_engine_checkpoint_v1(&input, &context, 1).unwrap();
+    let next = step_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    let next_value: Value = serde_json::from_slice(&next).unwrap();
+    assert_eq!(next_value["next_unprocessed_bar_index"], 1);
+    assert_eq!(
+        next_value["state"]["equity_curve"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let changed_input = format!("{}\n", String::from_utf8(input.clone()).unwrap()).into_bytes();
+    let input_error = step_engine_checkpoint_v1(&changed_input, &context, &checkpoint).unwrap_err();
+    assert_eq!(
+        input_error.to_string(),
+        "[checkpoint_v1:input_hash_mismatch]"
+    );
+    let context_error =
+        step_engine_checkpoint_v1(&input, &"e".repeat(64), &checkpoint).unwrap_err();
+    assert_eq!(
+        context_error.to_string(),
+        "[checkpoint_v1:context_hash_mismatch]"
+    );
+}
+
+#[test]
+fn legacy_fixture_matches_frozen_raw_bytes() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../fixtures/backtests/m3-a-share-long-short-v1.json"
+    ))
+    .unwrap();
+    let input = serde_json::to_vec(&fixture["input"]).unwrap();
+    let expected = include_str!("fixtures/m3-a-share-long-short-v1.raw.json")
+        .trim_end_matches('\n')
+        .as_bytes();
+    assert_eq!(run_engine_v1(&input).unwrap(), expected);
+}
+
+#[test]
+#[ignore = "manual release gate: 250,000 legal crypto bars must finish within 60 seconds"]
+fn checkpoint_250k_mixed_trade_funding_release_gate() {
+    const BAR_COUNT: usize = 250_000;
+    const BATCH_BAR_COUNT: usize = 16_384;
+    let bars = (1..=BAR_COUNT as u64)
+        .map(|session_seq| bar(session_seq, "1000", "1120", "980", "1000"))
+        .collect::<Vec<_>>();
+    assert_eq!(bars.len(), BAR_COUNT);
+    let input_value = json!({
+        "schema_version": 1,
+        "account": crypto_account(),
+        "bars": bars,
+        "funding_events": [
+            funding("funding-long", 1, "1000", "1000"),
+            funding("funding-short", 3, "1000", "1000")
+        ],
+        "intents": [
+            crypto_intent("long", 1, "buy", "open", "market", 0, 1, None),
+            crypto_intent("sell", 2, "sell", "close", "market", 1, 2, None),
+            crypto_intent("short", 3, "sell", "open", "market", 2, 3, None),
+            crypto_intent("cover", 4, "buy", "close", "market", 3, 4, None)
+        ]
+    });
+    let input = serde_json::to_vec(&input_value).unwrap();
+    let expected = run_engine_v1(&input).unwrap();
+    let context = "d".repeat(64);
+    let started = std::time::Instant::now();
+    let mut checkpoint = start_engine_checkpoint_v1(&input, &context, BATCH_BAR_COUNT).unwrap();
+    while serde_json::from_slice::<Value>(&checkpoint).unwrap()["status"] != "complete" {
+        checkpoint = step_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    }
+    let actual = finalize_engine_checkpoint_v1(&input, &context, &checkpoint).unwrap();
+    let elapsed = started.elapsed();
+    eprintln!(
+        "250k checkpoint release gate: bars={BAR_COUNT} batch_bar_count={BATCH_BAR_COUNT} elapsed={elapsed:?} final_checkpoint_bytes={}",
+        checkpoint.len()
+    );
+    assert_eq!(actual, expected);
+    assert!(
+        elapsed < std::time::Duration::from_secs(60),
+        "250,000-bar checkpoint release gate exceeded 60 seconds: {elapsed:?}"
+    );
 }
 
 #[test]

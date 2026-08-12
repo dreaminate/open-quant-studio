@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/diagnostic-log-read-model.schema.json",
+  "title": "Open Quant Studio diagnostic log list read model v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["logs", "next_after_log_seq"],
+  "properties": {
+    "logs": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "https://open-quant-studio.local/schemas/v1/diagnostic-log.schema.json" }
+    },
+    "next_after_log_seq": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "null" }
+      ]
+    }
+  }
+}

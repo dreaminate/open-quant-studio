@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import tempfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from .domain import (
     MessageBodyTooLarge,
     QuantDomain,
 )
+from .data_import import DataImportValidationError
+from .project_archive import ProjectArchiveError, export_project_archive
+from .strategy_library import load_strategy_catalog, render_strategy_notebook
 
 
 LAST_EVENT_ID = re.compile(r"^(0|[1-9][0-9]*)$")
@@ -62,6 +66,11 @@ async def post_command(request: Request) -> JSONResponse:
     except ContractViolation as error:
         return JSONResponse(
             {"error": "contract_violation", "details": error.errors},
+            status_code=422,
+        )
+    except DataImportValidationError as error:
+        return JSONResponse(
+            {"error": "data_import_invalid", "details": error.details},
             status_code=422,
         )
     except DomainConflict as error:
@@ -138,18 +147,149 @@ async def get_logs(request: Request) -> JSONResponse:
         return JSONResponse({"error": "invalid_log_level"}, status_code=422)
     if priority is not None and priority not in {"p1", "p2", "p3", "p4"}:
         return JSONResponse({"error": "invalid_log_priority"}, status_code=422)
+    levels = request.query_params.getlist("levels")
+    priorities = request.query_params.getlist("priorities")
+    if any(value not in {"debug", "info", "warn", "error"} for value in levels):
+        return JSONResponse({"error": "invalid_log_level"}, status_code=422)
+    if any(value not in {"p1", "p2", "p3", "p4"} for value in priorities):
+        return JSONResponse({"error": "invalid_log_priority"}, status_code=422)
+    try:
+        after_log_seq = int(request.query_params.get("after_log_seq", "0"))
+        limit = int(request.query_params.get("limit", "1000"))
+    except ValueError:
+        return JSONResponse({"error": "invalid_log_cursor"}, status_code=422)
+    if after_log_seq < 0 or limit < 1 or limit > 10000:
+        return JSONResponse({"error": "invalid_log_cursor"}, status_code=422)
     domain: QuantDomain = request.app.state.domain
-    logs = domain.logs(
+    page = domain.log_page(
         project_id=request.query_params.get("project_id"),
         level=level,
         priority=priority,
+        activity_id=request.query_params.get("activity_id"),
+        session_id=request.query_params.get("session_id"),
+        run_id=request.query_params.get("run_id"),
+        from_timestamp=request.query_params.get("from"),
+        to_timestamp=request.query_params.get("to"),
+        levels=levels or None,
+        priorities=priorities or None,
+        query=request.query_params.get("query"),
+        after_log_seq=after_log_seq,
+        limit=limit,
     )
-    return JSONResponse({"logs": logs})
+    return JSONResponse(page)
 
 
 async def get_projects(request: Request) -> JSONResponse:
     domain: QuantDomain = request.app.state.domain
     return JSONResponse({"projects": domain.projects()})
+
+
+async def get_strategies(request: Request) -> JSONResponse:
+    return JSONResponse(load_strategy_catalog())
+
+
+async def post_strategy_notebook(request: Request) -> JSONResponse:
+    payload = json.loads(await request.body())
+    return JSONResponse(
+        render_strategy_notebook(
+            request.path_params["strategy_id"],
+            payload["source"],
+        )
+    )
+
+
+async def post_data_import_preview(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    file_name = request.query_params.get("file_name")
+    source_format = request.query_params.get("source_format")
+    if not file_name or not source_format:
+        return JSONResponse(
+            {"error": "data_import_parameters_required"}, status_code=422
+        )
+    domain: QuantDomain = request.app.state.domain
+    try:
+        preview = domain.preview_data_import(
+            await request.body(), file_name, source_format
+        )
+    except DataImportValidationError as error:
+        return JSONResponse(
+            {"error": "data_import_invalid", "details": error.details},
+            status_code=422,
+        )
+    return JSONResponse(preview)
+
+
+async def get_local_data_imports(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    return JSONResponse({"files": domain.local_data_imports()})
+
+
+async def post_local_data_import_preview(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    try:
+        payload = json.loads(await request.body())
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "invalid_json"}, status_code=400)
+    if not isinstance(payload, dict) or set(payload) != {"file_name"} or not isinstance(
+        payload["file_name"], str
+    ):
+        return JSONResponse({"error": "invalid_local_preview_request"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    try:
+        preview = domain.preview_local_data_import(payload["file_name"])
+    except DataImportValidationError as error:
+        return JSONResponse(
+            {"error": "data_import_invalid", "details": error.details},
+            status_code=422,
+        )
+    return JSONResponse(preview)
+
+
+async def get_data_snapshots(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    return JSONResponse({"snapshots": domain.data_snapshots(project_id)})
+
+
+async def get_data_snapshot(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    snapshot_id = request.path_params["snapshot_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(snapshot_id) is None:
+        return JSONResponse({"error": "invalid_snapshot_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    snapshot = domain.data_snapshot(project_id, snapshot_id)
+    if snapshot is None:
+        return JSONResponse({"error": "data_snapshot_not_found"}, status_code=404)
+    return JSONResponse(snapshot)
+
+
+async def get_data_snapshot_market_input(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    snapshot_id = request.path_params["snapshot_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(snapshot_id) is None:
+        return JSONResponse({"error": "invalid_snapshot_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    try:
+        content = domain.data_snapshot_market_input(project_id, snapshot_id)
+    except (ArtifactBlobMissing, ArtifactIntegrityMismatch) as error:
+        return JSONResponse({"error": error.code}, status_code=409)
+    if content is None:
+        return JSONResponse({"error": "data_snapshot_not_found"}, status_code=404)
+    artifact, body = content
+    return Response(body, media_type=artifact["media_type"])
 
 
 async def get_activities(request: Request) -> Response:
@@ -188,6 +328,72 @@ async def get_run(request: Request) -> Response:
     if run is None:
         return JSONResponse({"error": "run_not_found"}, status_code=404)
     return JSONResponse(run)
+
+
+async def get_run_report(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    run_id = request.path_params["run_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(run_id) is None:
+        return JSONResponse({"error": "invalid_run_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    try:
+        report = domain.run_report(project_id, run_id)
+    except (ArtifactBlobMissing, ArtifactIntegrityMismatch) as error:
+        return JSONResponse({"error": error.code}, status_code=409)
+    if report is None:
+        return JSONResponse({"error": "run_report_not_found"}, status_code=404)
+    return JSONResponse(report)
+
+
+async def get_forward_test(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    forward_test_id = request.path_params["forward_test_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(forward_test_id) is None:
+        return JSONResponse({"error": "invalid_forward_test_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    result = domain.forward_test(project_id, forward_test_id)
+    if result is None:
+        return JSONResponse({"error": "forward_test_not_found"}, status_code=404)
+    return JSONResponse(result)
+
+
+async def get_project_archive(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    selected_logs = request.query_params.get("selected_logs", "full")
+    if selected_logs not in {"full", "warn_error", "none"}:
+        return JSONResponse({"error": "invalid_log_selection"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    exports_root = domain.data_root / "exports"
+    exports_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=exports_root) as temporary_directory:
+        archive_path = Path(temporary_directory) / f"{project_id}.oqs.zip"
+        try:
+            exported = export_project_archive(
+                domain,
+                project_id=project_id,
+                archive_path=archive_path,
+                selected_logs=selected_logs,
+            )
+        except ProjectArchiveError as error:
+            return JSONResponse(
+                {"error": "project_archive_unavailable", "message": str(error)},
+                status_code=409,
+            )
+        archive_body = exported.archive_path.read_bytes()
+    return Response(
+        archive_body,
+        media_type="application/vnd.open-quant-studio.project-archive+zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{project_id}.oqs.zip"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 async def get_artifact(request: Request) -> Response:
@@ -364,9 +570,50 @@ def create_app(data_root: Path, instance_token: str | None = None) -> Starlette:
             Route("/v1/jobs/{job_id}", get_job, methods=["GET"]),
             Route("/v1/logs", get_logs, methods=["GET"]),
             Route("/v1/projects", get_projects, methods=["GET"]),
+            Route("/v1/strategies", get_strategies, methods=["GET"]),
+            Route(
+                "/v1/strategies/{strategy_id}/notebook",
+                post_strategy_notebook,
+                methods=["POST"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-imports/preview",
+                post_data_import_preview,
+                methods=["POST"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-imports/local-files",
+                get_local_data_imports,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-imports/local-preview",
+                post_local_data_import_preview,
+                methods=["POST"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-snapshots/{snapshot_id}/market-input",
+                get_data_snapshot_market_input,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-snapshots/{snapshot_id}",
+                get_data_snapshot,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/data-snapshots",
+                get_data_snapshots,
+                methods=["GET"],
+            ),
             Route(
                 "/v1/projects/{project_id}/activities",
                 get_activities,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/runs/{run_id}/report",
+                get_run_report,
                 methods=["GET"],
             ),
             Route(
@@ -377,6 +624,16 @@ def create_app(data_root: Path, instance_token: str | None = None) -> Starlette:
             Route(
                 "/v1/projects/{project_id}/runs",
                 get_runs,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/forward-tests/{forward_test_id}",
+                get_forward_test,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/archive",
+                get_project_archive,
                 methods=["GET"],
             ),
             Route(

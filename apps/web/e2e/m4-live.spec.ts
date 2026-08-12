@@ -82,6 +82,20 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.locator(".oqs-chat-message.pi p").last()).toHaveText("Pi local demo is connected to the current research Activity.");
 
+    await page.getByRole("button", { name: /^Data/ }).click();
+    await expect(page.locator("main h1", { hasText: "Data" })).toBeVisible();
+    const localImport = page.getByLabel("Local imports file");
+    await expect(localImport.locator('option[value="m7-a-share-daily.csv"]')).toHaveCount(1);
+    await localImport.selectOption("m7-a-share-daily.csv");
+    await page.getByRole("button", { name: "Preview local file" }).click();
+    await expect(page.getByRole("heading", { name: "Preview rows" })).toBeVisible();
+    await expect(page.getByText("SYNTH.XSHG", { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Create immutable snapshot" }).click();
+    const snapshot = page.locator('[data-testid^="snapshot-"]', { hasText: "SYNTH.XSHG" });
+    await expect(snapshot).toBeVisible();
+    await snapshot.getByRole("button", { name: "Use for Formal Run" }).click();
+    await expect(snapshot.getByRole("button", { name: "Selected for Formal Run" })).toBeVisible();
+
     await page.getByRole("button", { name: "Code" }).click();
     await expect(page.getByRole("heading", { name: "strategy.py" })).toBeVisible();
     const editor = page.locator(".cm-content");
@@ -101,7 +115,7 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     await expect(page.locator("main h1", { hasText: "Backtest" })).toBeVisible();
     await page.locator(".oqs-nav-item", { hasText: "Run Detail" }).click();
     await expect(page.locator("main h1", { hasText: "Run Detail" })).toBeVisible();
-    await expect(page.getByText("oqs-quant-engine/0.1.0", { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".oqs-chip", { hasText: "oqs-quant-engine/0.1.0" })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("bound", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Promote" }).click();

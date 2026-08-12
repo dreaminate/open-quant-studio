@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/project-archive-command.schema.json",
+  "title": "Open Quant Studio project archive import command v1",
+  "allOf": [
+    { "$ref": "https://open-quant-studio.local/schemas/v1/command-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "command_type": { "const": "project.archive_import" },
+        "expected_revision_id": { "type": "null" },
+        "variant_id": { "type": "null" },
+        "base_revision_id": { "type": "null" },
+        "payload": { "$ref": "#/$defs/importPayload" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "archiveArtifact": {
+      "allOf": [
+        { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "media_type": { "const": "application/vnd.open-quant-studio.project-archive+zip" },
+            "byte_size": { "type": "integer", "minimum": 1, "maximum": 10737418240 },
+            "producing_revision_id": { "type": "null" },
+            "producing_run_id": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "importPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_project_id", "archive"],
+      "properties": {
+        "expected_project_id": { "$ref": "#/$defs/uuid" },
+        "archive": { "$ref": "#/$defs/archiveArtifact" }
+      }
+    }
+  }
+}

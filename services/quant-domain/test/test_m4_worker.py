@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import os
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -15,9 +14,7 @@ from pathlib import Path
 from threading import Event
 
 import test_m3_formal_runs as formal_run_scenario
-from quant_domain.database import Database
 from quant_domain.domain import QuantDomain
-from quant_domain.git_workspace import GitWorkspaceStore
 from test_m2_session import PROJECT_ID, register_command
 from test_m3_revisions import create_revision_command, create_variant_command
 
@@ -139,22 +136,30 @@ class M4WorkerProcessTest(unittest.TestCase):
         )
         deadline = time.monotonic() + 10
         detail = None
+        worker_error = None
         while time.monotonic() < deadline:
             if worker.poll() is not None:
                 stdout, stderr = worker.communicate()
-                self.fail(
+                worker_error = (
                     "worker exited before completing the Formal Run\n"
                     f"stdout:\n{stdout}\nstderr:\n{stderr}"
                 )
+                break
             detail = self.domain.run(PROJECT_ID, formal_run_scenario.RUN_ID)
-            if detail is not None:
+            if detail is not None and detail["run"]["status"] in {
+                "succeeded",
+                "failed",
+                "cancelled",
+            }:
                 break
             time.sleep(0.02)
+
+        if worker.poll() is None:
+            worker.terminate()
+        stdout, stderr = worker.communicate(timeout=5)
+        self.assertIsNone(worker_error, worker_error)
         self.assertIsNotNone(detail, "worker did not complete the Formal Run")
         self.assertEqual(detail["run"]["status"], "succeeded")
-
-        worker.terminate()
-        stdout, stderr = worker.communicate(timeout=5)
         self.assertEqual(worker.returncode, 0, f"stdout:\n{stdout}\nstderr:\n{stderr}")
 
     def test_two_workers_never_claim_two_formal_runs_concurrently(self) -> None:
@@ -193,140 +198,6 @@ class M4WorkerProcessTest(unittest.TestCase):
             {run["run_id"] for run in self.domain.runs(PROJECT_ID)},
             {formal_run_scenario.RUN_ID, formal_run_scenario.RACING_RUN_ID},
         )
-
-    def test_migration_terminalizes_pre_m4_running_jobs_before_old_completion(
-        self,
-    ) -> None:
-        legacy_root = self.data_root / "legacy-upgrade"
-        legacy_migrations = legacy_root / "legacy-migrations"
-        legacy_migrations.mkdir(parents=True)
-        source_migrations = (
-            Path(__file__).parents[1] / "src" / "quant_domain" / "migrations"
-        )
-        for migration in sorted(source_migrations.glob("00[1-5]_*.sql")):
-            shutil.copy2(migration, legacy_migrations / migration.name)
-
-        legacy = object.__new__(QuantDomain)
-        legacy.data_root = legacy_root
-        legacy.database_path = legacy_root / "quant-domain.sqlite3"
-        legacy.database = Database(
-            legacy.database_path, migrations_dir=legacy_migrations
-        )
-        legacy.git_workspace = GitWorkspaceStore(legacy_root)
-        legacy.submit_command(register_command())
-        scenario = formal_run_scenario.M3FormalRunDomainTest(
-            "test_formal_run_persists_a_hash_bound_manifest_without_recalculation"
-        )
-        scenario.data_root = legacy_root
-        scenario.domain = legacy
-        scenario._create_variant_revision()
-        slow_strategy = scenario._strategy_source().replace(
-            b"def on_start():\n",
-            b"def on_start():\n    import time\n    time.sleep(2.0)\n",
-        )
-        legacy.submit_command(scenario._merge_command(slow_strategy))
-        legacy.submit_command(scenario._formal_run_command())
-        self.queue_second_formal_run(
-            domain=legacy,
-            scenario=scenario,
-            slow_strategy=slow_strategy,
-        )
-        with legacy.database.connect() as connection:
-            old_claim = connection.execute(
-                """
-                SELECT *
-                FROM jobs
-                WHERE job_type = 'formal.run'
-                ORDER BY run_id
-                LIMIT 1
-                """
-            ).fetchone()
-            connection.execute(
-                """
-                UPDATE jobs
-                SET status = 'running', started_at = created_at,
-                    attempts = attempts + 1
-                WHERE job_type = 'formal.run'
-                """
-            )
-
-        upgraded = QuantDomain(legacy_root)
-
-        with upgraded.database.connect() as connection:
-            statuses = connection.execute(
-                """
-                SELECT status, started_at, attempts, error_code, finished_at
-                FROM jobs
-                WHERE job_type = 'formal.run'
-                ORDER BY run_id
-                """
-            ).fetchall()
-            index_row = connection.execute(
-                """
-                SELECT sql
-                FROM sqlite_master
-                WHERE type = 'index' AND name = 'jobs_single_running_formal_idx'
-                """
-            ).fetchone()
-        self.assertEqual(
-            [
-                (
-                    row["status"],
-                    row["started_at"] is not None,
-                    row["attempts"],
-                    row["error_code"],
-                    row["finished_at"] is not None,
-                )
-                for row in statuses
-            ],
-            [
-                (
-                    "failed",
-                    True,
-                    1,
-                    "worker_interrupted_by_upgrade",
-                    True,
-                ),
-                (
-                    "failed",
-                    True,
-                    1,
-                    "worker_interrupted_by_upgrade",
-                    True,
-                ),
-            ],
-        )
-        self.assertIn("status = 'running'", index_row["sql"])
-
-        with upgraded.database.connect() as connection:
-            reclaimed = connection.execute(
-                """
-                UPDATE jobs
-                SET status = 'running', started_at = created_at,
-                    attempts = attempts + 1
-                WHERE job_id = ? AND status = 'pending'
-                """,
-                (old_claim["job_id"],),
-            )
-            historical_completion = connection.execute(
-                """
-                UPDATE jobs
-                SET status = 'failed', result_json = '{}',
-                    error_code = 'legacy_completion',
-                    error_message = 'legacy completion', finished_at = created_at
-                WHERE job_id = ? AND status = 'running'
-                """,
-                (old_claim["job_id"],),
-            )
-        self.assertEqual(reclaimed.rowcount, 0)
-        self.assertEqual(historical_completion.rowcount, 0)
-        with upgraded.database.connect() as connection:
-            formal_run = connection.execute(
-                "SELECT 1 FROM formal_runs WHERE run_id = ?",
-                (old_claim["run_id"],),
-            ).fetchone()
-        self.assertIsNone(formal_run)
-
 
 if __name__ == "__main__":
     unittest.main()

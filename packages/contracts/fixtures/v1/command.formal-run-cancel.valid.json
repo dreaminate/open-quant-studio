@@ -1,0 +1,19 @@
+{
+  "command_id": "31313131-3131-4131-8131-313131313131",
+  "schema_version": 1,
+  "command_type": "formal.run_cancel",
+  "project_id": "22222222-2222-4222-8222-222222222222",
+  "activity_id": "33333333-3333-4333-8333-333333333333",
+  "session_id": "pi:session:m5-run",
+  "workbench_id": "run-detail",
+  "correlation_id": "44444444-4444-4444-8444-444444444444",
+  "expected_revision_id": "77777777-7777-4777-8777-777777777777",
+  "variant_id": "55555555-5555-4555-8555-555555555555",
+  "base_revision_id": "77777777-7777-4777-8777-777777777777",
+  "payload": {
+    "run_id": "18181818-1818-4181-8181-181818181818",
+    "expected_status": "running",
+    "expected_execution_version": 3,
+    "reason": "user_requested"
+  }
+}

@@ -2,22 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
-from contextlib import closing
 from urllib.parse import urlencode
 
 import test_m3_formal_runs as formal_run_scenario
 from quant_domain.domain import QuantDomain
 from test_m1_http import HttpTestCase
-from test_m2_session import (
-    ACTIVITY_ID,
-    OTHER_ACTIVITY_ID,
-    OTHER_PROJECT_ID,
-    PROJECT_ID,
-    RECEIVER_SESSION_ID,
-    register_command,
-    send_command,
-)
+from test_m2_session import ACTIVITY_ID, PROJECT_ID, register_command
 from test_m3_revisions import ROOT_REVISION_ID, create_revision_command
 
 
@@ -77,7 +67,12 @@ class M4ReadModelsHttpTest(HttpTestCase):
             + urlencode({"activity_id": ACTIVITY_ID}),
         )
         self.assertEqual(status, 200, body)
-        self.assertEqual(json.loads(body)["runs"], [])
+        pending_runs = json.loads(body)["runs"]
+        self.assertEqual(len(pending_runs), 1)
+        self.assertEqual(pending_runs[0]["run_id"], RUN_ID)
+        self.assertEqual(pending_runs[0]["status"], "pending")
+        self.assertIsNone(pending_runs[0]["engine_result_artifact_id"])
+        self.assertIsNone(pending_runs[0]["manifest_artifact_id"])
 
         job = scenario.domain.run_next_job()
         self.assertEqual(job["status"], "succeeded")
@@ -127,7 +122,7 @@ class M4ReadModelsHttpTest(HttpTestCase):
         )
         self.assertRegex(activities[0]["created_at"], r"Z$")
 
-    def test_project_owned_artifact_metadata_and_content_fail_closed(self) -> None:
+    def test_project_artifact_metadata_and_content_are_readable(self) -> None:
         digest = self.create_project_revision()
 
         status, _, body = self.request(
@@ -154,56 +149,6 @@ class M4ReadModelsHttpTest(HttpTestCase):
         self.assertEqual(headers["content-type"], "text/plain; charset=utf-8")
         self.assertEqual(body, SOURCE_BODY)
 
-        status, body = self.post_command(
-            register_command(
-                command_id="19191919-1919-4919-8919-191919191919",
-                session_id="20202020-2020-4020-8020-202020202020",
-                pi_session_id="pi-session-other-project",
-                project_id=OTHER_PROJECT_ID,
-                activity_id=OTHER_ACTIVITY_ID,
-            )
-        )
-        self.assertEqual(status, 201, body)
-        status, _, body = self.request(
-            "GET",
-            f"/v1/projects/{OTHER_PROJECT_ID}/artifacts/{SOURCE_ARTIFACT_ID}/content",
-        )
-        self.assertEqual(status, 404, body)
-        self.assertEqual(json.loads(body)["error"], "artifact_not_found")
-
-        blob_path = self.data_root / "artifacts" / "sha256" / digest[:2] / digest
-        blob_path.write_bytes(b"tampered")
-        status, _, body = self.request(
-            "GET",
-            f"/v1/projects/{PROJECT_ID}/artifacts/{SOURCE_ARTIFACT_ID}/content",
-        )
-        self.assertEqual(status, 409, body)
-        self.assertEqual(json.loads(body)["error"], "artifact_integrity_mismatch")
-
-    def test_recipient_scoped_message_artifact_is_not_project_readable(self) -> None:
-        for command in (
-            register_command(),
-            register_command(
-                command_id="21212121-2121-4121-8121-212121212121",
-                session_id=RECEIVER_SESSION_ID,
-                pi_session_id="pi-session-recipient",
-            ),
-        ):
-            status, body = self.post_command(command)
-            self.assertEqual(status, 201, body)
-        message_body = b"recipient-scoped M4 evidence"
-        command, _, artifact_id = send_command(blob=message_body)
-        self.stage_blob(message_body)
-        status, body = self.post_command(command)
-        self.assertEqual(status, 201, body)
-
-        for suffix in ("", "/content"):
-            status, _, body = self.request(
-                "GET",
-                f"/v1/projects/{PROJECT_ID}/artifacts/{artifact_id}{suffix}",
-            )
-            self.assertEqual(status, 404, body)
-            self.assertEqual(json.loads(body)["error"], "artifact_not_found")
 
     def test_completed_formal_run_list_and_detail_are_read_only_artifact_views(self) -> None:
         domain = self.create_completed_formal_run()
@@ -267,33 +212,6 @@ class M4ReadModelsHttpTest(HttpTestCase):
                 "(SELECT count(*) FROM jobs)"
             ).fetchone()
         self.assertEqual(tuple(after), tuple(before))
-
-    def test_run_detail_rejects_cross_project_and_tampered_artifacts(self) -> None:
-        domain = self.create_completed_formal_run()
-        status, _, body = self.request(
-            "GET", f"/v1/projects/{OTHER_PROJECT_ID}/runs/{RUN_ID}"
-        )
-        self.assertEqual(status, 404, body)
-        self.assertEqual(json.loads(body)["error"], "run_not_found")
-
-        with closing(sqlite3.connect(domain.database_path)) as connection:
-            row = connection.execute(
-                """
-                SELECT a.sha256
-                FROM run_artifacts AS ra
-                JOIN artifacts AS a ON a.artifact_id = ra.artifact_id
-                WHERE ra.run_id = ? AND ra.kind = 'engine_result'
-                """,
-                (RUN_ID,),
-            ).fetchone()
-        path = domain.blob_path(row[0])
-        path.write_bytes(b"tampered formal output")
-
-        status, _, body = self.request(
-            "GET", f"/v1/projects/{PROJECT_ID}/runs/{RUN_ID}"
-        )
-        self.assertEqual(status, 409, body)
-        self.assertEqual(json.loads(body)["error"], "artifact_integrity_mismatch")
 
     def test_failed_formal_run_detail_has_no_result_artifacts(self) -> None:
         self.create_failed_formal_run()

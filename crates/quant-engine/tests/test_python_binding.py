@@ -160,6 +160,59 @@ class PythonBindingTest(unittest.TestCase):
             Decimal(output["metrics"]["total_slippage_atoms"]), total_slippage
         )
 
+    def test_python_checkpoint_round_trip(self) -> None:
+        fixture_path = (
+            Path(__file__).parents[3]
+            / "fixtures"
+            / "backtests"
+            / "m3-a-share-long-short-v1.json"
+        )
+        fixture = json.loads(fixture_path.read_text())
+        encoded = json.dumps(fixture["input"], separators=(",", ":")).encode()
+        context = "d" * 64
+        expected = oqs_quant_engine.run_engine_v1(encoded)
+        checkpoint = oqs_quant_engine.start_engine_checkpoint_v1(encoded, context, 1)
+        while json.loads(checkpoint)["status"] != "complete":
+            checkpoint = oqs_quant_engine.step_engine_checkpoint_v1(
+                encoded, context, checkpoint
+            )
+        self.assertEqual(
+            oqs_quant_engine.finalize_engine_checkpoint_v1(
+                encoded, context, checkpoint
+            ),
+            expected,
+        )
+
+    def test_python_calls_the_portfolio_v2_engine_and_restarts_by_session_batch(self) -> None:
+        fixture_path = (
+            Path(__file__).parents[3]
+            / "fixtures"
+            / "backtests"
+            / "m8-a-share-rotation-v2.json"
+        )
+        fixture = json.loads(fixture_path.read_text())
+        encoded = json.dumps(fixture["input"], separators=(",", ":")).encode()
+        context = "e" * 64
+
+        direct = oqs_quant_engine.run_engine_v2(encoded)
+        checkpoint = oqs_quant_engine.start_engine_checkpoint_v2(encoded, context, 2)
+        while json.loads(checkpoint)["status"] != "complete":
+            checkpoint = oqs_quant_engine.step_engine_checkpoint_v2(
+                encoded, context, checkpoint
+            )
+
+        self.assertIsInstance(direct, bytes)
+        self.assertEqual(
+            oqs_quant_engine.finalize_engine_checkpoint_v2(
+                encoded, context, checkpoint
+            ),
+            direct,
+        )
+        output = json.loads(direct)
+        self.assertEqual(output["schema_version"], 2)
+        self.assertEqual(output["engine_version"], "oqs-quant-engine/0.2.0")
+        self.assertEqual(output["equity_curve"][2]["market_value_atoms"], "13500")
+
 
 if __name__ == "__main__":
     unittest.main()

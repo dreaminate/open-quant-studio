@@ -6,31 +6,47 @@ Repository: https://github.com/dreaminate/open-quant-studio
 
 ## Current state
 
-Checkpoint `ae5fd02` contains the M0 foundation, M1 durable-domain slice, M2 Pi
-Session Fabric, and the provenance-safe M3 formal Run slice. The current local
-working tree implements the M4 unified desktop vertical on top of that checkpoint.
-M2 pins the
-official Pi `AgentSession`, keeps built-in filesystem and shell tools disabled,
-and connects real Pi sessions through the Python-owned catalog, inbox, receipt
-state machine, bounded JSONL recall, verified source references, and durable
-wake path. M3 adds Pi-bound merge/Formal Run/Promote tools, immutable Git and
+Checkpoint `c0cbe40` contains the M0 foundation through the M4 unified desktop
+vertical. The current branch implements the M5 recovery/lifecycle slice, M6
+core POC, M7 local data, M8 six-strategy workbench, M9 deterministic Run
+reports, and the M10 local delivery vertical on top of that checkpoint. M2 pins
+the official Pi `AgentSession` and connects real Pi sessions through the
+Python-owned catalog, inbox, receipt state machine, bounded JSONL recall,
+verified source references, and durable wake path. M3 adds Pi-bound
+merge/Formal Run/Promote tools, immutable Git and
 SQLite WorkspaceRevisions, isolated StrategyVariant heads, ordered two-parent
 merge commits, an OQS cleanroom Rust/PyO3 engine, immutable RunSpec/Run and
 content-addressed formal artifacts, validation-gated compare-and-set Promote,
 and explicit stale conflicts.
 
-The M4 working tree adds strict project/activity/artifact/Run read models, a
-continuous Python worker, a sealed same-origin browser facade, the single
-React/Vite SPA, and both mocked and real browser vertical tests. The M4 formal
-path uses a pinned synthetic fixture and does not establish market performance.
-Restart recovery, full log lifecycle, local data import, the six-strategy
-library, reports, Docker/CI, and the complete POC remain not implemented. All donor
-repositories remain read-only and no donor source was copied. The M0 oracle is
-not a formal Run. Read [the M0 evidence](docs/09_M0_FOUNDATION_EVIDENCE.md), [the
+M5 adds batch checkpoints and restart, cancel/retry/legal rerun, the full log
+lifecycle, local Forward Test replay, deterministic project export/import, and
+their Python, control-plane, and SPA surfaces. M6 combines those capabilities
+with two real Pi sessions, independent variants, PyO3 Runs, Run Detail, Promote,
+and a real-browser local vertical. M7 adds browser and configured-local CSV or
+Parquet preview, field mapping and row errors, immutable A-share/crypto
+DataSnapshots, direct snapshot-backed Formal Runs, included sample data, and
+archive round-trip. M8 adds the six-strategy catalog, authoritative `.py`
+editing, deterministic `.ipynb` finalization/download, a shared-cash
+multi-symbol A-share portfolio engine, and real engine runs for all six
+strategies. M9 adds independently reconciled Run metrics, shared report
+contracts, Run Detail report rendering, deterministic JSON/HTML artifacts, and
+archive preservation. M10 adds a one-command Docker Compose runtime, a real
+six-strategy browser journey, the 250,000-bar performance gate, lock/license/
+configuration checks, and Ubuntu/macOS GitHub Actions. The complete local
+`pnpm validate:m10` gate passes; remote CI, PR, and merge evidence remain
+separate delivery steps. All donor repositories remain read-only and no donor
+source was copied. The M0 oracle is not a formal Run. Read [the M0 evidence](docs/09_M0_FOUNDATION_EVIDENCE.md), [the
 M1 evidence](docs/10_M1_DURABLE_CORE_EVIDENCE.md), [the M2
 evidence](docs/11_M2_SESSION_FABRIC_EVIDENCE.md), [the M3
 evidence](docs/12_M3_REVISION_SLICE_EVIDENCE.md), and [the M4
-evidence](docs/13_M4_UNIFIED_WORKBENCH_EVIDENCE.md).
+evidence](docs/13_M4_UNIFIED_WORKBENCH_EVIDENCE.md), [the M5
+evidence](docs/14_M5_RECOVERY_LIFECYCLE_EVIDENCE.md), [the M6
+evidence](docs/15_M6_CORE_POC_EVIDENCE.md), and [the M7
+evidence](docs/16_M7_LOCAL_DATA_SNAPSHOT_EVIDENCE.md), [the M8
+evidence](docs/17_M8_STRATEGY_WORKBENCH_EVIDENCE.md), [the M9
+evidence](docs/18_M9_RUN_REPORT_EVIDENCE.md), and [the M10
+evidence](docs/19_M10_DELIVERY_EVIDENCE.md).
 
 ## Non-negotiable product boundaries
 
@@ -64,11 +80,15 @@ third_party/               provenance and attribution policy
 1. Read [AGENTS.md](AGENTS.md).
 2. Read [the project charter](docs/00_PROJECT_CHARTER.md) through [the implementation plan](docs/08_IMPLEMENTATION_PLAN.md).
 3. Run `pnpm install --frozen-lockfile` and `uv sync --project services/quant-domain --frozen`.
-4. Run `pnpm validate:m4` before relying on the current local M4 evidence.
-5. Run `pnpm start:m4`, then open `http://127.0.0.1:4173`. The launcher builds
-   the SPA and PyO3 extension and starts the local domain, worker, Pi session,
-   and browser facade against `var/m4-local` by default.
-6. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
+4. Run `pnpm validate:m10` for the complete local functional gate.
+5. Run `docker compose up --build`, then open `http://127.0.0.1:4173`. The
+   Compose runtime starts the SPA, Pi/control plane, Python domain and worker,
+   and the PyO3 engine. Host files under `var/compose-imports/` are available to
+   the Data workbench and project archives are written to
+   `var/compose-exports/`.
+6. Run `docker compose down` to stop the stack while preserving the named data
+   volume.
+7. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
 
 ## License
 

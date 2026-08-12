@@ -1,0 +1,36 @@
+{
+  "snapshots": [
+    {
+      "snapshot_id": "62626262-6262-4262-8262-626262626262",
+      "source_artifact_id": "63636363-6363-4363-8363-636363636363",
+      "normalized_artifact_id": "66666666-6666-4666-8666-666666666666",
+      "market_input_artifact_id": "67676767-6767-4767-8767-676767676767",
+      "market": "a_share_daily",
+      "symbol": "000001.SZ",
+      "symbols": ["000001.SZ"],
+      "timezone": "Asia/Shanghai",
+      "price_basis": "raw",
+      "cutoff": "2026-08-12T00:00:00Z",
+      "schema_version": 1,
+      "sample_start": "2026-01-02T00:00:00Z",
+      "sample_end": "2026-08-11T00:00:00Z",
+      "row_count": 156,
+      "session_count": 156,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "created_at": "2026-08-12T08:00:00+08:00",
+      "project_id": "22222222-2222-4222-8222-222222222222",
+      "mapping": {
+        "timestamp": "timestamp",
+        "symbol": "symbol",
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "volume": "volume"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "normalized_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "market_input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}
