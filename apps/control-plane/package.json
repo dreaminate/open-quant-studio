@@ -45,6 +45,10 @@
     "./revision-tools": {
       "types": "./dist/revision-tools.d.ts",
       "import": "./dist/revision-tools.js"
+    },
+    "./browser-server": {
+      "types": "./dist/browser-server.d.ts",
+      "import": "./dist/browser-server.js"
     }
   },
   "types": "./dist/index.d.ts",
@@ -56,12 +60,12 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@open-quant-studio/contracts": "workspace:*",
     "typebox": "1.3.7"
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "0.84.1",
-    "@earendil-works/pi-ai": "0.84.1"
+    "@earendil-works/pi-agent-core": "0.84.1"
   }
 }

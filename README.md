@@ -6,9 +6,9 @@ Repository: https://github.com/dreaminate/open-quant-studio
 
 ## Current state
 
-Checkpoint `146024d` contains the M0 foundation, M1 durable-domain slice, M2 Pi
-Session Fabric, and the initial provenance-safe M3 revision slice. The current
-local working tree completes the M3 vertical slice on top of that checkpoint.
+Checkpoint `ae5fd02` contains the M0 foundation, M1 durable-domain slice, M2 Pi
+Session Fabric, and the provenance-safe M3 formal Run slice. The current local
+working tree implements the M4 unified desktop vertical on top of that checkpoint.
 M2 pins the
 official Pi `AgentSession`, keeps built-in filesystem and shell tools disabled,
 and connects real Pi sessions through the Python-owned catalog, inbox, receipt
@@ -19,15 +19,18 @@ merge commits, an OQS cleanroom Rust/PyO3 engine, immutable RunSpec/Run and
 content-addressed formal artifacts, validation-gated compare-and-set Promote,
 and explicit stale conflicts.
 
-The local `validate:m3` gate passes; remote CI has not yet verified this
-uncommitted slice. The unified SPA, restart recovery, full log lifecycle, local
-data import, six-strategy library, reports, Docker/CI, and the complete POC
-remain not implemented. All donor
+The M4 working tree adds strict project/activity/artifact/Run read models, a
+continuous Python worker, a sealed same-origin browser facade, the single
+React/Vite SPA, and both mocked and real browser vertical tests. The M4 formal
+path uses a pinned synthetic fixture and does not establish market performance.
+Restart recovery, full log lifecycle, local data import, the six-strategy
+library, reports, Docker/CI, and the complete POC remain not implemented. All donor
 repositories remain read-only and no donor source was copied. The M0 oracle is
 not a formal Run. Read [the M0 evidence](docs/09_M0_FOUNDATION_EVIDENCE.md), [the
 M1 evidence](docs/10_M1_DURABLE_CORE_EVIDENCE.md), [the M2
-evidence](docs/11_M2_SESSION_FABRIC_EVIDENCE.md), and [the M3
-evidence](docs/12_M3_REVISION_SLICE_EVIDENCE.md).
+evidence](docs/11_M2_SESSION_FABRIC_EVIDENCE.md), [the M3
+evidence](docs/12_M3_REVISION_SLICE_EVIDENCE.md), and [the M4
+evidence](docs/13_M4_UNIFIED_WORKBENCH_EVIDENCE.md).
 
 ## Non-negotiable product boundaries
 
@@ -61,8 +64,11 @@ third_party/               provenance and attribution policy
 1. Read [AGENTS.md](AGENTS.md).
 2. Read [the project charter](docs/00_PROJECT_CHARTER.md) through [the implementation plan](docs/08_IMPLEMENTATION_PLAN.md).
 3. Run `pnpm install --frozen-lockfile` and `uv sync --project services/quant-domain --frozen`.
-4. Run `pnpm validate:m3` before relying on the current local M3 evidence.
-5. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
+4. Run `pnpm validate:m4` before relying on the current local M4 evidence.
+5. Run `pnpm start:m4`, then open `http://127.0.0.1:4173`. The launcher builds
+   the SPA and PyO3 extension and starts the local domain, worker, Pi session,
+   and browser facade against `var/m4-local` by default.
+6. Use [HANDOFF_PROMPT.md](prompts/HANDOFF_PROMPT.md) when transferring the work to another session.
 
 ## License
 

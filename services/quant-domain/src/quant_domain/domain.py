@@ -2128,9 +2128,19 @@ class QuantDomain:
             connection.execute("BEGIN IMMEDIATE")
             claimed = connection.execute(
                 """
-                SELECT * FROM jobs
-                WHERE status = 'pending'
-                ORDER BY created_at, job_id
+                SELECT pending.*
+                FROM jobs AS pending
+                WHERE pending.status = 'pending'
+                  AND (
+                    pending.job_type != 'formal.run'
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM jobs AS active
+                        WHERE active.job_type = 'formal.run'
+                          AND active.status = 'running'
+                    )
+                  )
+                ORDER BY pending.created_at, pending.job_id
                 LIMIT 1
                 """
             ).fetchone()
@@ -2573,7 +2583,7 @@ class QuantDomain:
                 UPDATE jobs
                 SET status = ?, result_json = ?, error_code = ?,
                     error_message = ?, finished_at = ?
-                WHERE job_id = ? AND status = 'running'
+                WHERE job_id = ? AND status = 'running' AND attempts = ?
                 """,
                 (
                     status,
@@ -2582,6 +2592,7 @@ class QuantDomain:
                     None if error_code is None else error_code.replace("_", " "),
                     finished_at,
                     claimed["job_id"],
+                    claimed["attempts"] + 1,
                 ),
             )
             if transition.rowcount != 1:
@@ -2745,7 +2756,7 @@ class QuantDomain:
                 UPDATE jobs
                 SET status = ?, result_json = ?, error_code = ?,
                     error_message = ?, finished_at = ?
-                WHERE job_id = ? AND status = 'running'
+                WHERE job_id = ? AND status = 'running' AND attempts = ?
                 """,
                 (
                     status,
@@ -2754,6 +2765,7 @@ class QuantDomain:
                     error_message,
                     finished_at,
                     claimed["job_id"],
+                    claimed["attempts"] + 1,
                 ),
             )
             if transition.rowcount != 1:
@@ -2867,6 +2879,306 @@ class QuantDomain:
                 parameters,
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def projects(self) -> list[dict[str, Any]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT project_id, created_at
+                FROM research_projects
+                ORDER BY created_at, project_id
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def activities(self, project_id: str) -> list[dict[str, Any]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT activity_id, project_id, created_at
+                FROM activities
+                WHERE project_id = ?
+                ORDER BY created_at, activity_id
+                """,
+                (project_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def runs(
+        self, project_id: str, *, activity_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT r.run_id, r.run_spec_id, r.project_id, r.activity_id,
+                       r.variant_id, r.candidate_revision_id, r.status,
+                       r.engine_result_artifact_id, r.manifest_artifact_id,
+                       r.calculation_hash, r.error_code, r.finished_at,
+                       v.validation_id, v.outcome AS validation_outcome,
+                       v.contract_outcome, v.strategy_import_outcome,
+                       v.smoke_run_outcome
+                FROM formal_runs AS r
+                JOIN merge_validations AS v
+                  ON v.run_id = r.run_id
+                 AND v.project_id = r.project_id
+                 AND v.activity_id = r.activity_id
+                WHERE r.project_id = ?
+                  AND (? IS NULL OR r.activity_id = ?)
+                ORDER BY r.finished_at, r.run_id
+                """,
+                (project_id, activity_id, activity_id),
+            ).fetchall()
+        results = []
+        for row in rows:
+            run = dict(row)
+            run["gates"] = {
+                "contract": run.pop("contract_outcome"),
+                "strategy_import": run.pop("strategy_import_outcome"),
+                "smoke_run": run.pop("smoke_run_outcome"),
+            }
+            results.append(run)
+        return results
+
+    def run(self, project_id: str, run_id: str) -> dict[str, Any] | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT r.*, j.job_id, j.created_at AS queued_at, j.started_at,
+                       j.finished_at AS job_finished_at
+                FROM formal_runs AS r
+                JOIN jobs AS j
+                  ON j.run_id = r.run_id
+                 AND j.project_id = r.project_id
+                 AND j.activity_id = r.activity_id
+                WHERE r.project_id = ? AND r.run_id = ?
+                """,
+                (project_id, run_id),
+            ).fetchone()
+            if row is None:
+                return None
+            run_spec = connection.execute(
+                """
+                SELECT *
+                FROM run_specs
+                WHERE run_spec_id = ? AND project_id = ? AND activity_id = ?
+                """,
+                (row["run_spec_id"], project_id, row["activity_id"]),
+            ).fetchone()
+            validation = connection.execute(
+                """
+                SELECT *
+                FROM merge_validations
+                WHERE run_id = ? AND project_id = ? AND activity_id = ?
+                """,
+                (run_id, project_id, row["activity_id"]),
+            ).fetchone()
+            artifact_rows = connection.execute(
+                """
+                SELECT ra.kind, a.*
+                FROM run_artifacts AS ra
+                JOIN artifacts AS a ON a.artifact_id = ra.artifact_id
+                WHERE ra.run_id = ?
+                ORDER BY ra.kind
+                """,
+                (run_id,),
+            ).fetchall()
+            log_rows = connection.execute(
+                """
+                SELECT timestamp, level, priority, component, event_code,
+                       project_id, activity_id, session_id, task_id, job_id,
+                       run_id, correlation_id, message
+                FROM diagnostic_logs
+                WHERE project_id = ? AND run_id = ?
+                ORDER BY timestamp, log_id
+                """,
+                (project_id, run_id),
+            ).fetchall()
+
+        if run_spec is None or validation is None:
+            raise ArtifactIntegrityMismatch("formal Run lineage is incomplete")
+        artifacts = {artifact["kind"]: dict(artifact) for artifact in artifact_rows}
+        run_detail = dict(row)
+        validation_detail = {
+            "validation_id": validation["validation_id"],
+            "gate_policy_version": validation["gate_policy_version"],
+            "engine_version": validation["engine_version"],
+            "gates": {
+                "contract": validation["contract_outcome"],
+                "strategy_import": validation["strategy_import_outcome"],
+                "smoke_run": validation["smoke_run_outcome"],
+            },
+            "outcome": validation["outcome"],
+            "manifest_artifact_id": validation["manifest_artifact_id"],
+            "created_at": validation["created_at"],
+        }
+        if row["status"] == "failed":
+            if (
+                artifacts
+                or row["engine_result_artifact_id"] is not None
+                or row["manifest_artifact_id"] is not None
+                or row["calculation_hash"] is not None
+                or validation["manifest_artifact_id"] is not None
+                or validation["outcome"] != "failed"
+            ):
+                raise ArtifactIntegrityMismatch(
+                    "failed formal Run has result artifact state"
+                )
+            return {
+                "run": run_detail,
+                "run_spec": dict(run_spec),
+                "validation": validation_detail,
+                "artifacts": {},
+                "manifest": None,
+                "engine_result": None,
+                "intent_tape": None,
+                "logs": [dict(log) for log in log_rows],
+            }
+
+        if set(artifacts) != {"intent_tape", "engine_result", "manifest"}:
+            raise ArtifactIntegrityMismatch("formal Run artifact set is incomplete")
+        if (
+            artifacts["engine_result"]["artifact_id"]
+            != row["engine_result_artifact_id"]
+            or artifacts["manifest"]["artifact_id"] != row["manifest_artifact_id"]
+            or artifacts["engine_result"]["sha256"] != row["calculation_hash"]
+            or validation["manifest_artifact_id"] != row["manifest_artifact_id"]
+            or validation["outcome"] != "passed"
+        ):
+            raise ArtifactIntegrityMismatch("formal Run artifact identity is inconsistent")
+
+        content: dict[str, object] = {}
+        artifact_details: dict[str, dict[str, Any]] = {}
+        for kind, artifact in artifacts.items():
+            loaded = self.artifact_content(project_id, artifact["artifact_id"])
+            if loaded is None:
+                raise ArtifactIntegrityMismatch("formal Run artifact lost project ownership")
+            detail, body = loaded
+            try:
+                content[kind] = json.loads(body)
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                raise ArtifactIntegrityMismatch(
+                    "formal Run artifact is not valid JSON"
+                ) from error
+            artifact_details[kind] = detail
+
+        manifest = content["manifest"]
+        try:
+            manifest_matches = (
+                manifest["run_id"] == run_id
+                and manifest["validation_id"] == validation["validation_id"]
+                and manifest["run_spec"]["run_spec_id"] == row["run_spec_id"]
+                and manifest["engine_result"]["artifact_id"]
+                == artifacts["engine_result"]["artifact_id"]
+                and manifest["engine_result"]["sha256"] == row["calculation_hash"]
+                and manifest["strategy_execution"]["intent_tape_artifact_id"]
+                == artifacts["intent_tape"]["artifact_id"]
+                and manifest["strategy_execution"]["intent_tape_sha256"]
+                == artifacts["intent_tape"]["sha256"]
+            )
+        except (KeyError, TypeError) as error:
+            raise ArtifactIntegrityMismatch(
+                "formal Run manifest identity is incomplete"
+            ) from error
+        if not manifest_matches:
+            raise ArtifactIntegrityMismatch("formal Run manifest identity is inconsistent")
+        return {
+            "run": run_detail,
+            "run_spec": dict(run_spec),
+            "validation": validation_detail,
+            "artifacts": artifact_details,
+            "manifest": content["manifest"],
+            "engine_result": content["engine_result"],
+            "intent_tape": content["intent_tape"],
+            "logs": [dict(log) for log in log_rows],
+        }
+
+    def artifact(
+        self, project_id: str, artifact_id: str
+    ) -> dict[str, Any] | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT a.*
+                FROM artifacts AS a
+                WHERE a.artifact_id = ?
+                  AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM revision_files AS f
+                        WHERE f.artifact_id = a.artifact_id
+                          AND f.project_id = ?
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM context_items AS c
+                        WHERE c.artifact_id = a.artifact_id
+                          AND c.project_id = ?
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM run_specs AS rs
+                        WHERE rs.engine_input_artifact_id = a.artifact_id
+                          AND rs.project_id = ?
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM run_artifacts AS ra
+                        JOIN formal_runs AS r ON r.run_id = ra.run_id
+                        WHERE ra.artifact_id = a.artifact_id
+                          AND r.project_id = ?
+                    )
+                  )
+                """,
+                (
+                    artifact_id,
+                    project_id,
+                    project_id,
+                    project_id,
+                    project_id,
+                ),
+            ).fetchone()
+            if row is None:
+                return None
+            revision_paths = connection.execute(
+                """
+                SELECT revision_id, path
+                FROM revision_files
+                WHERE project_id = ? AND artifact_id = ?
+                ORDER BY revision_id, path
+                """,
+                (project_id, artifact_id),
+            ).fetchall()
+            run_kinds = connection.execute(
+                """
+                SELECT ra.run_id, ra.kind
+                FROM run_artifacts AS ra
+                JOIN formal_runs AS r ON r.run_id = ra.run_id
+                WHERE r.project_id = ? AND ra.artifact_id = ?
+                ORDER BY ra.run_id, ra.kind
+                """,
+                (project_id, artifact_id),
+            ).fetchall()
+        detail = dict(row)
+        detail["project_id"] = project_id
+        detail["revision_paths"] = [dict(item) for item in revision_paths]
+        detail["run_kinds"] = [dict(item) for item in run_kinds]
+        return detail
+
+    def artifact_content(
+        self, project_id: str, artifact_id: str
+    ) -> tuple[dict[str, Any], bytes] | None:
+        artifact = self.artifact(project_id, artifact_id)
+        if artifact is None:
+            return None
+        path = self.blob_path(artifact["sha256"])
+        if not path.exists():
+            raise ArtifactBlobMissing("artifact blob is not staged")
+        body = path.read_bytes()
+        if (
+            hashlib.sha256(body).hexdigest() != artifact["sha256"]
+            or len(body) != artifact["byte_size"]
+        ):
+            raise ArtifactIntegrityMismatch(
+                "artifact bytes do not match registered identity"
+            )
+        return artifact, body
 
     def sessions(self, project_id: str) -> list[dict[str, Any]]:
         with self.database.connect() as connection:

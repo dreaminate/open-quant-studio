@@ -4,5 +4,24 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Unified React/Vite SPA boundary; UI implementation begins after the domain core"
+  "description": "Unified React/Vite SPA for local quantitative research",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@open-quant-studio/contracts": "workspace:*",
+    "@open-quant-studio/research-ui": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "vite": "8.2.1"
+  }
 }

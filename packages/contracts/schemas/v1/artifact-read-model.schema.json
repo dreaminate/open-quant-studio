@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/artifact-read-model.schema.json",
+  "title": "Project-scoped artifact metadata read model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_id",
+    "project_id",
+    "sha256",
+    "media_type",
+    "byte_size",
+    "storage_uri",
+    "producing_revision_id",
+    "producing_run_id",
+    "origin_kind",
+    "source_ref",
+    "created_at",
+    "revision_paths",
+    "run_kinds"
+  ],
+  "properties": {
+    "artifact_id": { "$ref": "#/$defs/uuid" },
+    "project_id": { "$ref": "#/$defs/uuid" },
+    "sha256": { "$ref": "#/$defs/sha256" },
+    "media_type": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "byte_size": { "type": "integer", "minimum": 0 },
+    "storage_uri": { "$ref": "#/$defs/storage_uri" },
+    "producing_revision_id": {
+      "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+    },
+    "producing_run_id": {
+      "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+    },
+    "origin_kind": {
+      "enum": ["fixture", "user_upload", "service_generated"]
+    },
+    "source_ref": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "revision_paths": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/revision_path" }
+    },
+    "run_kinds": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/run_kind" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "storage_uri": {
+      "type": "string",
+      "pattern": "^cas://sha256/[a-f0-9]{64}$"
+    },
+    "revision_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision_id", "path"],
+      "properties": {
+        "revision_id": { "$ref": "#/$defs/uuid" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "run_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "kind"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "kind": { "enum": ["intent_tape", "engine_result", "manifest"] }
+      }
+    }
+  }
+}

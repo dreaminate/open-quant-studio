@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-run-read-model.schema.json",
+  "title": "Open Quant Studio formal Run read models v1",
+  "oneOf": [
+    { "$ref": "#/$defs/listReadModel" },
+    { "$ref": "#/$defs/succeededDetail" },
+    { "$ref": "#/$defs/failedDetail" }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "atom": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "errorCode": {
+      "enum": [
+        "contract_gate_failed",
+        "strategy_import_failed",
+        "engine_input_missing",
+        "engine_input_integrity_mismatch",
+        "smoke_run_failed",
+        "engine_result_contract_failed"
+      ]
+    },
+    "gateOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "enum": ["passed", "failed"] },
+        "strategy_import": { "enum": ["passed", "failed"] },
+        "smoke_run": { "enum": ["passed", "failed"] }
+      }
+    },
+    "passedGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "strategy_import", "smoke_run"],
+      "properties": {
+        "contract": { "const": "passed" },
+        "strategy_import": { "const": "passed" },
+        "smoke_run": { "const": "passed" }
+      }
+    },
+    "artifact": {
+      "$ref": "https://open-quant-studio.local/schemas/v1/artifact-read-model.schema.json"
+    },
+    "runSucceeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_spec_id",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "status",
+        "engine_result_artifact_id",
+        "manifest_artifact_id",
+        "calculation_hash",
+        "error_code",
+        "finished_at",
+        "job_id",
+        "queued_at",
+        "started_at",
+        "job_finished_at"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "succeeded" },
+        "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+        "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+        "calculation_hash": { "$ref": "#/$defs/sha256" },
+        "error_code": { "type": "null" },
+        "finished_at": { "$ref": "#/$defs/dateTime" },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "queued_at": { "$ref": "#/$defs/dateTime" },
+        "started_at": { "$ref": "#/$defs/dateTime" },
+        "job_finished_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "runFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_spec_id",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "status",
+        "engine_result_artifact_id",
+        "manifest_artifact_id",
+        "calculation_hash",
+        "error_code",
+        "finished_at",
+        "job_id",
+        "queued_at",
+        "started_at",
+        "job_finished_at"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "failed" },
+        "engine_result_artifact_id": { "type": "null" },
+        "manifest_artifact_id": { "type": "null" },
+        "calculation_hash": { "type": "null" },
+        "error_code": { "$ref": "#/$defs/errorCode" },
+        "finished_at": { "$ref": "#/$defs/dateTime" },
+        "job_id": { "$ref": "#/$defs/uuid" },
+        "queued_at": { "$ref": "#/$defs/dateTime" },
+        "started_at": { "$ref": "#/$defs/dateTime" },
+        "job_finished_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "runSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_spec_id",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "engine_input_artifact_id",
+        "data_snapshot_id",
+        "data_snapshot_sha256",
+        "strategy_tree_oid",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "environment_lock_sha256",
+        "engine_version",
+        "price_basis",
+        "cutoff",
+        "timezone",
+        "sample_start",
+        "sample_end",
+        "random_seed",
+        "output_schema_version",
+        "gate_policy_version",
+        "spec_hash",
+        "created_at"
+      ],
+      "properties": {
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "engine_input_artifact_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_id": { "$ref": "#/$defs/uuid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "price_basis": { "enum": ["raw", "qfq", "hfq"] },
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_start": { "$ref": "#/$defs/dateTime" },
+        "sample_end": { "$ref": "#/$defs/dateTime" },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "output_schema_version": { "const": 1 },
+        "gate_policy_version": { "const": "m3-v1" },
+        "spec_hash": { "$ref": "#/$defs/sha256" },
+        "created_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validation_id",
+        "gate_policy_version",
+        "engine_version",
+        "gates",
+        "outcome",
+        "manifest_artifact_id",
+        "created_at"
+      ],
+      "properties": {
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "gate_policy_version": { "const": "m3-v1" },
+        "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+        "gates": { "$ref": "#/$defs/gateOutcomes" },
+        "outcome": { "enum": ["passed", "failed"] },
+        "manifest_artifact_id": {
+          "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        },
+        "created_at": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "intentEventKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_seq", "phase", "stable_seq"],
+      "properties": {
+        "session_seq": { "type": "integer", "minimum": 0 },
+        "phase": { "enum": ["open", "intrabar", "close"] },
+        "stable_seq": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_id",
+        "intent_seq",
+        "symbol",
+        "side",
+        "position_effect",
+        "quantity",
+        "order_type",
+        "known_at",
+        "effective_at",
+        "limit_price_atoms",
+        "stop_price_atoms",
+        "time_in_force",
+        "oco_group"
+      ],
+      "properties": {
+        "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "intent_seq": { "type": "integer", "minimum": 0 },
+        "symbol": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "side": { "enum": ["buy", "sell"] },
+        "position_effect": { "enum": ["open", "close"] },
+        "quantity": { "$ref": "#/$defs/atom" },
+        "order_type": { "enum": ["market", "limit", "stop"] },
+        "known_at": { "$ref": "#/$defs/intentEventKey" },
+        "effective_at": { "$ref": "#/$defs/intentEventKey" },
+        "limit_price_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/atom" }, { "type": "null" }]
+        },
+        "stop_price_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/atom" }, { "type": "null" }]
+        },
+        "time_in_force": { "enum": ["day", "gtc"] },
+        "oco_group": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 256 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "intentTape": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/intent" }
+    },
+    "logs": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "$ref": "https://open-quant-studio.local/schemas/v1/diagnostic-log.schema.json"
+      }
+    },
+    "listEntrySucceeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_spec_id",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "status",
+        "engine_result_artifact_id",
+        "manifest_artifact_id",
+        "calculation_hash",
+        "error_code",
+        "finished_at",
+        "validation_id",
+        "validation_outcome",
+        "gates"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "succeeded" },
+        "engine_result_artifact_id": { "$ref": "#/$defs/uuid" },
+        "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+        "calculation_hash": { "$ref": "#/$defs/sha256" },
+        "error_code": { "type": "null" },
+        "finished_at": { "$ref": "#/$defs/dateTime" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "validation_outcome": { "const": "passed" },
+        "gates": { "$ref": "#/$defs/passedGates" }
+      }
+    },
+    "listEntryFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_spec_id",
+        "project_id",
+        "activity_id",
+        "variant_id",
+        "candidate_revision_id",
+        "status",
+        "engine_result_artifact_id",
+        "manifest_artifact_id",
+        "calculation_hash",
+        "error_code",
+        "finished_at",
+        "validation_id",
+        "validation_outcome",
+        "gates"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "run_spec_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "variant_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "failed" },
+        "engine_result_artifact_id": { "type": "null" },
+        "manifest_artifact_id": { "type": "null" },
+        "calculation_hash": { "type": "null" },
+        "error_code": { "$ref": "#/$defs/errorCode" },
+        "finished_at": { "$ref": "#/$defs/dateTime" },
+        "validation_id": { "$ref": "#/$defs/uuid" },
+        "validation_outcome": { "const": "failed" },
+        "gates": { "$ref": "#/$defs/gateOutcomes" }
+      }
+    },
+    "listReadModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runs"],
+      "properties": {
+        "runs": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/listEntrySucceeded" },
+              { "$ref": "#/$defs/listEntryFailed" }
+            ]
+          }
+        }
+      }
+    },
+    "detailCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "run_spec",
+        "validation",
+        "artifacts",
+        "manifest",
+        "engine_result",
+        "intent_tape",
+        "logs"
+      ],
+      "properties": {
+        "run": {
+          "oneOf": [
+            { "$ref": "#/$defs/runSucceeded" },
+            { "$ref": "#/$defs/runFailed" }
+          ]
+        },
+        "run_spec": { "$ref": "#/$defs/runSpec" },
+        "validation": { "$ref": "#/$defs/validation" },
+        "artifacts": { "type": "object" },
+        "manifest": { "type": ["object", "null"] },
+        "engine_result": { "type": ["object", "null"] },
+        "intent_tape": { "type": ["array", "null"] },
+        "logs": { "$ref": "#/$defs/logs" }
+      }
+    },
+    "succeededDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/detailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runSucceeded" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "outcome": { "const": "passed" },
+                "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+                "gates": { "$ref": "#/$defs/passedGates" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["intent_tape", "engine_result", "manifest"],
+              "properties": {
+                "intent_tape": { "$ref": "#/$defs/artifact" },
+                "engine_result": { "$ref": "#/$defs/artifact" },
+                "manifest": { "$ref": "#/$defs/artifact" }
+              }
+            },
+            "manifest": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-run-manifest.schema.json"
+            },
+            "engine_result": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json"
+            },
+            "intent_tape": { "$ref": "#/$defs/intentTape" }
+          }
+        }
+      ]
+    },
+    "failedDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/detailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runFailed" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "outcome": { "const": "failed" },
+                "manifest_artifact_id": { "type": "null" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            },
+            "manifest": { "type": "null" },
+            "engine_result": { "type": "null" },
+            "intent_tape": { "type": "null" }
+          }
+        }
+      ]
+    }
+  }
+}

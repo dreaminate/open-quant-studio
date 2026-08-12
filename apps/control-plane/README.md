@@ -37,12 +37,19 @@ across canvas/code/Run Detail, and proves redelivery dedupe and event wake-up.
 Restart recovery, terminal cancellation/expiry, authentication, task handoff,
 and exact remaining-context-budget accounting remain later work.
 
-The partial M3 revision slice adds `FetchQuantDomainRevisionClient` and five
+The M3 revision slice adds `FetchQuantDomainRevisionClient` and five
 actor-bound Pi tools for root revision creation, variant fork, child revision
 creation, metadata compare, and CAS Promote. File bytes are validated locally,
 staged through the existing Python CAS seam, and represented by the same
 canonical text Artifact identity used by M2 messages. All durable mutations
 still pass through the typed Python command endpoint; read responses are
 identity-checked and body-free. The M3 tests include an official faux Pi tool
-call and a real Uvicorn regression. No second AgentLoop, formal backtest engine,
-or formal Run path is introduced here.
+call and a real Uvicorn regression.
+
+M4 adds the browser facade and strict shared read models. The facade seals the
+active project/activity/session/workbench actor, derives fresh compare-and-set
+state server-side, injects only the hash-pinned synthetic formal fixture, and
+serves the built SPA from bounded static paths. It exposes no raw commands,
+jobs, logs, artifact staging, or Pi state. `scripts/run-m4-local.mjs` composes
+the real Pi adapter/registry with the facade, Python service, continuous worker,
+and SPA without adding another AgentLoop or durable writer.

@@ -1,9 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  type ActivityListReadModel,
   type ArtifactRef,
+  type ArtifactMetadataReadModel,
   type FormalRunCommand,
+  type FormalRunDetailReadModel,
+  type FormalRunListReadModel,
   type M3ArtifactRef,
+  type ProjectListReadModel,
   type RevisionCommand,
   type RevisionCreatePayload,
   type StrategyVariantCreateCommand,
@@ -12,7 +17,12 @@ import {
   type WorkspaceRevisionCreateCommand,
   type WorkspaceRevisionCreateRootCommand,
   type WorkspaceRevisionPromoteCommand,
+  validateActivityListReadModel,
+  validateArtifactMetadataReadModel,
   validateFormalRunCommand,
+  validateFormalRunDetailReadModel,
+  validateFormalRunListReadModel,
+  validateProjectListReadModel,
   validateStrategyVariantCreateCommand,
   validateWorkspaceMergeCreateCommand,
   validateWorkspaceRevisionCreateCommand,
@@ -107,6 +117,8 @@ export interface FormalRunRequest extends RevisionCommandContext {
   sampleStart: string;
   sampleEnd: string;
   randomSeed: number;
+  engineInputOriginKind?: "fixture" | "service_generated";
+  engineInputSourceRef?: string;
   runSpecId?: string;
   runId?: string;
   validationId?: string;
@@ -423,9 +435,147 @@ export class FetchQuantDomainRevisionClient {
     return assertProjectHead(await this.#jsonResponse(response), projectId);
   }
 
+  async listProjects(): Promise<ProjectListReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects`,
+      { headers: { Accept: "application/json" } },
+    );
+    return assertReadContract(
+      validateProjectListReadModel(await this.#jsonResponse(response)),
+      "projects response",
+    );
+  }
+
+  async listActivities(projectId: string): Promise<ActivityListReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/activities`,
+      { headers: { Accept: "application/json" } },
+    );
+    const activities = assertReadContract(
+      validateActivityListReadModel(await this.#jsonResponse(response)),
+      "activities response",
+    );
+    if (activities.activities.some((activity) => activity.project_id !== projectId)) {
+      throw new Error("quant-domain activities response crossed project identity");
+    }
+    return activities;
+  }
+
+  async listRuns(
+    projectId: string,
+    activityId: string,
+  ): Promise<FormalRunListReadModel> {
+    const query = new URLSearchParams({ activity_id: activityId });
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/runs?${query}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const runs = assertReadContract(
+      validateFormalRunListReadModel(await this.#jsonResponse(response)),
+      "Formal Run list response",
+    );
+    if (
+      runs.runs.some(
+        (run) => run.project_id !== projectId || run.activity_id !== activityId,
+      )
+    ) {
+      throw new Error("quant-domain Formal Run list crossed request identity");
+    }
+    return runs;
+  }
+
+  async getRun(projectId: string, runId: string): Promise<FormalRunDetailReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const run = assertReadContract(
+      validateFormalRunDetailReadModel(await this.#jsonResponse(response)),
+      "Formal Run detail response",
+    );
+    if (run.run.project_id !== projectId || run.run.run_id !== runId) {
+      throw new Error("quant-domain Formal Run detail crossed request identity");
+    }
+    if (run.run.status === "succeeded") {
+      const [intentTapeBytes, engineResultBytes, manifestBytes] = await Promise.all([
+        this.getArtifactContent(projectId, run.artifacts.intent_tape),
+        this.getArtifactContent(projectId, run.artifacts.engine_result),
+        this.getArtifactContent(projectId, run.artifacts.manifest),
+      ]);
+      assertEmbeddedArtifact(
+        run.intent_tape,
+        parseJsonArtifact(intentTapeBytes, "intent_tape"),
+        "intent_tape",
+      );
+      assertEmbeddedArtifact(
+        run.engine_result,
+        parseJsonArtifact(engineResultBytes, "engine_result"),
+        "engine_result",
+      );
+      assertEmbeddedArtifact(
+        run.manifest,
+        parseJsonArtifact(manifestBytes, "manifest"),
+        "manifest",
+      );
+    }
+    return run;
+  }
+
+  async getArtifact(
+    projectId: string,
+    artifactId: string,
+  ): Promise<ArtifactMetadataReadModel> {
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const artifact = assertReadContract(
+      validateArtifactMetadataReadModel(await this.#jsonResponse(response)),
+      "artifact metadata response",
+    );
+    if (artifact.artifact_id !== artifactId || artifact.project_id !== projectId) {
+      throw new Error("quant-domain artifact metadata crossed request identity");
+    }
+    return artifact;
+  }
+
+  async getArtifactContent(
+    projectId: string,
+    artifact: ArtifactMetadataReadModel,
+  ): Promise<Uint8Array> {
+    if (artifact.project_id !== projectId) {
+      throw new Error("quant-domain artifact metadata crossed request identity");
+    }
+    const response = await this.#fetch(
+      `${this.#baseUrl}/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifact.artifact_id)}/content`,
+      { headers: { Accept: artifact.media_type } },
+    );
+    if (!response.ok) {
+      throw new QuantDomainHttpError({
+        status: response.status,
+        code: await boundedResponseCode(response),
+      });
+    }
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
+    if (mediaType !== artifact.media_type) {
+      throw new Error("quant-domain artifact content returned the wrong media type");
+    }
+    const content = new Uint8Array(await response.arrayBuffer());
+    if (
+      content.byteLength !== artifact.byte_size
+      || createHash("sha256").update(content).digest("hex") !== artifact.sha256
+    ) {
+      throw new Error("quant-domain artifact content failed identity verification");
+    }
+    return content;
+  }
+
   getVariants = this.listVariants.bind(this);
   compare = this.compareRevisions.bind(this);
   projectHead = this.getProjectRevisionHead.bind(this);
+  getProjects = this.listProjects.bind(this);
+  getActivities = this.listActivities.bind(this);
+  getRuns = this.listRuns.bind(this);
 
   #prepareRevision(
     request: RevisionCreateRequest,
@@ -501,7 +651,11 @@ export class FetchQuantDomainRevisionClient {
   #prepareFormalRun(request: FormalRunRequest): PreparedFormalRun {
     const commandId = this.#commandId(request.commandId);
     const correlationId = this.#correlationId(request.correlationId, commandId);
-    const engineInput = canonicalJsonArtifactRef(request.engineInputJson);
+    const engineInput = canonicalJsonArtifactRef(
+      request.engineInputJson,
+      request.engineInputOriginKind,
+      request.engineInputSourceRef,
+    );
     const command: FormalRunCommand = {
       command_id: commandId,
       schema_version: 1,
@@ -619,7 +773,11 @@ function assertStagedJsonIdentity(
   }
 }
 
-function canonicalJsonArtifactRef(body: string): ArtifactRef {
+function canonicalJsonArtifactRef(
+  body: string,
+  originKind: "fixture" | "service_generated" = "service_generated",
+  sourceRef?: string,
+): ArtifactRef {
   const bytes = new TextEncoder().encode(body);
   if (bytes.byteLength < 2 || bytes.byteLength > 5 * 1024 * 1024) {
     throw new Error("formal engine input must contain between 2 and 5242880 UTF-8 bytes");
@@ -635,10 +793,47 @@ function canonicalJsonArtifactRef(body: string): ArtifactRef {
     producing_revision_id: null,
     producing_run_id: null,
     provenance: {
-      origin_kind: "service_generated",
-      source_ref: stableIdentityUuid(`${sha256}:formal-engine-input-provenance`),
+      origin_kind: originKind,
+      source_ref: sourceRef
+        ?? stableIdentityUuid(`${sha256}:formal-engine-input-provenance`),
     },
   };
+}
+
+function parseJsonArtifact(bytes: Uint8Array, label: string): unknown {
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error(`verified ${label} artifact is not valid JSON`);
+  }
+}
+
+function assertEmbeddedArtifact(
+  embedded: unknown,
+  verified: unknown,
+  label: string,
+): void {
+  if (canonicalJsonValue(embedded) !== canonicalJsonValue(verified)) {
+    throw new Error(`embedded ${label} does not match verified artifact bytes`);
+  }
+}
+
+function canonicalJsonValue(value: unknown): string {
+  if (value === undefined) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJsonValue(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) =>
+      left.localeCompare(right)
+    );
+    return `{${entries.map(([key, item]) =>
+      `${JSON.stringify(key)}:${canonicalJsonValue(item)}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function assertValidCommand<T extends RevisionCommand>(
@@ -647,6 +842,18 @@ function assertValidCommand<T extends RevisionCommand>(
 ): T {
   if (!result.valid) {
     throw new Error(`${commandType} command contract violation: ${result.errors.join("; ")}`);
+  }
+  return result.value;
+}
+
+function assertReadContract<T>(
+  result: { valid: true; value: T } | { valid: false; errors: string[] },
+  label: string,
+): T {
+  if (!result.valid) {
+    throw new Error(
+      `quant-domain ${label} contract violation: ${result.errors.join("; ")}`,
+    );
   }
   return result.value;
 }

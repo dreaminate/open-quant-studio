@@ -48,9 +48,13 @@ to 64 variants so the durable writer and bounded control-plane catalog agree. `G
 `GET /v1/revisions/compare`, and `GET /v1/projects/{project_id}/revision-head`
 return identity and hash metadata without source bodies.
 
-Run locally with `OQS_DATA_ROOT=var PYTHONPATH=services/quant-domain/src uv run
---project services/quant-domain --frozen uvicorn quant_domain.app:app`. M2 does
-not add checkpoints, restart recovery, terminal cancellation/expiry,
-retention/deletion, import/export, authentication, a persistent outbox
-dispatcher, formal engine, formal Runs, formal gates, merge, or Git
-export/import retention; those remain later milestone work.
+M3/M4 add merge validation, immutable Formal Runs and artifacts, project-scoped
+read models, and a continuous `python -m quant_domain.worker` process. A global
+database gate permits only one running Formal Run, and attempt-bound completion
+prevents a reclaimed job from accepting a stale current-worker completion.
+
+Run the complete M4 local composition with `pnpm start:m4`. To operate the
+Python processes separately, point both Uvicorn and the worker at the same
+absolute `OQS_DATA_ROOT`; the repository launcher is the executable reference.
+Checkpoint/resume, cancel/retry, retention/deletion, import/export, and durable
+outbox dispatch remain later milestone work.

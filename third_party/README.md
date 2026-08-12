@@ -30,4 +30,8 @@ M3 uses an OQS-owned cleanroom engine. Its exact Rust/PyO3 dependencies,
 build-only Maturin boundary, license evidence, behavior oracles, and independent
 Decimal reconciliation are recorded in `M3_DEPENDENCY_DECISIONS.md`.
 
+M4's single-SPA React/Vite boundary, React Flow projection, CodeMirror editor,
+Playwright browser oracle, exact versions, and licenses are recorded in
+`M4_DEPENDENCY_DECISIONS.md`.
+
 PSM/byteowlz material may not be copied from the reviewed unlicensed snapshots. MCP Agent Mail may not be copied, run, tested, or integrated because of its restrictive license rider. See `docs/06_MIGRATION_MAP.md`.

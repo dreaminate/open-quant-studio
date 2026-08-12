@@ -9,11 +9,12 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  type AgentSessionEvent,
   type ResourceLoader,
   type SessionEntry,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model, StopReason } from "@earendil-works/pi-ai";
 
 
 const PI_SESSION_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
@@ -156,6 +157,15 @@ export interface PiSessionSnapshot {
   isStreaming: boolean;
   entries: SessionEntry[];
 }
+
+export type PiChatEvent =
+  | { type: "agent_start" }
+  | { type: "assistant_text_delta"; delta: string }
+  | { type: "assistant_message_end"; text: string; stopReason: StopReason }
+  | { type: "agent_end"; willRetry: boolean }
+  | { type: "agent_settled" };
+
+export type PiChatEventListener = (event: PiChatEvent) => void;
 
 export class PiSessionAdapter {
   readonly #sessionId: string;
@@ -327,6 +337,23 @@ export class PiSessionAdapter {
     };
   }
 
+  async prompt(text: string): Promise<void> {
+    await this.#session.prompt(text, {
+      expandPromptTemplates: false,
+      streamingBehavior: "followUp",
+      source: "rpc",
+    });
+  }
+
+  subscribe(listener: PiChatEventListener): () => void {
+    return this.#session.subscribe((event) => {
+      const publicEvent = projectPiChatEvent(event);
+      if (publicEvent !== null) {
+        listener(publicEvent);
+      }
+    });
+  }
+
   async followUp(
     input: MessageInjectionInput,
     options: MessageInjectionOptions = {},
@@ -411,6 +438,39 @@ export class PiSessionAdapter {
   dispose(): void {
     this.#session.dispose();
   }
+}
+
+function projectPiChatEvent(event: AgentSessionEvent): PiChatEvent | null {
+  if (event.type === "agent_start") {
+    return { type: "agent_start" };
+  }
+  if (
+    event.type === "message_update"
+    && event.message.role === "assistant"
+    && event.assistantMessageEvent.type === "text_delta"
+  ) {
+    return {
+      type: "assistant_text_delta",
+      delta: event.assistantMessageEvent.delta,
+    };
+  }
+  if (event.type === "message_end" && event.message.role === "assistant") {
+    return {
+      type: "assistant_message_end",
+      text: event.message.content
+        .filter((content) => content.type === "text")
+        .map((content) => content.text)
+        .join(""),
+      stopReason: event.message.stopReason,
+    };
+  }
+  if (event.type === "agent_end") {
+    return { type: "agent_end", willRetry: event.willRetry };
+  }
+  if (event.type === "agent_settled") {
+    return { type: "agent_settled" };
+  }
+  return null;
 }
 
 async function findSessionFile(cwd: string, sessionDir: string, piSessionId: string): Promise<string> {

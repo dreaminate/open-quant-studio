@@ -217,6 +217,88 @@ test("adapter creates one Pi JSONL session with an explicit message marker", asy
   await rm(root, { recursive: true, force: true });
 });
 
+test("adapter exposes only browser-safe Pi chat events", async () => {
+  const root = await tempDir("adapter-browser-chat");
+  const sessionDir = join(root, "sessions");
+  const faux = await fauxSessionOptions(
+    root,
+    sessionDir,
+    "pi-session-m4-browser-chat",
+    false,
+    [
+      fauxAssistantMessage(
+        fauxToolCall("oqs_browser_safe_tool", {
+          secret: "server-only-tool-arg",
+        }),
+      ),
+      fauxAssistantMessage("visible browser answer"),
+    ],
+  );
+  const customTool = {
+    name: "oqs_browser_safe_tool",
+    label: "OQS browser-safe test tool",
+    description: "Returns a server-only sentinel that the browser must never see.",
+    parameters: Type.Object({ secret: Type.String() }),
+    execute: async () => ({
+      content: [{ type: "text", text: "server-only-tool-result" }],
+    }),
+  };
+  const adapter = await PiSessionAdapter.create({
+    sessionId: "domain-session-m4-browser-chat",
+    projectId: "project-m4",
+    activityId: "activity-m4",
+    controlledCwd: root,
+    controlledSessionDir: sessionDir,
+    piSessionId: "pi-session-m4-browser-chat",
+    modelRuntime: faux.modelRuntime,
+    model: faux.model,
+    customTools: [customTool],
+  });
+  const events = [];
+  const unsubscribe = adapter.subscribe((event) => events.push(event));
+
+  await adapter.prompt("browser-only-input");
+
+  assert.equal(events[0].type, "agent_start");
+  assert.equal(events.at(-1).type, "agent_settled");
+  assert.equal(
+    events
+      .filter((event) => event.type === "assistant_text_delta")
+      .map((event) => event.delta)
+      .join(""),
+    "visible browser answer",
+  );
+  assert.deepEqual(
+    events.filter((event) => event.type === "assistant_message_end").at(-1),
+    {
+      type: "assistant_message_end",
+      text: "visible browser answer",
+      stopReason: "stop",
+    },
+  );
+  assert.equal(
+    events.every((event) =>
+      [
+        "agent_start",
+        "assistant_text_delta",
+        "assistant_message_end",
+        "agent_end",
+        "agent_settled",
+      ].includes(event.type),
+    ),
+    true,
+  );
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /browser-only-input/);
+  assert.doesNotMatch(serialized, /server-only-tool-arg/);
+  assert.doesNotMatch(serialized, /server-only-tool-result/);
+
+  unsubscribe();
+  adapter.dispose();
+  faux.unregister();
+  await rm(root, { recursive: true, force: true });
+});
+
 test("adapter reserves a marker before concurrent Pi writes", async () => {
   const root = await tempDir("adapter-concurrent");
   const sessionDir = join(root, "sessions");

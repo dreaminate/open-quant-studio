@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/project-read-model.schema.json",
+  "title": "Project and Activity read models",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "created_at"],
+      "properties": {
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity_id", "project_id", "created_at"],
+      "properties": {
+        "activity_id": { "$ref": "#/$defs/uuid" },
+        "project_id": { "$ref": "#/$defs/uuid" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "project_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projects"],
+      "properties": {
+        "projects": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/project" }
+        }
+      }
+    },
+    "activity_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activities"],
+      "properties": {
+        "activities": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/activity" }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/project_list" },
+    { "$ref": "#/$defs/activity_list" }
+  ]
+}

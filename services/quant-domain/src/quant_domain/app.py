@@ -31,8 +31,11 @@ UUID_ID = re.compile(
 )
 
 
-async def health(_: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "service": "quant-domain"})
+async def health(request: Request) -> JSONResponse:
+    payload = {"status": "ok", "service": "quant-domain"}
+    if request.app.state.instance_token is not None:
+        payload["instance_token"] = request.app.state.instance_token
+    return JSONResponse(payload)
 
 
 async def put_artifact_blob(request: Request) -> JSONResponse:
@@ -142,6 +145,81 @@ async def get_logs(request: Request) -> JSONResponse:
         priority=priority,
     )
     return JSONResponse({"logs": logs})
+
+
+async def get_projects(request: Request) -> JSONResponse:
+    domain: QuantDomain = request.app.state.domain
+    return JSONResponse({"projects": domain.projects()})
+
+
+async def get_activities(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    return JSONResponse({"activities": domain.activities(project_id)})
+
+
+async def get_runs(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    activity_id = request.query_params.get("activity_id")
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if activity_id is not None and UUID_ID.fullmatch(activity_id) is None:
+        return JSONResponse({"error": "invalid_activity_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    return JSONResponse(
+        {"runs": domain.runs(project_id, activity_id=activity_id)}
+    )
+
+
+async def get_run(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    run_id = request.path_params["run_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(run_id) is None:
+        return JSONResponse({"error": "invalid_run_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    try:
+        run = domain.run(project_id, run_id)
+    except (ArtifactBlobMissing, ArtifactIntegrityMismatch) as error:
+        return JSONResponse({"error": error.code}, status_code=409)
+    if run is None:
+        return JSONResponse({"error": "run_not_found"}, status_code=404)
+    return JSONResponse(run)
+
+
+async def get_artifact(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    artifact_id = request.path_params["artifact_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(artifact_id) is None:
+        return JSONResponse({"error": "invalid_artifact_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    artifact = domain.artifact(project_id, artifact_id)
+    if artifact is None:
+        return JSONResponse({"error": "artifact_not_found"}, status_code=404)
+    return JSONResponse(artifact)
+
+
+async def get_artifact_content(request: Request) -> Response:
+    project_id = request.path_params["project_id"]
+    artifact_id = request.path_params["artifact_id"]
+    if UUID_ID.fullmatch(project_id) is None:
+        return JSONResponse({"error": "invalid_project_id"}, status_code=422)
+    if UUID_ID.fullmatch(artifact_id) is None:
+        return JSONResponse({"error": "invalid_artifact_id"}, status_code=422)
+    domain: QuantDomain = request.app.state.domain
+    try:
+        content = domain.artifact_content(project_id, artifact_id)
+    except (ArtifactBlobMissing, ArtifactIntegrityMismatch) as error:
+        return JSONResponse({"error": error.code}, status_code=409)
+    if content is None:
+        return JSONResponse({"error": "artifact_not_found"}, status_code=404)
+    artifact, body = content
+    return Response(body, media_type=artifact["media_type"])
 
 
 async def get_sessions(request: Request) -> JSONResponse:
@@ -271,7 +349,7 @@ async def get_project_revision_head(request: Request) -> Response:
     )
 
 
-def create_app(data_root: Path) -> Starlette:
+def create_app(data_root: Path, instance_token: str | None = None) -> Starlette:
     application = Starlette(
         routes=[
             Route("/health", health, methods=["GET"]),
@@ -285,6 +363,32 @@ def create_app(data_root: Path) -> Starlette:
             Route("/v1/jobs/run-next", run_next_job, methods=["POST"]),
             Route("/v1/jobs/{job_id}", get_job, methods=["GET"]),
             Route("/v1/logs", get_logs, methods=["GET"]),
+            Route("/v1/projects", get_projects, methods=["GET"]),
+            Route(
+                "/v1/projects/{project_id}/activities",
+                get_activities,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/runs/{run_id}",
+                get_run,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/runs",
+                get_runs,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/artifacts/{artifact_id}/content",
+                get_artifact_content,
+                methods=["GET"],
+            ),
+            Route(
+                "/v1/projects/{project_id}/artifacts/{artifact_id}",
+                get_artifact,
+                methods=["GET"],
+            ),
             Route("/v1/sessions", get_sessions, methods=["GET"]),
             Route("/v1/inbox", get_inbox, methods=["GET"]),
             Route("/v1/messages/{message_id}", get_message, methods=["GET"]),
@@ -301,7 +405,11 @@ def create_app(data_root: Path) -> Starlette:
         ]
     )
     application.state.domain = QuantDomain(data_root)
+    application.state.instance_token = instance_token
     return application
 
 
-app = create_app(Path(os.environ.get("OQS_DATA_ROOT", "var")))
+app = create_app(
+    Path(os.environ.get("OQS_DATA_ROOT", "var")),
+    os.environ.get("OQS_DOMAIN_INSTANCE_TOKEN"),
+)

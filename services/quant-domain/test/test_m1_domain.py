@@ -112,6 +112,7 @@ class M1DomainTest(unittest.TestCase):
                 ("003_m2_session_fabric",),
                 ("004_m3_revision_graph",),
                 ("005_m3_formal_runs",),
+                ("006_m4_single_active_formal_run",),
             ],
         )
 

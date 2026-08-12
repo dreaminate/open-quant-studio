@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-engine-result.schema.json",
+  "title": "Formal Rust engine result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "engine_version",
+    "account_model",
+    "orders",
+    "trades",
+    "positions",
+    "cash_ledger",
+    "funding_ledger",
+    "equity_curve",
+    "drawdown_curve",
+    "metrics",
+    "costs",
+    "assumptions"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "engine_version": { "const": "oqs-quant-engine/0.1.0" },
+    "account_model": { "enum": ["a_share_cash", "crypto_linear_perp"] },
+    "orders": { "$ref": "#/$defs/orders" },
+    "trades": { "$ref": "#/$defs/trades" },
+    "positions": { "$ref": "#/$defs/positions" },
+    "cash_ledger": { "$ref": "#/$defs/cash_ledger" },
+    "funding_ledger": { "$ref": "#/$defs/funding_ledger" },
+    "equity_curve": { "$ref": "#/$defs/equity_curve" },
+    "drawdown_curve": { "$ref": "#/$defs/drawdown_curve" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "costs": { "$ref": "#/$defs/costs" },
+    "assumptions": { "$ref": "#/$defs/assumptions" }
+  },
+  "$defs": {
+    "atom": { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "side": { "enum": ["buy", "sell"] },
+    "position_effect": { "enum": ["open", "close"] },
+    "order_type": { "enum": ["market", "limit", "stop"] },
+    "orders": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id",
+          "intent_seq",
+          "status",
+          "side",
+          "position_effect",
+          "order_type",
+          "quantity",
+          "filled_session_seq",
+          "filled_phase"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_seq": { "$ref": "#/$defs/seq" },
+          "status": { "enum": ["filled", "expired", "cancelled"] },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/position_effect" },
+          "order_type": { "$ref": "#/$defs/order_type" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "filled_session_seq": {
+            "oneOf": [{ "$ref": "#/$defs/seq" }, { "type": "null" }]
+          },
+          "filled_phase": {
+            "oneOf": [{ "enum": ["open", "intrabar"] }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "trades": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "trade_id",
+          "intent_id",
+          "session_seq",
+          "side",
+          "position_effect",
+          "quantity",
+          "fill_price_atoms",
+          "notional_atoms",
+          "fee_atoms",
+          "stamp_duty_atoms",
+          "slippage_atoms",
+          "liquidity"
+        ],
+        "properties": {
+          "trade_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/position_effect" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "fill_price_atoms": { "$ref": "#/$defs/atom" },
+          "notional_atoms": { "$ref": "#/$defs/atom" },
+          "fee_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+          "slippage_atoms": { "$ref": "#/$defs/atom" },
+          "liquidity": { "enum": ["maker", "taker"] }
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id",
+          "session_seq",
+          "signed_quantity",
+          "eligible_quantity"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "signed_quantity": { "$ref": "#/$defs/atom" },
+          "eligible_quantity": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "cash_ledger": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_id",
+          "session_seq",
+          "notional_delta_atoms",
+          "fee_delta_atoms",
+          "stamp_duty_delta_atoms",
+          "realized_pnl_delta_atoms",
+          "funding_delta_atoms",
+          "resulting_cash_atoms"
+        ],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "notional_delta_atoms": { "$ref": "#/$defs/atom" },
+          "fee_delta_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_delta_atoms": { "$ref": "#/$defs/atom" },
+          "realized_pnl_delta_atoms": { "$ref": "#/$defs/atom" },
+          "funding_delta_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_cash_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "funding_ledger": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "session_seq",
+          "signed_quantity",
+          "rate_atoms",
+          "mark_price_atoms",
+          "wallet_delta_atoms",
+          "resulting_wallet_atoms"
+        ],
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "signed_quantity": { "$ref": "#/$defs/atom" },
+          "rate_atoms": { "$ref": "#/$defs/atom" },
+          "mark_price_atoms": { "$ref": "#/$defs/atom" },
+          "wallet_delta_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_wallet_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "equity_curve": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_seq",
+          "timestamp",
+          "mark_price_atoms",
+          "cash_atoms",
+          "signed_quantity",
+          "equity_atoms"
+        ],
+        "properties": {
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "mark_price_atoms": { "$ref": "#/$defs/atom" },
+          "cash_atoms": { "$ref": "#/$defs/atom" },
+          "signed_quantity": { "$ref": "#/$defs/atom" },
+          "equity_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "drawdown_curve": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_seq",
+          "equity_atoms",
+          "peak_equity_atoms",
+          "drawdown_atoms",
+          "drawdown_rate_atoms"
+        ],
+        "properties": {
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "equity_atoms": { "$ref": "#/$defs/atom" },
+          "peak_equity_atoms": { "$ref": "#/$defs/atom" },
+          "drawdown_atoms": { "$ref": "#/$defs/atom" },
+          "drawdown_rate_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "starting_equity_atoms",
+        "ending_equity_atoms",
+        "net_pnl_atoms",
+        "total_return_rate_atoms",
+        "max_drawdown_atoms",
+        "max_drawdown_rate_atoms",
+        "total_fees_atoms",
+        "total_stamp_duty_atoms",
+        "total_funding_atoms",
+        "total_slippage_atoms",
+        "fill_count",
+        "closed_trade_count",
+        "open_position_count"
+      ],
+      "properties": {
+        "starting_equity_atoms": { "$ref": "#/$defs/atom" },
+        "ending_equity_atoms": { "$ref": "#/$defs/atom" },
+        "net_pnl_atoms": { "$ref": "#/$defs/atom" },
+        "total_return_rate_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_rate_atoms": { "$ref": "#/$defs/atom" },
+        "total_fees_atoms": { "$ref": "#/$defs/atom" },
+        "total_stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+        "total_funding_atoms": { "$ref": "#/$defs/atom" },
+        "total_slippage_atoms": { "$ref": "#/$defs/atom" },
+        "fill_count": { "$ref": "#/$defs/seq" },
+        "closed_trade_count": { "$ref": "#/$defs/seq" },
+        "open_position_count": { "$ref": "#/$defs/seq" }
+      }
+    },
+    "costs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commission_atoms",
+        "stamp_duty_atoms",
+        "funding_atoms",
+        "slippage_atoms"
+      ],
+      "properties": {
+        "commission_atoms": { "$ref": "#/$defs/atom" },
+        "stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+        "funding_atoms": { "$ref": "#/$defs/atom" },
+        "slippage_atoms": { "$ref": "#/$defs/atom" }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fill_model",
+        "partial_fills",
+        "liquidate_on_end",
+        "research_short",
+        "research_short_notice",
+        "one_x_notional"
+      ],
+      "properties": {
+        "fill_model": { "const": "ohlc_full_fill_v1" },
+        "partial_fills": { "type": "boolean" },
+        "liquidate_on_end": { "type": "boolean" },
+        "research_short": { "type": "boolean" },
+        "research_short_notice": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "one_x_notional": { "type": "boolean" }
+      }
+    }
+  }
+}
