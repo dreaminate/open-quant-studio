@@ -33,7 +33,6 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.21.0 --activate
           test "$(pnpm --version)" = "11.21.0"
-          pnpm config set --global strictDepBuilds false
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
