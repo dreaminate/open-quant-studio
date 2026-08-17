@@ -30,3 +30,6 @@ worktrees/
 
 /.opencode/
 /graphify-out/
+
+# Agent Team adoption backups (local safety copies; tracked history is the rollback source)
+.agent-team/backups/

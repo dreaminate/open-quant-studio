@@ -1,0 +1,27 @@
+{
+  "adoptedAt": "2026-08-17T21:30:19+08:00",
+  "adoptedBy": "adopt-team-charter",
+  "adoptedFrom": {
+    "backup": [
+      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/TEAM.md.v5.dcc3e7f3.bak",
+      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/AGENTS.md.pointer.07d72178.bak",
+      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/CLAUDE.md.pointer.1a33e177.bak"
+    ],
+    "oldCharterSha256": "dcc3e7f38b56e23d482bde1d908e57b59d75257af43e499650b1fac6e594311b"
+  },
+  "assetSha256": "97c9d9af60d083bdabebaba415fd168f35deae8b1413c3cf1df9ea41bd0bc806",
+  "assetSource": "/Users/wzy/.codex/skills/init-project-agent-team/assets/TEAM.md",
+  "charterPath": ".agent-team/TEAM.md",
+  "charterSha256": "97c9d9af60d083bdabebaba415fd168f35deae8b1413c3cf1df9ea41bd0bc806",
+  "contractVersion": 6,
+  "migrationMapPath": ".agent-team/migration-map.md",
+  "migrationMapSha256": "3258695dff6e58b6fed3d334fe1a6d8a6baabe13c063186824892f2733b3dc63",
+  "minLauncherContractSha256": "53f4b3ce1d25a88d53f8afcfe4a4e5267f52061984cdd48fc98eed79e42fb664",
+  "minLauncherVersion": 1,
+  "pointerSha256": "8144c6ceb96c713ce686b69450ef7dc8cda09b8316c518ca52b494076775fde4",
+  "pointerTargets": [
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "schemaVersion": 1
+}
