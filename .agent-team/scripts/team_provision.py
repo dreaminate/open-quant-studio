@@ -271,7 +271,8 @@ def build_plan(
         },
         "plannedCreates": {
             "main": main_class["state"] == "absent_branch",
-            "leaderBranch": not seats[SEATS[0]["key"]]["branchExists"],
+            # Orca-first: branch and worktree are created together by the CLI;
+            # there is no separate branch-creation step.
             "teamWorktree": seats[SEATS[0]["key"]]["worktree"] is None,
             "employeeWorktrees": [
                 key for key in employee_keys if seats[key]["worktree"] is None
@@ -305,21 +306,22 @@ def expected_first_blocking_code(
     seats: dict[str, dict[str, Any]],
     leader_bootstrap_commit: str | None = None,
 ) -> str | None:
-    """The first failure code a `run` will hit, for preview navigation."""
+    """The first deterministic failure code a `run` will hit, if any.
+
+    Environmental gates (Orca runtime, repo registration) are not
+    deterministic, so a creatable topology returns None.
+    """
     if main_class["state"] == "existing_unattached_branch":
         return "main_attach_pending"
     leader = seats[SEATS[0]["key"]]
     if leader["branchExists"] and leader["worktree"] is None:
-        # Provenance supplied in the plan clears the verification gate; the
-        # next blocker is the Orca exact-branch CLI gap.
-        if leader_bootstrap_commit is not None:
-            return "team_create_cli_pending"
+        return "leader_branch_collision_cleanup_required"
+    if leader["worktree"] is not None and leader_bootstrap_commit is None:
         return "leader_branch_baseline_unverified"
-    if leader["worktree"] is None:
-        return "team_create_cli_pending"
     employee_keys = [seat["key"] for seat in SEATS[1:]]
-    if any(seats[key]["worktree"] is None for key in employee_keys):
-        return "employee_parent_create_cli_pending"
+    for key in employee_keys:
+        if seats[key]["branchExists"] and seats[key]["worktree"] is None:
+            return "employee_branch_collision_cleanup_required"
     return None
 
 
@@ -402,7 +404,12 @@ def orca_worktree_ids(orca_cli: str, repo_id: str) -> dict[str, str]:
     if code != 0:
         raise tc.TeamToolError(f"orca_worktree_list_failed: exit {code}")
     payload = json.loads(stdout)
-    worktrees = payload.get("worktrees", [])
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    worktrees = (
+        result_wrapper.get("worktrees", [])
+        if isinstance(result_wrapper, dict)
+        else payload.get("worktrees", [])
+    )
     return {
         canonical_path(wt["path"]): wt["id"]
         for wt in worktrees
@@ -410,32 +417,46 @@ def orca_worktree_ids(orca_cli: str, repo_id: str) -> dict[str, str]:
     }
 
 
-def orca_create_worktree(
-    orca_cli: str,
-    repo_id: str,
-    branch: str,
-    path: str,
-    parent_id: str | None,
-    display_name: str | None = None,
+def orca_worktree_inventory(
+    orca_cli: str, repo_id: str
+) -> dict[str, dict[str, Any]]:
+    """Full Orca worktree inventory keyed by canonical path (real payload shape)."""
+    code, stdout, _ = tc.orca_run(orca_cli, "worktree", "list", "--repo", repo_id, "--json")
+    if code != 0:
+        raise tc.TeamToolError(f"orca_worktree_list_failed: exit {code}")
+    payload = json.loads(stdout)
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    worktrees = (
+        result_wrapper.get("worktrees", [])
+        if isinstance(result_wrapper, dict)
+        else payload.get("worktrees", [])
+    )
+    return {canonical_path(wt["path"]): wt for wt in worktrees if wt.get("path")}
+
+
+def orca_create_named_worktree(
+    orca_cli: str, repo_id: str, name: str, base_branch: str
 ) -> dict[str, Any]:
-    """Attempt one worktree creation through the Orca CLI (mock-contract mode)."""
+    """Create one worktree through the verified real CLI contract.
+
+    Verified against 1.4.180 (2026-08-18): `worktree create --repo id:<id>
+    --name <name> --base-branch <base> --no-parent --json` creates the exact
+    branch `refs/heads/<name>` from <base> together with the worktree and a
+    first terminal — provided the branch does not pre-exist (a collision
+    makes the CLI auto-suffix the name, which this helper rejects).
+    """
     argv = [
         "worktree",
         "create",
         "--repo",
-        repo_id,
-        "--branch",
-        branch,
-        "--path",
-        path,
+        f"id:{repo_id}",
+        "--name",
+        name,
+        "--base-branch",
+        base_branch,
+        "--no-parent",
         "--json",
     ]
-    if parent_id is not None:
-        argv += ["--parent", parent_id]
-    else:
-        argv.append("--no-parent")
-    if display_name is not None:
-        argv += ["--display-name", display_name]
     code, stdout, stderr = tc.orca_run(orca_cli, *argv)
     if code != 0:
         return {
@@ -448,31 +469,86 @@ def orca_create_worktree(
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return {"ok": False, "code": "orca_worktree_create_invalid_json", "error": str(exc)}
-    created = payload.get("worktree")
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    created = result_wrapper.get("worktree") if isinstance(result_wrapper, dict) else None
     if not payload.get("ok") or not isinstance(created, dict):
+        return {"ok": False, "code": "orca_worktree_create_rejected", "payload": payload}
+    if created.get("branch") != f"refs/heads/{name}":
         return {
             "ok": False,
-            "code": "orca_worktree_create_rejected",
-            "payload": payload,
+            "code": "orca_worktree_create_mismatched_branch",
+            "payload": created,
         }
-    if created.get("branch") != branch or canonical_path(created.get("path", "")) != canonical_path(path):
+    if not created.get("head"):
+        return {"ok": False, "code": "orca_worktree_create_missing_head", "payload": created}
+    first_terminal = result_wrapper.get("firstTerminal") if isinstance(result_wrapper, dict) else None
+    return {
+        "ok": True,
+        "worktree": created,
+        "firstTerminal": first_terminal,
+    }
+
+
+def orca_set_worktree(
+    orca_cli: str,
+    worktree_selector: str,
+    display_name: str | None = None,
+    parent_worktree: str | None = None,
+    no_parent: bool = False,
+) -> dict[str, Any]:
+    """Update Orca metadata: display name and/or parent lineage (verified CLI).
+
+    `worktree_selector` and `parent_worktree` are raw Orca worktree ids
+    (`<repo-id>::<path>`); the CLI selector form `id:<id>` is composed here.
+    """
+    argv = ["worktree", "set", "--worktree", f"id:{worktree_selector}", "--json"]
+    if display_name is not None:
+        argv += ["--display-name", display_name]
+    if parent_worktree is not None:
+        argv += ["--parent-worktree", f"id:{parent_worktree}"]
+    if no_parent:
+        argv.append("--no-parent")
+    code, stdout, stderr = tc.orca_run(orca_cli, *argv)
+    if code != 0:
         return {
             "ok": False,
-            "code": "orca_worktree_create_mismatched_branch_or_path",
-            "payload": payload,
+            "code": "orca_worktree_set_failed",
+            "exit": code,
+            "stderr": stderr.decode("utf-8", "replace").strip()[:500],
         }
-    if (created.get("parentId") is not None) != (parent_id is not None):
-        return {"ok": False, "code": "orca_worktree_create_parent_mismatch", "payload": payload}
-    return {"ok": True, "worktree": created, "firstTerminal": payload.get("firstTerminal")}
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return {"ok": False, "code": "orca_worktree_set_invalid_json", "error": str(exc)}
+    if not payload.get("ok"):
+        return {"ok": False, "code": "orca_worktree_set_rejected", "payload": payload}
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    updated = result_wrapper.get("worktree") if isinstance(result_wrapper, dict) else None
+    if parent_worktree is not None and isinstance(updated, dict):
+        if updated.get("parentWorktreeId") != parent_worktree:
+            return {
+                "ok": False,
+                "code": "orca_worktree_set_parent_mismatch",
+                "payload": updated,
+            }
+    return {"ok": True, "worktree": updated}
 
 
 def orca_clean_first_terminal(
-    orca_cli: str, repo_id: str, worktree_path: str, first_terminal: dict[str, Any]
+    orca_cli: str,
+    repo_id: str,
+    worktree_path: str,
+    first_terminal: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Close exactly the first terminal bound to a worktree-creation receipt."""
-    handle = first_terminal.get("handle")
-    if not handle:
-        return {"ok": False, "code": "first_terminal_receipt_missing"}
+    """Close exactly the first terminal bound to a worktree-creation receipt.
+
+    With a receipt: every terminal in the new worktree's inventory must
+    belong to the receipt's tab. Without one (older runtimes omit it): the
+    brand-new worktree must show exactly one terminal — the just-created
+    first terminal — or cleanup fails closed as scope-ambiguous.
+    """
+    if not first_terminal:
+        first_terminal = {}
     code, stdout, _ = tc.orca_run(
         orca_cli,
         "terminal",
@@ -494,8 +570,17 @@ def orca_clean_first_terminal(
         )
     except json.JSONDecodeError as exc:
         return {"ok": False, "code": "terminal_list_invalid_json", "error": str(exc)}
-    if any(term.get("tabId") != first_terminal.get("tabId") for term in terminals):
-        return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
+    handle = first_terminal.get("handle")
+    if handle:
+        # Receipt-bound path: every terminal must belong to the receipt tab.
+        if any(term.get("tabId") != first_terminal.get("tabId") for term in terminals):
+            return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
+    else:
+        # Receipt-less (older runtime): the brand-new worktree must show
+        # exactly one terminal — the just-created first terminal.
+        if len(terminals) != 1 or not terminals[0].get("handle"):
+            return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
+        handle = terminals[0]["handle"]
     close_code, close_out, _ = tc.orca_run(
         orca_cli, "terminal", "close", "--terminal", str(handle), "--tab", "--json"
     )
@@ -592,56 +677,27 @@ def run_phases(
             mutations, unrelated_before, mock_contract, repo_id,
         )
 
-    # Phase 2: Leader integration branch.
+    # Phase 2: Leader branch state. The verified Orca-first contract creates
+    # the exact integration branch together with its worktree; a pre-existing
+    # branch collides (the CLI auto-suffixes the name), so that state fails
+    # closed with a cleanup route.
     leader_key = SEATS[0]["key"]
     leader_branch = SEATS[0]["branch"]
     leader_seat = plan["seats"][leader_key]
-    if not leader_seat["branchExists"]:
-        if accepted_commit is None:
-            return stop(
-                "rules_object_not_accepted",
-                "Creating the Leader branch requires an accepted main commit (--accepted-commit).",
-            )
-        git.require_clean_read()
-        git.check_config_snapshot()
-        main_commit_now = resolve_ref(git, "refs/heads/main")
-        if accepted_commit != main_commit_now:
-            return stop("git_ref_drift", f"main moved before Leader branch creation: {main_commit_now}")
-        code, _, stderr = git.run("branch", leader_branch, accepted_commit)
-        if code != 0:
-            return stop(
-                "leader_branch_create_failed",
-                f"git branch exited {code}: {stderr.decode('utf-8', 'replace').strip()}",
-            )
-        if resolve_ref(git, f"refs/heads/{leader_branch}") != accepted_commit:
-            return stop(
-                "git_ref_changed_after_mutation",
-                "Leader branch moved during creation; reconcile before retrying.",
-            )
-        mutations.append(
-            {
-                "kind": "leader_branch_created",
-                "branch": leader_branch,
-                "leaderBootstrapCommit": accepted_commit,
-                "commandSucceeded": True,
-            }
+    if leader_seat["branchExists"] and leader_seat["worktree"] is None:
+        return stop(
+            "leader_branch_collision_cleanup_required",
+            f"The {leader_branch} branch already exists without an Orca worktree. "
+            "Orca-first creation requires the branch to be absent (a pre-existing branch "
+            "makes the CLI auto-suffix the name). Delete the branch through a separately "
+            "authorized git command, then re-run.",
         )
-        return run_phases(
-            git, base_dir, orca_cli, accepted_commit, accepted_commit, roster_path,
-            mutations, unrelated_before, mock_contract, repo_id,
+    if leader_seat["worktree"] is not None and leader_bootstrap_commit is None:
+        return stop(
+            "leader_branch_baseline_unverified",
+            "The Leader worktree exists but no bootstrap receipt or roster binds its creation "
+            "provenance. Pass --leader-bootstrap-commit from a prior provision receipt.",
         )
-    if leader_seat["worktree"] is None:
-        if leader_bootstrap_commit is None:
-            return stop(
-                "leader_branch_baseline_unverified",
-                "The Leader branch exists but no bootstrap receipt or roster binds its creation "
-                "provenance. Pass --leader-bootstrap-commit from a prior provision receipt.",
-            )
-        if resolve_ref(git, f"refs/heads/{leader_branch}") != leader_bootstrap_commit:
-            return stop(
-                "leader_branch_baseline_unverified",
-                "The supplied leaderBootstrapCommit does not match the current Leader branch tip.",
-            )
 
     # Phase 3: Orca runtime and repo registration.
     status = orca_status(orca_cli)
@@ -665,98 +721,86 @@ def run_phases(
             "The Orca repo inventory did not expose a repo id for this project.",
         )
 
-    # Phase 4: logical team / Leader parent worktree.
+    # Phase 4: logical team / Leader parent worktree — the verified real
+    # Orca-first contract (identical shape in mock mode, which mirrors it).
     if leader_seat["worktree"] is None:
-        if not mock_contract:
-            return stop(
-                "team_create_cli_pending",
-                "Orca CLI 1.4.180 exposes no command that safely checks out the exact existing "
-                "leader-claude-integration branch. Pending placeholder retained; fail closed; "
-                "employee parent creation is unreachable until this resolves.",
-            )
-        # Mock-contract mode (disposable E2E only): attempt the documented
-        # future command shape against the mock CLI, verify the receipt, and
-        # clean the first terminal it created.
-        team_path = plan["seats"][leader_key]["plannedPath"]
-        created = orca_create_worktree(
-            orca_cli, repo_id, leader_branch, team_path, None, display_name="team"
-        )
+        created = orca_create_named_worktree(orca_cli, repo_id, leader_branch, "main")
         if not created["ok"]:
             return stop(created["code"], f"team worktree creation failed: {created}")
+        team_path = created["worktree"]["path"]
+        set_result = orca_set_worktree(
+            orca_cli, created["worktree"]["id"], display_name="team", no_parent=True
+        )
+        if not set_result["ok"]:
+            return stop(set_result["code"], f"team display-name set failed: {set_result}")
         cleaned = orca_clean_first_terminal(
-            orca_cli, repo_id, team_path, created.get("firstTerminal") or {}
+            orca_cli, repo_id, team_path, created.get("firstTerminal")
         )
         if not cleaned["ok"]:
             return stop(cleaned["code"], f"team first-terminal cleanup failed: {cleaned}")
+        bootstrap_commit = created["worktree"]["head"]
         mutations.append(
             {
                 "kind": "team_worktree_created",
                 "path": team_path,
                 "branch": leader_branch,
                 "orcaWorktreeId": created["worktree"]["id"],
+                "leaderBootstrapCommit": bootstrap_commit,
                 "commandSucceeded": True,
                 "firstTerminalCleaned": True,
             }
         )
         return run_phases(
-            git, base_dir, orca_cli, accepted_commit, leader_bootstrap_commit, roster_path,
+            git, base_dir, orca_cli, accepted_commit, bootstrap_commit, roster_path,
             mutations, unrelated_before, mock_contract, repo_id,
         )
 
-    # Phase 5: five employee secondary parents.
+    # Phase 5: five employee secondary parents — the verified real contract.
     missing_employees = [
         key for key in SEAT_KEYS[1:] if plan["seats"][key]["worktree"] is None
     ]
     if missing_employees:
-        if not mock_contract:
-            return stop(
-                "employee_parent_create_cli_pending",
-                "Employee parent creation through the Orca CLI (with Leader-parent lineage binding) "
-                "is not verified against the current CLI. Pending placeholder retained; fail closed.",
-            )
-        team_ids = orca_worktree_ids(orca_cli, repo_id)
-        team_orca_id = team_ids.get(
+        team_inventory = orca_worktree_inventory(orca_cli, repo_id)
+        team_entry = team_inventory.get(
             canonical_path(plan["seats"][leader_key]["existingWorktreePath"])
         )
-        if team_orca_id is None:
-            return stop("orca_worktree_inventory_missing_team", "team worktree id not found in the Orca inventory")
-        leader_baseline = resolve_ref(git, f"refs/heads/{leader_branch}")
+        if team_entry is None:
+            return stop(
+                "orca_worktree_inventory_missing_team",
+                "team worktree not found in the Orca inventory",
+            )
+        team_selector = team_entry["id"]
         for key in missing_employees:
             seat_plan = plan["seats"][key]
-            # Each employee branch starts from the recorded Leader integration
-            # baseline (charter step 3).
-            if not seat_plan["branchExists"]:
-                git.require_clean_read()
-                git.check_config_snapshot()
-                branch_code, _, branch_err = git.run(
-                    "branch", seat_plan["branch"], leader_baseline
+            if seat_plan["branchExists"]:
+                return stop(
+                    "employee_branch_collision_cleanup_required",
+                    f"Branch {seat_plan['branch']} exists without an Orca worktree; delete it "
+                    "through a separately authorized git command and re-run.",
                 )
-                if branch_code != 0:
-                    return stop(
-                        "employee_branch_create_failed",
-                        f"git branch {seat_plan['branch']} exited {branch_code}: "
-                        f"{branch_err.decode('utf-8', 'replace').strip()}",
-                    )
-                mutations.append(
-                    {
-                        "kind": "employee_branch_created",
-                        "seat": key,
-                        "branch": seat_plan["branch"],
-                        "base": leader_baseline,
-                        "commandSucceeded": True,
-                    }
-                )
-            employee_path = seat_plan["plannedPath"]
-            created = orca_create_worktree(
-                orca_cli, repo_id, seat_plan["branch"], employee_path, team_orca_id
+            created = orca_create_named_worktree(
+                orca_cli, repo_id, seat_plan["branch"], leader_branch
             )
             if not created["ok"]:
-                return stop(created["code"], f"employee worktree creation failed for {key}: {created}")
+                return stop(
+                    created["code"], f"employee worktree creation failed for {key}: {created}"
+                )
+            employee_path = created["worktree"]["path"]
+            parent_result = orca_set_worktree(
+                orca_cli, created["worktree"]["id"], parent_worktree=team_selector
+            )
+            if not parent_result["ok"]:
+                return stop(
+                    parent_result["code"],
+                    f"employee parent set failed for {key}: {parent_result}",
+                )
             cleaned = orca_clean_first_terminal(
-                orca_cli, repo_id, employee_path, created.get("firstTerminal") or {}
+                orca_cli, repo_id, employee_path, created.get("firstTerminal")
             )
             if not cleaned["ok"]:
-                return stop(cleaned["code"], f"employee first-terminal cleanup failed for {key}: {cleaned}")
+                return stop(
+                    cleaned["code"], f"employee first-terminal cleanup failed for {key}: {cleaned}"
+                )
             mutations.append(
                 {
                     "kind": "employee_worktree_created",
@@ -764,7 +808,7 @@ def run_phases(
                     "path": employee_path,
                     "branch": seat_plan["branch"],
                     "orcaWorktreeId": created["worktree"]["id"],
-                    "parentOrcaWorktreeId": team_orca_id,
+                    "parentOrcaWorktreeId": team_selector,
                     "commandSucceeded": True,
                     "firstTerminalCleaned": True,
                 }
@@ -777,7 +821,7 @@ def run_phases(
     # Phase 6: full topology verified — publish the roster atomically.
     import team_roster  # noqa: PLC0415  # type: ignore[import-not-found]
 
-    orca_ids = orca_worktree_ids(orca_cli, repo_id) if mock_contract else {}
+    orca_ids = orca_worktree_ids(orca_cli, repo_id)
     roster_result = team_roster.write_initial_roster(
         _project=git.repo,
         roster_path=roster_path,
@@ -818,6 +862,11 @@ def stop_plan(
     try:
         inventory = parse_worktree_inventory(git)
         planned_paths = {canonical_path(path) for path in _all_planned_paths(base_dir)}
+        # Worktrees created by Orca-first land at Orca-chosen paths; those
+        # are managed, not unrelated.
+        for mutation in mutations:
+            if mutation.get("path"):
+                planned_paths.add(canonical_path(mutation["path"]))
         unrelated_after = sorted(
             path for path in inventory.keys() if canonical_path(path) not in planned_paths
         )

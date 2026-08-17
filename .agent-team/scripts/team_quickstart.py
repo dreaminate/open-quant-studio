@@ -213,30 +213,9 @@ def run_quickstart(
         )
     results["phases"]["orca"] = {"ready": True}
 
-    # Phase 5: session lifecycle.
+    # Phase 5: session lifecycle — the verified real contract (terminal
+    # create); the mock CLI mirrors the same shapes for E2E runs.
     prior_tabs = [seat.get("tabId") for seat in roster["seats"] if seat.get("tabId")]
-    if not mock_contract:
-        results["phases"]["sessionLifecycle"] = {
-            "priorGenerationTabs": prior_tabs,
-            "cleanupRequired": bool(prior_tabs),
-            "state": "start_session_cli_pending",
-            "placeholder": ORCA_START_SESSION_PLACEHOLDER,
-        }
-        return {
-            "ok": False,
-            "code": "start_session_cli_pending",
-            "message": (
-                "Topology, roster, permission modes, and Orca runtime all verified, but the "
-                "Orca CLI surface for starting a seat session in a target worktree is unverified. "
-                "Pending placeholder retained; fail closed; no terminal was created."
-            ),
-            "phases": results["phases"],
-            "nextStep": "wait for Orca CLI verification (pending placeholder); do not bypass",
-            "changesApplied": False,
-        }
-
-    # Mock-contract mode (disposable E2E only): generation-bound cleanup and
-    # six session creations against the mock CLI.
     listed, repo_info = team_provision.orca_repo_listed(orca_cli, str(project))
     if not listed:
         return fail("orca_repo_not_registered", "provision preview", results)
@@ -289,7 +268,19 @@ def run_quickstart(
             return fail("terminal_close_rejected", "inspect the close error, then re-run", results)
 
     code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--include-visual-layouts", "--json")
-    if code != 0 or json.loads(stdout).get("totalCount", -1) != 0:
+    if code != 0:
+        return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
+    try:
+        zero_payload = json.loads(stdout)
+        zero_wrapper = zero_payload.get("result") if isinstance(zero_payload, dict) else None
+        zero_total = (
+            zero_wrapper.get("totalCount")
+            if isinstance(zero_wrapper, dict)
+            else zero_payload.get("totalCount", -1)
+        )
+    except json.JSONDecodeError:
+        zero_total = -1
+    if zero_total != 0:
         return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
 
     updates: dict[str, dict[str, str]] = {}

@@ -1,18 +1,16 @@
 {
-  "adoptedAt": "2026-08-17T21:30:19+08:00",
+  "adoptedAt": "2026-08-18T03:11:10+08:00",
   "adoptedBy": "adopt-team-charter",
   "adoptedFrom": {
     "backup": [
-      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/TEAM.md.v5.dcc3e7f3.bak",
-      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/AGENTS.md.pointer.07d72178.bak",
-      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/CLAUDE.md.pointer.1a33e177.bak"
+      "/Users/wzy/Work/01_Projects/My-Projects/Original/open-quant-studio/.agent-team/backups/TEAM.md.v5.97c9d9af.bak"
     ],
-    "oldCharterSha256": "dcc3e7f38b56e23d482bde1d908e57b59d75257af43e499650b1fac6e594311b"
+    "oldCharterSha256": "97c9d9af60d083bdabebaba415fd168f35deae8b1413c3cf1df9ea41bd0bc806"
   },
-  "assetSha256": "97c9d9af60d083bdabebaba415fd168f35deae8b1413c3cf1df9ea41bd0bc806",
+  "assetSha256": "c6ac509cdc666543c3d31c420b6ad1f0b062b9ccf4aff1d215883e01b966dbf3",
   "assetSource": "/Users/wzy/.codex/skills/init-project-agent-team/assets/TEAM.md",
   "charterPath": ".agent-team/TEAM.md",
-  "charterSha256": "97c9d9af60d083bdabebaba415fd168f35deae8b1413c3cf1df9ea41bd0bc806",
+  "charterSha256": "c6ac509cdc666543c3d31c420b6ad1f0b062b9ccf4aff1d215883e01b966dbf3",
   "contractVersion": 6,
   "migrationMapPath": ".agent-team/migration-map.md",
   "migrationMapSha256": "3258695dff6e58b6fed3d334fe1a6d8a6baabe13c063186824892f2733b3dc63",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +74,16 @@ def write_orca_ready_stub(base_dir: Path) -> Path:
         "  status)\n"
         "    printf '%s\\n' '{\"ok\":true,\"result\":{\"app\":{\"running\":true},\"runtime\":{\"state\":\"ready\",\"reachable\":true,\"runtimeId\":\"test-runtime\"}}}'\n"
         "    ;;\n"
+        "  repo)\n"
+        "    printf '{\"repos\":[{\"id\":\"repo-1\",\"path\":\"%s\"}]}\\n' \"$MOCK_REPO_PATH\"\n"
+        "    ;;\n"
+        "  terminal)\n"
+        "    if [ \"$2\" = \"list\" ]; then\n"
+        "      printf '%s\\n' '{\"ok\":true,\"result\":{\"terminals\":[],\"totalCount\":0}}'\n"
+        "    else\n"
+        "      printf '%s\\n' '{\"ok\":true,\"result\":{\"terminal\":{\"handle\":\"term-stub\",\"tabId\":\"tab-stub\",\"worktreeId\":\"wt\"}}}'\n"
+        "    fi\n"
+        "    ;;\n"
         "esac\n"
     )
     stub.chmod(0o755)
@@ -100,6 +111,7 @@ def run_quickstart(project: Path, asset: Path, base_dir: Path, home: Path) -> tu
         capture_output=True,
         text=True,
         timeout=60,
+        env={**os.environ, "MOCK_REPO_PATH": str(project)},
     )
     return proc.stdout, proc.stderr, proc.returncode
 
@@ -123,20 +135,21 @@ def setup_ready_project(tmp_path: Path, asset: Path) -> tuple[Path, Path, Path]:
     return project, base_dir, home
 
 
-def test_quickstart_all_preflights_pass_stops_at_session_placeholder(
+def test_quickstart_preflights_pass_then_session_contract_required(
     tmp_path: Path, asset: Path
 ) -> None:
+    """All preflights green; the thin stub lacks the terminal-create contract,
+    so the run fails closed at the first create with a navigable code."""
     project, base_dir, home = setup_ready_project(tmp_path, asset)
     stdout, stderr, code = run_quickstart(project, asset, base_dir, home)
     assert code == 7
     result = json.loads(stdout)
-    assert result["code"] == "start_session_cli_pending"
+    assert result["code"] == "terminal_create_duplicate_identity"
     assert result["phases"]["charter"]["code"] == "charter_current"
     assert result["phases"]["roster"]["code"] == "roster_valid"
     assert result["phases"]["claudeAutoMode"]["code"] == "claude_auto_mode_ok"
     assert result["phases"]["orca"]["ready"] is True
     assert result["changesApplied"] is False
-    assert "PENDING" in result["phases"]["sessionLifecycle"]["placeholder"]
 
 
 def test_quickstart_fails_on_stale_charter(tmp_path: Path, asset: Path) -> None:
@@ -217,7 +230,7 @@ def test_claude_auto_mode_resolution_project_overrides_user(tmp_path: Path, asse
     stdout, _, code = run_quickstart(project, asset, base_dir, home)
     assert code == 7
     result = json.loads(stdout)
-    assert result["code"] == "start_session_cli_pending"
+    assert result["code"] == "terminal_create_duplicate_identity"
     assert result["phases"]["claudeAutoMode"]["effectiveMode"] == "auto"
 
 
