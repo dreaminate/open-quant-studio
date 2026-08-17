@@ -73,6 +73,43 @@ dead end.
 | `orca_runtime_unavailable` | 7 | Orca runtime not ready | Open the local Orca app, re-run |
 | `invalid_project` | 9 | Boundary or identity check failed | Read the reported reason |
 
+## message (identity inject / verify / keys / roster-update)
+
+| Code | Exit | Meaning | Next command |
+|---|---|---|---|
+| `keys_generated` | 0 | Ed25519 key pair created (private 0600, never overwrites) | `message roster-update <seat> <fingerprint>` then commit the roster separately |
+| `envelope_signed` | 0 | Envelope built and signed from roster-bound sender identity | deliver the envelope; recipient runs `message verify` |
+| `identity_verified` | 0 | Signature, fingerprint, generation, worktree, branch, recipient all valid | act on the message |
+| `identity_rejected` | 6 | One or more structured rejections (see `errors[].code`) | Reject the message without execution; notify sender and Leader |
+| `roster_fingerprint_updated` | 0 | Fingerprint recorded (empty → nonempty) | Commit the roster change separately (user-confirmed) |
+| `identity_error` | 9 | Injection/keys refused: agent-supplied tool fields, unknown seat, key overwrite, rotation without generation increment, bad envelope | Read the message; the tool must not be bypassed |
+
+Verify rejection codes (`errors[].code`): `envelope_version`, `sender_missing`,
+`recipient_missing`, `sender_seat_unknown`, `stale_generation`,
+`sender_worktree_mismatch`, `sender_branch_mismatch`, `fingerprint_missing`,
+`fingerprint_mismatch`, `public_key_missing`, `signature_invalid`,
+`recipient_seat_unknown`, `recipient_worktree_mismatch`,
+`recipient_branch_mismatch`, `envelope_incomplete`.
+
+## team doctor
+
+| Code | Exit | Meaning | Next command |
+|---|---|---|---|
+| `doctor_all_green` | 0 | All checks pass | `team quickstart` |
+| `doctor_failed` | 3 | One or more checks failed; every failing check carries its own `code` and `nextStep` | Follow the first failing check's next step, then re-run |
+| `invalid_project` | 9 | Boundary or identity check failed | Read the reported reason |
+
+Doctor check codes: `charter_current` / `charter_current_meta_missing` /
+`charter_mismatch`, `pointers_canonical` / `pointer_mismatch`,
+`approval_complete` / `approval_incomplete` / `approval_missing`,
+`roster_valid` / `roster_invalid` / `roster_missing` / `roster_unreadable`,
+`topology_ready` / `topology_incomplete` / `git_inventory_failed`,
+`cli_profiles_ready` / `cli_profile_issue`, `orca_ready` /
+`orca_runtime_unavailable` / `orca_status_failed` /
+`orca_status_invalid_json`, `terminals_clean` /
+`resident_terminals_present` / `terminal_inventory_unavailable` /
+`terminal_inventory_invalid`, `identity_cases_pass` / `identity_cases_fail`.
+
 ## Pending placeholder registry
 
 Placeholders retained from the canonical initializer contract; each requires a
