@@ -433,13 +433,19 @@ def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
             "nextStep": "inspect the orca terminal inventory",
         }
     result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    terminals = (
+        result_wrapper.get("terminals", [])
+        if isinstance(result_wrapper, dict)
+        else (payload.get("terminals", []) if isinstance(payload, dict) else [])
+    )
     total = (
         result_wrapper.get("totalCount")
         if isinstance(result_wrapper, dict)
         else (payload.get("totalCount") if isinstance(payload, dict) else None)
     )
     if total is None:
-        total = len(payload) if isinstance(payload, dict) else -1
+        # Fall back to the terminals list length; never count payload keys.
+        total = len(terminals) if isinstance(terminals, list) else -1
     return {
         "id": "terminals",
         "label": "terminal readiness",
