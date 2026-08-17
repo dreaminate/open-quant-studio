@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://open-quant-studio/.agent-team/roster.schema.json",
+  "title": "Agent Team generation roster",
+  "description": "Generation roster for the fixed six-seat Agent Team. Written only by the provisioner (generation increments) and explicit human edits with current-user confirmation. Every change is its own commit. The authoritative validator is scripts/team_roster.py; this document mirrors its constraints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generation",
+    "leaderBootstrapCommit",
+    "acceptedMainCommit",
+    "mainWorktree",
+    "seats",
+    "updatedAt",
+    "updatedBy"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "generation": { "type": "integer", "minimum": 0 },
+    "leaderBootstrapCommit": {
+      "description": "Immutable creation provenance of the Leader integration branch; null until provisioned.",
+      "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" }]
+    },
+    "acceptedMainCommit": {
+      "description": "The accepted main commit this generation was provisioned from.",
+      "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" }]
+    },
+    "mainWorktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "branch", "commit"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "const": "main" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" }
+      }
+    },
+    "seats": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": { "$ref": "#/definitions/seatEntry" }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "type": "string", "minLength": 1 }
+  },
+  "definitions": {
+    "seatEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seat",
+        "branch",
+        "worktree",
+        "generation",
+        "parent_id",
+        "owner",
+        "public_key_fingerprint",
+        "updated_by",
+        "updated_at"
+      ],
+      "properties": {
+        "seat": {
+          "type": "string",
+          "enum": [
+            "leader-claude",
+            "advisor-codex",
+            "fullstack-opencode",
+            "review-opencode",
+            "principal-fullstack-claudex",
+            "frontend-kimi"
+          ]
+        },
+        "branch": {
+          "type": "string",
+          "enum": [
+            "leader-claude-integration",
+            "advisor-codex-integration",
+            "fullstack-opencode-integration",
+            "review-opencode-integration",
+            "principal-fullstack-claudex-integration",
+            "frontend-kimi-integration"
+          ]
+        },
+        "worktree": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "orcaWorktreeId"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "orcaWorktreeId": { "anyOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] }
+          }
+        },
+        "generation": { "type": "integer", "minimum": 0 },
+        "parent_id": {
+          "description": "null for the Leader parent (second lineage root); the Leader worktree identity for every employee parent.",
+          "anyOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }]
+        },
+        "owner": { "type": "string", "minLength": 1 },
+        "public_key_fingerprint": {
+          "description": "sha256 fingerprint of the seat signing public key; empty until M4 key generation.",
+          "anyOf": [{ "type": "string", "const": "" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }]
+        },
+        "tabId": {
+          "description": "Resident terminal tab id recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "terminalHandle": {
+          "description": "Resident terminal handle recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "launchArgs": {
+          "description": "Effective launch arguments recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "permissionMode": {
+          "description": "Effective permission mode recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_by": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

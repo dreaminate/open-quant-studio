@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://open-quant-studio/.agent-team/message-envelope.schema.json",
+  "title": "Team message envelope",
+  "description": "Signed envelope for formal Team messages. Tool-injected fields (envelopeVersion, project, messageId, sender, recipient, injectedAt, signature) are never supplied by the model; agent-supplied fields are messageKind, body, outcome, artifactRefs, commitRefs, taskId, dispatchId, runId, dependencyIds. The signature is Ed25519 over the canonical JSON (sorted keys, compact separators) of the envelope without the signature field. Verification rejects: tampered seats, forged signatures, stale generations, worktree/branch mismatches, unknown recipients, and fingerprint mismatches. The authoritative validator is scripts/team_identity.py verify; this document mirrors its constraints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelopeVersion",
+    "project",
+    "messageId",
+    "messageKind",
+    "sender",
+    "recipient",
+    "injectedAt",
+    "body",
+    "signature"
+  ],
+  "properties": {
+    "envelopeVersion": { "type": "integer", "const": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "messageId": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "messageKind": { "type": "string", "minLength": 1 },
+    "sender": { "$ref": "#/definitions/party" },
+    "recipient": { "$ref": "#/definitions/party" },
+    "injectedAt": { "type": "string", "format": "date-time" },
+    "body": { "type": "string", "minLength": 1 },
+    "outcome": { "type": ["string", "null"] },
+    "artifactRefs": { "type": "array", "items": { "type": "string" } },
+    "commitRefs": { "type": "array", "items": { "type": "string" } },
+    "taskId": { "type": "string" },
+    "dispatchId": { "type": "string" },
+    "runId": { "type": "string" },
+    "dependencyIds": { "type": "array", "items": { "type": "string" } },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "publicKeyFingerprint", "value"],
+      "properties": {
+        "scheme": { "type": "string", "const": "ed25519" },
+        "publicKeyFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "value": { "type": "string", "pattern": "^[0-9a-f]{128}$" }
+      }
+    }
+  },
+  "definitions": {
+    "party": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seat", "worktree", "branch", "generation"],
+      "properties": {
+        "seat": {
+          "type": "string",
+          "enum": [
+            "leader-claude",
+            "advisor-codex",
+            "fullstack-opencode",
+            "review-opencode",
+            "principal-fullstack-claudex",
+            "frontend-kimi"
+          ]
+        },
+        "worktree": {
+          "type": ["object", "null"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "orcaWorktreeId": { "type": ["string", "null"] }
+          }
+        },
+        "branch": { "type": ["string", "null"], "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
