@@ -464,3 +464,32 @@ def test_write_initial_roster_generation_zero(tmp_path: Path) -> None:
     second = team_roster.write_initial_roster(project, roster_path, plan, mutations)
     assert second["ok"] is False
     assert second["code"] == "roster_already_exists"
+
+
+def test_mock_contract_flag_refuses_real_cli(tmp_path: Path) -> None:
+    project, head = init_repo(tmp_path / "repo")
+    base_dir = tmp_path / "worktrees"
+    base_dir.mkdir()
+    write_orca_stub(base_dir, ready=True, repo_path=str(project))
+    stdout, _, code = run_helper(
+        project,
+        "preview",
+        base_dir,
+        "--accepted-commit",
+        head,
+    )
+    digest = parse(stdout)["pathsDigest"]
+    stdout, _, code = run_helper(
+        project,
+        "run",
+        base_dir,
+        "--confirm-paths-digest",
+        digest,
+        "--accepted-commit",
+        head,
+        "--mock-orca-contract",
+        "--orca-cli",
+        "/bin/ls",
+    )
+    assert code == 9
+    assert "mock_contract_requires_mock_cli" in parse(stdout)["message"]

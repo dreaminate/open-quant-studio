@@ -325,6 +325,8 @@ def run_provision(
     mid-run mutation the pipeline re-classifies from live inventory and the
     same fail-closed phases continue.
     """
+    if mock_contract:
+        require_mock_cli(orca_cli)
     git = tc.SafeGit(git_cli, project)
     git.inspect_config()
     git.require_clean_read()
@@ -354,6 +356,29 @@ def run_provision(
 
 def canonical_path(raw: str) -> str:
     return os.path.realpath(str(Path(raw).expanduser()))
+
+
+def require_mock_cli(orca_cli: str) -> None:
+    """Contract-mode may only target the in-repo mock CLI.
+
+    The real Orca CLI keeps its pending placeholders; the mock-contract flag
+    must never reach it, or unverified command shapes would execute real
+    terminal/worktree mutations.
+    """
+    identity = tc.executable_identity(orca_cli, "orca")
+    resolved = Path(identity["canonicalPath"])
+    is_in_repo_mock = (
+        resolved.name == "mock_orca.py"
+        and resolved.parent.name == "e2e"
+        and resolved.parent.parent.name == "tests"
+        and resolved.parent.parent.parent.name == ".agent-team"
+    )
+    if not is_in_repo_mock:
+        raise tc.TeamToolError(
+            "mock_contract_requires_mock_cli: --mock-orca-contract may only target the "
+            "in-repo .agent-team/tests/e2e/mock_orca.py; the real Orca CLI keeps its "
+            "pending placeholders and fails closed."
+        )
 
 
 def orca_worktree_ids(orca_cli: str, repo_id: str) -> dict[str, str]:

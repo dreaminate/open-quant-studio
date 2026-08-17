@@ -50,6 +50,7 @@ dead end.
 | `roster_missing` / `roster_unreadable` / `roster_empty` | 8 | No roster to derive removal targets from | `provision preview` or repair roster.json |
 | `git_status_failed` / `worktree_remove_failed` | 8 | A git status/remove command failed | Inspect the raw error, reconcile |
 | `invalid_project` | 9 | Boundary or identity check failed (includes `git_inspection_failed`, `git_config_drift`, `git_read_side_effect_authorization_required`, `checkout_side_effect_authorization_required`) | Read the reported reason; the helper must not be bypassed |
+| `mock_contract_requires_mock_cli` | 9 | `--mock-orca-contract` was passed with a CLI other than the in-repo `.agent-team/tests/e2e/mock_orca.py`; the real Orca CLI keeps its pending placeholders | Remove the flag or target the mock CLI; never combine the flag with the real CLI |
 
 ## roster validator (`team_roster.py validate`)
 

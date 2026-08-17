@@ -219,3 +219,40 @@ def test_claude_auto_mode_resolution_project_overrides_user(tmp_path: Path, asse
     result = json.loads(stdout)
     assert result["code"] == "start_session_cli_pending"
     assert result["phases"]["claudeAutoMode"]["effectiveMode"] == "auto"
+
+
+def test_mock_contract_flag_refuses_real_cli(tmp_path: Path, asset: Path) -> None:
+    project = make_project(tmp_path / "proj", stale=True)
+    adopt_project(project, asset)
+    base_dir = tmp_path / "worktrees"
+    base_dir.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    stdout, _, code = run_quickstart(project, asset, base_dir, home)
+    # Without the flag the pipeline fails closed at the roster gate first;
+    # with the flag against a non-mock CLI it must refuse outright.
+    assert code == 7
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(QUICKSTART_HELPER),
+            "--project",
+            str(project),
+            "--asset",
+            str(asset),
+            "--roster-path",
+            str(project / ".agent-team" / "roster.json"),
+            "--meta-path",
+            str(project / ".agent-team" / "charter-meta.json"),
+            "--orca-cli",
+            "/bin/ls",
+            "--home",
+            str(home),
+            "--mock-orca-contract",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 9
+    assert "mock_contract_requires_mock_cli" in json.loads(proc.stdout)["message"]

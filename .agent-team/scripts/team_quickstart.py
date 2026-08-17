@@ -127,6 +127,8 @@ def run_quickstart(
     home: Path,
     mock_contract: bool = False,
 ) -> dict[str, Any]:
+    if mock_contract:
+        team_provision.require_mock_cli(orca_cli)
     results: dict[str, Any] = {"phases": {}}
 
     # Phase 1: charter.
