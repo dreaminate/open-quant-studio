@@ -191,6 +191,8 @@ def atomic_replace_file(path: Path, content: bytes) -> dict[str, Any]:
     Fails closed on: symlink/special file, hard links, file flags, ACL
     xattrs, or concurrent change of the target before the rename.
     """
+    parent = path.parent
+    expected_parent_real = _assert_real_parent(parent)
     baseline = file_identity(path)
     if baseline["links"] != 1:
         raise TeamToolError(f"{path} is hard-linked and cannot be replaced safely")
@@ -198,7 +200,6 @@ def atomic_replace_file(path: Path, content: bytes) -> dict[str, Any]:
         raise TeamToolError(f"{path} has file flags and cannot be replaced safely")
     xattrs = read_xattrs(path)
 
-    parent = path.parent
     temp_name = f".{path.name}.adopt-team.{os.getpid()}.{secrets.token_hex(8)}"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     fd = os.open(parent / temp_name, flags, 0o600)
@@ -217,6 +218,7 @@ def atomic_replace_file(path: Path, content: bytes) -> dict[str, Any]:
         current = file_identity(path)
         if current["sha256"] != baseline["sha256"] or current["inode"] != baseline["inode"]:
             raise TeamToolError(f"{path} changed before replacement")
+        _assert_real_parent(parent)
         os.replace(parent / temp_name, path)
     except BaseException:
         try:
@@ -225,6 +227,11 @@ def atomic_replace_file(path: Path, content: bytes) -> dict[str, Any]:
             pass
         raise
 
+    try:
+        _assert_contained(path, expected_parent_real)
+        _assert_real_parent(parent)
+    except TeamToolError:
+        raise
     _fsync_directory(parent)
     written = file_identity(path)
     if written["sha256"] != bytes_sha256(content):
@@ -232,10 +239,33 @@ def atomic_replace_file(path: Path, content: bytes) -> dict[str, Any]:
     return written
 
 
+def _assert_real_parent(parent: Path) -> str:
+    """Require the parent to be a real (non-symlink) directory; return its realpath."""
+    if parent.is_symlink() or not parent.is_dir():
+        raise TeamToolError(f"parent is not a real directory: {parent}")
+    return os.path.realpath(str(parent))
+
+
+def _assert_contained(path: Path, expected_parent_real: str) -> None:
+    """Fail closed if the file resolved outside the expected parent (TOCTOU)."""
+    resolved = os.path.realpath(str(path))
+    expected = os.path.join(expected_parent_real, path.name)
+    if resolved != expected:
+        raise TeamToolError(
+            f"{path} resolved to {resolved}; expected containment under {expected_parent_real}"
+        )
+
+
 def write_new_file(path: Path, content: bytes, mode: int) -> dict[str, Any]:
-    """Create a new regular file atomically; fail closed if it appeared first."""
+    """Create a new regular file atomically; fail closed if it appeared first.
+
+    The parent directory is verified real before and after the rename, and
+    the written file must resolve inside it — a parent swapped for a symlink
+    mid-write is detected and the stray file removed.
+    """
     parent = path.parent
     parent.mkdir(parents=True, exist_ok=True)
+    expected_parent_real = _assert_real_parent(parent)
     temp_name = f".{path.name}.adopt-team.{os.getpid()}.{secrets.token_hex(8)}"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     fd = os.open(parent / temp_name, flags, 0o600)
@@ -248,10 +278,20 @@ def write_new_file(path: Path, content: bytes, mode: int) -> dict[str, Any]:
             os.close(fd)
         if path.exists() or path.is_symlink():
             raise TeamToolError(f"{path} appeared before commit")
+        _assert_real_parent(parent)
         os.replace(parent / temp_name, path)
     except BaseException:
         try:
             os.unlink(parent / temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+    try:
+        _assert_contained(path, expected_parent_real)
+        _assert_real_parent(parent)
+    except TeamToolError:
+        try:
+            os.unlink(path)
         except FileNotFoundError:
             pass
         raise

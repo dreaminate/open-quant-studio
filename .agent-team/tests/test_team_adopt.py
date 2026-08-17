@@ -328,3 +328,43 @@ def test_fresh_install_creates_charter_and_pointers(tmp_path: Path, asset: Path)
     stdout, _, code = run_helper(project, "check", asset)
     assert code == 0
     assert parse(stdout)["code"] == "charter_current"
+
+
+def test_write_new_file_refuses_symlinked_parent(tmp_path: Path, asset: Path) -> None:
+    """A symlinked parent directory must never receive team writes."""
+    import subprocess as sp
+
+    sys.path.insert(0, str(HELPER.parent))
+    import team_common as tc  # noqa: PLC0415  # type: ignore[import-not-found]
+
+    project = tmp_path / "proj"
+    (project / ".agent-team").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    # Swap the real .agent-team for a symlink to an outside directory.
+    (project / ".agent-team").rmdir()
+    (project / ".agent-team").symlink_to(outside)
+
+    try:
+        tc.write_new_file(project / ".agent-team" / "TEAM.md", b"x", 0o644)
+        raised = False
+    except tc.TeamToolError as exc:
+        raised = True
+        assert "not a real directory" in str(exc)
+    assert raised
+    assert not (outside / "TEAM.md").exists()
+
+    # Same guard on the replace path: symlinked parent refuses too.
+    legit = tmp_path / "legit"
+    legit.mkdir()
+    (legit / "f.txt").write_text("original\n")
+    (legit / "sub").mkdir()
+    (legit / "sub").rmdir()
+    (legit / "sub").symlink_to(outside)
+    try:
+        tc.atomic_replace_file(legit / "sub" / "f.txt", b"replaced\n")
+        raised2 = False
+    except tc.TeamToolError as exc:
+        raised2 = True
+        assert "not a real directory" in str(exc)
+    assert raised2
