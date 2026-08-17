@@ -178,6 +178,7 @@ def test_doctor_all_green_on_full_fixture(tmp_path: Path, asset: Path) -> None:
     assert codes["charter"] == "charter_current"
     assert codes["pointers"] == "pointers_canonical"
     assert codes["approval"] == "approval_complete"
+    assert codes["runtime_boundary"] == "runtime_boundary_present"
     assert codes["roster"] == "roster_valid"
     assert codes["topology"] == "topology_ready"
     assert codes["cli_profiles"] == "cli_profiles_ready"
@@ -227,3 +228,18 @@ def test_doctor_rejects_non_auto_claude_mode(tmp_path: Path, asset: Path) -> Non
     result = json.loads(stdout)
     cli = next(check for check in result["checks"] if check["id"] == "cli_profiles")
     assert cli["ok"] is False
+
+
+def test_doctor_reports_missing_runtime_boundary(tmp_path: Path, asset: Path) -> None:
+    project, base_dir, home = build_full_fixture(tmp_path, asset)
+    agents = (project / "AGENTS.md").read_text()
+    (project / "AGENTS.md").write_text(
+        agents.replace("<!-- agent-team-runtime-boundary:begin -->", "").replace(
+            "<!-- agent-team-runtime-boundary:end -->", ""
+        )
+    )
+    stdout, _, code = run_doctor(project, base_dir, home, asset, *GREEN_CLI_ARGS)
+    assert code == 3
+    result = json.loads(stdout)
+    boundary = next(check for check in result["checks"] if check["id"] == "runtime_boundary")
+    assert boundary["code"] == "runtime_boundary_missing"

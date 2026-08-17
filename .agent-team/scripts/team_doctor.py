@@ -69,6 +69,56 @@ def check_pointers(project: Path) -> dict[str, Any]:
     }
 
 
+BOUNDARY_BEGIN = "<!-- agent-team-runtime-boundary:begin -->"
+BOUNDARY_END = "<!-- agent-team-runtime-boundary:end -->"
+BOUNDARY_CLAUSES = (
+    "development collaboration control plane",
+    "does not enter the OQS product runtime",
+    "not constitute a second product AgentLoop",
+    "Pi remains the only AgentLoop",
+    "team doctor --json",
+)
+
+
+def check_runtime_boundary(project: Path) -> dict[str, Any]:
+    """Verify the M8 runtime-boundary clause is installed in AGENTS.md."""
+    path = project / "AGENTS.md"
+    if not path.exists() or path.is_symlink():
+        return {
+            "id": "runtime_boundary",
+            "label": "runtime boundary clause",
+            "ok": False,
+            "code": "runtime_boundary_missing",
+            "detail": ["AGENTS.md missing or a symlink"],
+            "nextStep": "restore the boundary section in AGENTS.md from the repository",
+        }
+    text = path.read_text(encoding="utf-8")
+    if BOUNDARY_BEGIN not in text or BOUNDARY_END not in text:
+        return {
+            "id": "runtime_boundary",
+            "label": "runtime boundary clause",
+            "ok": False,
+            "code": "runtime_boundary_missing",
+            "detail": ["boundary markers missing from AGENTS.md"],
+            "nextStep": "restore the boundary section in AGENTS.md from the repository",
+        }
+    block = text[text.index(BOUNDARY_BEGIN) + len(BOUNDARY_BEGIN) : text.index(BOUNDARY_END)]
+    normalized_block = re.sub(r"\s+", " ", block)
+    missing_clauses = [clause for clause in BOUNDARY_CLAUSES if clause not in normalized_block]
+    return {
+        "id": "runtime_boundary",
+        "label": "runtime boundary clause",
+        "ok": not missing_clauses,
+        "code": "runtime_boundary_present" if not missing_clauses else "runtime_boundary_incomplete",
+        "detail": {"missingClauses": missing_clauses},
+        "nextStep": (
+            None
+            if not missing_clauses
+            else "restore the boundary section in AGENTS.md from the repository"
+        ),
+    }
+
+
 def check_approval_matrix(approval_path: Path) -> dict[str, Any]:
     if not approval_path.exists():
         return {
@@ -165,8 +215,12 @@ def check_topology(project: Path, git_cli: str, roster_path: Path) -> dict[str, 
 
     seat_states = {}
     if roster_worktrees:
+        canonical_inventory = {
+            team_provision.canonical_path(path): entry
+            for path, entry in inventory.items()
+        }
         for seat, path in roster_worktrees.items():
-            entry = inventory.get(path)
+            entry = canonical_inventory.get(team_provision.canonical_path(path))
             seat_states[seat] = {
                 "path": path,
                 "exists": entry is not None,
@@ -418,6 +472,7 @@ def main() -> None:
             check_charter(project, Path(args.asset), meta_path),
             check_pointers(project),
             check_approval_matrix(approval_path),
+            check_runtime_boundary(project),
             check_roster(roster_path),
             check_topology(project, args.git_cli, roster_path),
             check_cli_profiles(

@@ -102,6 +102,26 @@
           "description": "sha256 fingerprint of the seat signing public key; empty until M4 key generation.",
           "anyOf": [{ "type": "string", "const": "" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }]
         },
+        "tabId": {
+          "description": "Resident terminal tab id recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "terminalHandle": {
+          "description": "Resident terminal handle recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "launchArgs": {
+          "description": "Effective launch arguments recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
+        "permissionMode": {
+          "description": "Effective permission mode recorded by the quickstart generation publisher.",
+          "type": "string",
+          "minLength": 1
+        },
         "updated_by": { "type": "string", "minLength": 1 },
         "updated_at": { "type": "string", "format": "date-time" }
       }

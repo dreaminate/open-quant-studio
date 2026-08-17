@@ -260,13 +260,29 @@ def write_new_file(path: Path, content: bytes, mode: int) -> dict[str, Any]:
 
 
 def write_backup(source: Path, backup_dir: Path, tag: str) -> dict[str, Any]:
-    """Byte-copy one file into the backup directory; never overwrites."""
+    """Byte-copy one file into the backup directory; never overwrites.
+
+    Content-addressed names: an existing backup with the same digest is
+    treated as already backed up; a colliding name with different bytes is
+    an error.
+    """
     identity = file_identity(source)
     backup_dir.mkdir(parents=True, exist_ok=True)
     if not backup_dir.is_dir() or backup_dir.is_symlink():
         raise TeamToolError(f"backup directory is not a real directory: {backup_dir}")
     name = f"{source.name}.{tag}.{identity['sha256'][:8]}.bak"
     target = backup_dir / name
+    if target.exists():
+        existing_sha = file_sha256(target)
+        if existing_sha == identity["sha256"]:
+            return {
+                "source": str(source),
+                "sourceSha256": identity["sha256"],
+                "backupPath": str(target),
+                "backupSha256": existing_sha,
+                "preExisting": True,
+            }
+        raise TeamToolError(f"backup name collision with different content: {target}")
     content = source.read_bytes()
     written = write_new_file(target, content, identity["mode"])
     return {
@@ -274,6 +290,7 @@ def write_backup(source: Path, backup_dir: Path, tag: str) -> dict[str, Any]:
         "sourceSha256": identity["sha256"],
         "backupPath": str(target),
         "backupSha256": written["sha256"],
+        "preExisting": False,
     }
 
 

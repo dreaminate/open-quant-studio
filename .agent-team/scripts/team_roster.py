@@ -50,6 +50,8 @@ SEAT_BRANCHES = (
     "principal-fullstack-claudex-integration",
     "frontend-kimi-integration",
 )
+# Session-record fields the quickstart generation publisher writes per seat.
+SEAT_SESSION_FIELDS = ("tabId", "terminalHandle", "launchArgs", "permissionMode")
 
 
 def validate_roster(roster: dict[str, Any]) -> dict[str, Any]:
@@ -146,6 +148,10 @@ def validate_roster(roster: dict[str, Any]) -> dict[str, Any]:
         if not ISO8601_RE.match(str(seat.get("updated_at", ""))):
             fail(f"{label}: updated_at must be an ISO-8601 timestamp")
 
+        for field in SEAT_SESSION_FIELDS:
+            if field in seat and not str(seat[field]).strip():
+                fail(f"{label}: {field} must be a nonempty string when present")
+
     if len(set(branches)) != len(branches):
         fail("seat branches must be unique")
     if len(set(worktree_paths)) != len(worktree_paths):
@@ -164,8 +170,10 @@ def write_initial_roster(
     plan: dict[str, Any],
     mutations: list[dict[str, Any]],
     _git: Any = None,  # reserved: main-commit resolution source for future callers
+    orca_worktree_ids: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build and atomically publish the initial generation-0 roster."""
+    orca_ids = orca_worktree_ids or {}
     leader_mutation = next(
         (m for m in mutations if m.get("kind") == "leader_branch_created"), None
     )
@@ -181,6 +189,7 @@ def write_initial_roster(
         plan["seats"]["leader-claude"].get("existingWorktreePath")
         or plan["seats"]["leader-claude"]["plannedPath"]
     )
+    leader_orca_id = orca_ids.get(leader_worktree_path)
     seats = []
     for key, branch in zip(SEAT_KEYS, SEAT_BRANCHES):
         seat_plan = plan["seats"][key]
@@ -189,9 +198,14 @@ def write_initial_roster(
             {
                 "seat": key,
                 "branch": branch,
-                "worktree": {"path": worktree_path, "orcaWorktreeId": None},
+                "worktree": {
+                    "path": worktree_path,
+                    "orcaWorktreeId": orca_ids.get(worktree_path),
+                },
                 "generation": 0,
-                "parent_id": None if key == "leader-claude" else leader_worktree_path,
+                "parent_id": None
+                if key == "leader-claude"
+                else (leader_orca_id or leader_worktree_path),
                 "owner": key,
                 "public_key_fingerprint": "",
                 "updated_by": "provisioner",
@@ -238,6 +252,45 @@ def load_roster(roster_path: Path) -> dict[str, Any]:
         raise tc.TeamToolError(f"roster_unreadable: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise tc.TeamToolError(f"roster_invalid_json: {exc}") from exc
+
+
+def write_generation_roster(
+    roster_path: Path,
+    roster: dict[str, Any],
+    per_seat_updates: dict[str, dict[str, str]],
+    updated_by: str,
+) -> dict[str, Any]:
+    """Publish the next generation: generation+1, per-seat session records,
+    atomic replace. Only the quickstart publisher may call this."""
+    next_generation = roster["generation"] + 1
+    now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    for seat in roster["seats"]:
+        seat["generation"] = next_generation
+        seat["updated_by"] = updated_by
+        seat["updated_at"] = now
+        updates = per_seat_updates.get(seat["seat"], {})
+        for field in SEAT_SESSION_FIELDS:
+            if field in updates:
+                seat[field] = updates[field]
+            else:
+                # A new generation never inherits the previous one's handles.
+                seat.pop(field, None)
+    roster["generation"] = next_generation
+    roster["updatedBy"] = updated_by
+    roster["updatedAt"] = now
+
+    validation = validate_roster(roster)
+    if not validation["ok"]:
+        return {
+            "ok": False,
+            "code": "roster_validation_failed",
+            "message": "; ".join(validation["errors"]),
+        }
+    roster_bytes = (
+        json.dumps(roster, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    )
+    tc.atomic_replace_file(roster_path, roster_bytes)
+    return {"ok": True, "code": "roster_generation_published", "generation": next_generation}
 
 
 def main() -> None:

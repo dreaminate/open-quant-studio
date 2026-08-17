@@ -102,6 +102,8 @@ Verify rejection codes (`errors[].code`): `envelope_version`, `sender_missing`,
 Doctor check codes: `charter_current` / `charter_current_meta_missing` /
 `charter_mismatch`, `pointers_canonical` / `pointer_mismatch`,
 `approval_complete` / `approval_incomplete` / `approval_missing`,
+`runtime_boundary_present` / `runtime_boundary_incomplete` /
+`runtime_boundary_missing`,
 `roster_valid` / `roster_invalid` / `roster_missing` / `roster_unreadable`,
 `topology_ready` / `topology_incomplete` / `git_inventory_failed`,
 `cli_profiles_ready` / `cli_profile_issue`, `orca_ready` /

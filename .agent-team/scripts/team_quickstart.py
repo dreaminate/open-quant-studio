@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import team_adopt  # noqa: E402  # type: ignore[import-not-found]
 import team_common as tc  # noqa: E402
+import team_provision  # noqa: E402  # type: ignore[import-not-found]
 import team_roster  # noqa: E402  # type: ignore[import-not-found]
 
 ORCA_START_SESSION_PLACEHOLDER = (
@@ -39,6 +40,32 @@ ORCA_START_SESSION_PLACEHOLDER = (
 )
 
 CLAUDE_SEATS = ("leader-claude", "principal-fullstack-claudex")
+
+# Agent token, launch arguments, and permission mode per seat (charter roster).
+SEAT_LAUNCH: dict[str, tuple[str, str, str]] = {
+    "leader-claude": ("claude", "model=deepseek-v4-pro[1m]; effort=max", "--permission-mode auto"),
+    "advisor-codex": (
+        "codex",
+        "model=gpt-5.6-sol; effort=ultra; service_tier=priority",
+        "dangerously-bypass-approvals-and-sandbox",
+    ),
+    "fullstack-opencode": (
+        "opencode",
+        "agent=delivery-deepseek-flash; model=deepseek-v4-flash; variant=max",
+        "auto + agent permission=allow",
+    ),
+    "review-opencode": (
+        "opencode",
+        "agent=review-opus; model=jiekou-ai/claude-opus-4-8-r",
+        "auto + agent permission=allow",
+    ),
+    "principal-fullstack-claudex": (
+        "claudex",
+        "model=gpt-5.6-sol; effort=max",
+        "--permission-mode auto",
+    ),
+    "frontend-kimi": ("kimi", "config model=kimi-k3; thinking=max", "Orca default --auto"),
+}
 
 
 def check_claude_auto_mode(home: Path, project: Path) -> dict[str, Any]:
@@ -98,6 +125,7 @@ def run_quickstart(
     roster_path: Path,
     orca_cli: str,
     home: Path,
+    mock_contract: bool = False,
 ) -> dict[str, Any]:
     results: dict[str, Any] = {"phases": {}}
 
@@ -162,26 +190,141 @@ def run_quickstart(
     results["phases"]["orca"] = {"ready": True}
 
     # Phase 5: session lifecycle.
-    prior_tabs = [
-        seat.get("tabId") for seat in roster["seats"] if seat.get("tabId")
-    ]
+    prior_tabs = [seat.get("tabId") for seat in roster["seats"] if seat.get("tabId")]
+    if not mock_contract:
+        results["phases"]["sessionLifecycle"] = {
+            "priorGenerationTabs": prior_tabs,
+            "cleanupRequired": bool(prior_tabs),
+            "state": "start_session_cli_pending",
+            "placeholder": ORCA_START_SESSION_PLACEHOLDER,
+        }
+        return {
+            "ok": False,
+            "code": "start_session_cli_pending",
+            "message": (
+                "Topology, roster, permission modes, and Orca runtime all verified, but the "
+                "Orca CLI surface for starting a seat session in a target worktree is unverified. "
+                "Pending placeholder retained; fail closed; no terminal was created."
+            ),
+            "phases": results["phases"],
+            "nextStep": "wait for Orca CLI verification (pending placeholder); do not bypass",
+            "changesApplied": False,
+        }
+
+    # Mock-contract mode (disposable E2E only): generation-bound cleanup and
+    # six session creations against the mock CLI.
+    listed, repo_info = team_provision.orca_repo_listed(orca_cli, str(project))
+    if not listed:
+        return fail("orca_repo_not_registered", "provision preview", results)
+    repo_id = repo_info.get("repoId")
+
+    code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--include-visual-layouts", "--json")
+    if code != 0:
+        return fail("terminal_inventory_unavailable", "open the local Orca app, then re-run", results)
+    try:
+        terminals = json.loads(stdout).get("terminals", [])
+    except json.JSONDecodeError as exc:
+        return fail("terminal_inventory_invalid", "inspect the orca terminal inventory", results, message=str(exc))
+
+    prior_tab_set = set(prior_tabs)
+    unrecorded = [term for term in terminals if term.get("tabId") not in prior_tab_set]
+    if terminals and not prior_tab_set:
+        return fail(
+            "team_cleanup_scope_ambiguous",
+            "inspect the resident terminals, then re-run",
+            results,
+            message="resident terminals exist but the roster records no prior generation; "
+            "cleanup fails closed rather than guessing.",
+        )
+    if unrecorded:
+        return fail(
+            "team_cleanup_scope_ambiguous",
+            "inspect the resident terminals, then re-run",
+            results,
+            message=f"{len(unrecorded)} terminal(s) not bound to the prior generation roster.",
+        )
+
+    for tab_id in prior_tabs:
+        handle = next(
+            (term["handle"] for term in terminals if term.get("tabId") == tab_id), None
+        )
+        if handle is None:
+            return fail("team_cleanup_scope_ambiguous", "inspect the resident terminals, then re-run", results)
+        close_code, close_out, _ = tc.orca_run(
+            orca_cli, "terminal", "close", "--terminal", str(handle), "--tab", "--json"
+        )
+        if close_code != 0:
+            return fail("terminal_close_failed", "inspect the close error, then re-run", results)
+        if not json.loads(close_out).get("ok"):
+            return fail("terminal_close_rejected", "inspect the close error, then re-run", results)
+
+    code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--include-visual-layouts", "--json")
+    if code != 0 or json.loads(stdout).get("totalCount", -1) != 0:
+        return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
+
+    updates: dict[str, dict[str, str]] = {}
+    tab_ids: set[str] = set()
+    handles: set[str] = set()
+    for seat in roster["seats"]:
+        seat_key = seat["seat"]
+        agent_token, launch_args, permission = SEAT_LAUNCH[seat_key]
+        selector = f"id:{repo_id}::{seat['worktree']['path']}"
+        start_code, start_out, start_err = tc.orca_run(
+            orca_cli,
+            "terminal",
+            "start",
+            "--worktree",
+            selector,
+            "--agent",
+            agent_token,
+            "--args",
+            f"{launch_args}; permission={permission}",
+            "--json",
+        )
+        if start_code != 0:
+            return fail(
+                "terminal_start_failed",
+                "inspect the start error, then re-run",
+                results,
+                message=f"{seat_key}: {start_err.decode('utf-8', 'replace')[:300]}",
+            )
+        receipt = json.loads(start_out)
+        tab_id = receipt.get("tabId")
+        handle = receipt.get("handle")
+        if not receipt.get("ok") or not tab_id or not handle:
+            return fail("terminal_start_invalid_receipt", "inspect the start error, then re-run", results)
+        if tab_id in tab_ids or handle in handles:
+            return fail("terminal_start_duplicate_identity", "inspect the start receipts, then re-run", results)
+        tab_ids.add(tab_id)
+        handles.add(handle)
+        updates[seat_key] = {
+            "tabId": tab_id,
+            "terminalHandle": handle,
+            "launchArgs": launch_args,
+            "permissionMode": permission,
+        }
+
+    publish = team_roster.write_generation_roster(
+        roster_path, roster, updates, updated_by="quickstart"
+    )
+    if not publish["ok"]:
+        return fail(publish["code"], "inspect the roster publish error", results, message=publish["message"])
+
     results["phases"]["sessionLifecycle"] = {
         "priorGenerationTabs": prior_tabs,
         "cleanupRequired": bool(prior_tabs),
-        "state": "start_session_cli_pending",
-        "placeholder": ORCA_START_SESSION_PLACEHOLDER,
+        "zeroStateProved": True,
+        "createdSessions": 6,
+        "state": "generation_published",
     }
     return {
-        "ok": False,
-        "code": "start_session_cli_pending",
-        "message": (
-            "Topology, roster, permission modes, and Orca runtime all verified, but the "
-            "Orca CLI surface for starting a seat session in a target worktree is unverified. "
-            "Pending placeholder retained; fail closed; no terminal was created."
-        ),
+        "ok": True,
+        "code": "quickstart_generation_published",
+        "generation": publish["generation"],
         "phases": results["phases"],
-        "nextStep": "wait for Orca CLI verification (pending placeholder); do not bypass",
-        "changesApplied": False,
+        "nextStep": "assign work through the Team; verify messages with `message verify`",
+        "changesApplied": True,
+        "rosterPath": str(roster_path),
     }
 
 
@@ -206,6 +349,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--roster-path", default=".agent-team/roster.json")
     parser.add_argument("--orca-cli", default="/Users/wzy/.homebrew/bin/orca")
     parser.add_argument("--home", default=str(Path.home()))
+    parser.add_argument(
+        "--mock-orca-contract",
+        action="store_true",
+        help="disposable E2E only: use the documented future Orca CLI contract via the mock CLI",
+    )
     return parser.parse_args()
 
 
@@ -226,6 +374,7 @@ def main() -> None:
             roster_path,
             args.orca_cli,
             Path(args.home),
+            mock_contract=args.mock_orca_contract,
         )
         tc.emit(result, 0 if result.get("ok") else 7)
     except tc.TeamToolError as exc:

@@ -33,6 +33,16 @@ ASSET_CONTENT = (
     b"## Review and Acceptance\n\ncanonical review\n"
 )
 
+BOUNDARY_BLOCK = b"""<!-- agent-team-runtime-boundary:begin -->
+**Team runtime boundary:** The Orca six-seat Agent Team is a development
+collaboration control plane only. It does not enter the OQS product runtime,
+does not constitute a second product AgentLoop, and Pi remains the only
+AgentLoop inside the product. Team tooling never ships, deploys, or executes
+inside product processes. Pre-release check: `team doctor --json` all green
+plus the E2E suite passing.
+<!-- agent-team-runtime-boundary:end -->
+"""
+
 STALE_CHARTER = (
     b"# Fixed Six-Seat Agent Team\n"
     b"\n"
@@ -72,12 +82,12 @@ def make_project(tmp_path: Path, stale: bool = True) -> Path:
     (agent_team / "migration-map.md").write_bytes(REAL_MIGRATION_MAP.read_bytes())
     if stale:
         (project / "AGENTS.md").write_bytes(
-            b"# Project agents\n\nSome local instructions.\n\n" + OLD_POINTER
+            b"# Project agents\n\nSome local instructions.\n\n" + BOUNDARY_BLOCK + b"\n" + OLD_POINTER
         )
         (project / "CLAUDE.md").write_bytes(OLD_POINTER)
     else:
         (project / "AGENTS.md").write_bytes(
-            b"# Project agents\n\nSome local instructions.\n\n" + CANONICAL_POINTER
+            b"# Project agents\n\nSome local instructions.\n\n" + BOUNDARY_BLOCK + b"\n" + CANONICAL_POINTER
         )
         (project / "CLAUDE.md").write_bytes(CANONICAL_POINTER)
     return project
@@ -148,6 +158,7 @@ def test_apply_roundtrip(tmp_path: Path, asset: Path) -> None:
     # Pointers replaced; surrounding content preserved.
     agents = (project / "AGENTS.md").read_bytes()
     assert agents.startswith(b"# Project agents\n\nSome local instructions.\n\n")
+    assert BOUNDARY_BLOCK in agents
     assert agents.endswith(CANONICAL_POINTER)
     assert (project / "CLAUDE.md").read_bytes() == CANONICAL_POINTER
     # Meta written with the right fields.
