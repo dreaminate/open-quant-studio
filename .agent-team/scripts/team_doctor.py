@@ -21,7 +21,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import team_adopt  # noqa: E402  # type: ignore[import-not-found]
-import team_common as tc  # noqa: E402
+import team_common as tc  # noqa: E402  # type: ignore[import-not-found]
 import team_identity  # noqa: E402  # type: ignore[import-not-found]
 import team_provision  # noqa: E402  # type: ignore[import-not-found]
 import team_quickstart  # noqa: E402  # type: ignore[import-not-found]
@@ -71,11 +71,12 @@ def check_pointers(project: Path) -> dict[str, Any]:
 
 BOUNDARY_BEGIN = "<!-- agent-team-runtime-boundary:begin -->"
 BOUNDARY_END = "<!-- agent-team-runtime-boundary:end -->"
+# Generic clauses every project's boundary block must contain; project-specific
+# wording (OQS, Pi, the game, ...) is free beyond these.
 BOUNDARY_CLAUSES = (
     "development collaboration control plane",
-    "does not enter the OQS product runtime",
-    "not constitute a second product AgentLoop",
-    "Pi remains the only AgentLoop",
+    "does not enter the",
+    "not constitute a second",
     "team doctor --json",
 )
 
@@ -431,7 +432,14 @@ def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
             "detail": [str(exc)],
             "nextStep": "inspect the orca terminal inventory",
         }
-    total = payload.get("totalCount") if isinstance(payload, dict) else len(payload)
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    total = (
+        result_wrapper.get("totalCount")
+        if isinstance(result_wrapper, dict)
+        else (payload.get("totalCount") if isinstance(payload, dict) else None)
+    )
+    if total is None:
+        total = len(payload) if isinstance(payload, dict) else -1
     return {
         "id": "terminals",
         "label": "terminal readiness",

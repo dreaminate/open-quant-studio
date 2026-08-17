@@ -31,40 +31,62 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import team_adopt  # noqa: E402  # type: ignore[import-not-found]
-import team_common as tc  # noqa: E402
+import team_common as tc  # noqa: E402  # type: ignore[import-not-found]
 import team_provision  # noqa: E402  # type: ignore[import-not-found]
 import team_roster  # noqa: E402  # type: ignore[import-not-found]
 
 ORCA_START_SESSION_PLACEHOLDER = (
     "<ORCA_START_SEAT_SESSION_PENDING_CLI_VERIFICATION>"
 )
+# Session-creation surface verified against the real 1.4.180 CLI (2026-08-18):
+# `orca terminal create --worktree <selector> --command "<cli>" --json` returns
+# result.terminal.{handle,tabId,worktreeId}. The placeholder above only
+# remains for the topology gate: quickstart still refuses to start sessions
+# until the complete six-worktree topology exists.
 
 CLAUDE_SEATS = ("leader-claude", "principal-fullstack-claudex")
 
-# Agent token, launch arguments, and permission mode per seat (charter roster).
-SEAT_LAUNCH: dict[str, tuple[str, str, str]] = {
-    "leader-claude": ("claude", "model=deepseek-v4-pro[1m]; effort=max", "--permission-mode auto"),
+# Agent token, launch arguments, permission mode, and launch command per seat
+# (charter roster). The launch command is what `orca terminal create
+# --command` receives; opencode/kimi seats carry their configuration in
+# profiles, not flags.
+SEAT_LAUNCH: dict[str, tuple[str, str, str, str]] = {
+    "leader-claude": (
+        "claude",
+        "model=deepseek-v4-pro[1m]; effort=max",
+        "--permission-mode auto",
+        "claude --permission-mode auto",
+    ),
     "advisor-codex": (
         "codex",
         "model=gpt-5.6-sol; effort=ultra; service_tier=priority",
         "dangerously-bypass-approvals-and-sandbox",
+        "codex --dangerously-bypass-approvals-and-sandbox",
     ),
     "fullstack-opencode": (
         "opencode",
         "agent=delivery-deepseek-flash; model=deepseek-v4-flash; variant=max",
         "auto + agent permission=allow",
+        "opencode",
     ),
     "review-opencode": (
         "opencode",
         "agent=review-opus; model=jiekou-ai/claude-opus-4-8-r",
         "auto + agent permission=allow",
+        "opencode",
     ),
     "principal-fullstack-claudex": (
         "claudex",
         "model=gpt-5.6-sol; effort=max",
         "--permission-mode auto",
+        "claudex --permission-mode auto",
     ),
-    "frontend-kimi": ("kimi", "config model=kimi-k3; thinking=max", "Orca default --auto"),
+    "frontend-kimi": (
+        "kimi",
+        "config model=kimi-k3; thinking=max",
+        "Orca default --auto",
+        "kimi",
+    ),
 }
 
 
@@ -224,7 +246,13 @@ def run_quickstart(
     if code != 0:
         return fail("terminal_inventory_unavailable", "open the local Orca app, then re-run", results)
     try:
-        terminals = json.loads(stdout).get("terminals", [])
+        inventory_payload = json.loads(stdout)
+        result_wrapper = inventory_payload.get("result") if isinstance(inventory_payload, dict) else None
+        terminals = (
+            result_wrapper.get("terminals", [])
+            if isinstance(result_wrapper, dict)
+            else inventory_payload.get("terminals", [])
+        )
     except json.JSONDecodeError as exc:
         return fail("terminal_inventory_invalid", "inspect the orca terminal inventory", results, message=str(exc))
 
@@ -269,34 +297,35 @@ def run_quickstart(
     handles: set[str] = set()
     for seat in roster["seats"]:
         seat_key = seat["seat"]
-        agent_token, launch_args, permission = SEAT_LAUNCH[seat_key]
+        _agent_token, launch_args, permission, launch_command = SEAT_LAUNCH[seat_key]
         selector = f"id:{repo_id}::{seat['worktree']['path']}"
         start_code, start_out, start_err = tc.orca_run(
             orca_cli,
             "terminal",
-            "start",
+            "create",
             "--worktree",
             selector,
-            "--agent",
-            agent_token,
-            "--args",
-            f"{launch_args}; permission={permission}",
+            "--command",
+            launch_command,
+            "--title",
+            seat_key,
             "--json",
         )
         if start_code != 0:
             return fail(
-                "terminal_start_failed",
-                "inspect the start error, then re-run",
+                "terminal_create_failed",
+                "inspect the create error, then re-run",
                 results,
                 message=f"{seat_key}: {start_err.decode('utf-8', 'replace')[:300]}",
             )
         receipt = json.loads(start_out)
-        tab_id = receipt.get("tabId")
-        handle = receipt.get("handle")
+        terminal = receipt.get("result", {}).get("terminal") if isinstance(receipt.get("result"), dict) else None
+        tab_id = (terminal or {}).get("tabId")
+        handle = (terminal or {}).get("handle")
         if not receipt.get("ok") or not tab_id or not handle:
-            return fail("terminal_start_invalid_receipt", "inspect the start error, then re-run", results)
+            return fail("terminal_create_invalid_receipt", "inspect the create error, then re-run", results)
         if tab_id in tab_ids or handle in handles:
-            return fail("terminal_start_duplicate_identity", "inspect the start receipts, then re-run", results)
+            return fail("terminal_create_duplicate_identity", "inspect the create receipts, then re-run", results)
         tab_ids.add(tab_id)
         handles.add(handle)
         updates[seat_key] = {

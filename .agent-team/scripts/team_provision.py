@@ -163,9 +163,16 @@ def orca_repo_listed(orca_cli: str, project_path: str) -> tuple[bool, Any]:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return False, {"code": "orca_repo_list_invalid_json", "error": str(exc)}
-    repos = payload if isinstance(payload, list) else payload.get("repos", [])
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    repos = (
+        result_wrapper.get("repos", [])
+        if isinstance(result_wrapper, dict)
+        else (payload if isinstance(payload, list) else payload.get("repos", []))
+    )
+    canonical_project = canonical_path(project_path)
     for repo in repos:
-        if repo.get("path") == project_path or repo.get("canonicalPath") == project_path:
+        repo_path = repo.get("path") or repo.get("canonicalPath")
+        if repo_path and canonical_path(str(repo_path)) == canonical_project:
             return True, {"repoId": repo.get("id"), "worktreeId": repo.get("worktreeId")}
     return False, {"code": "orca_repo_not_found", "reposListed": len(repos)}
 
@@ -471,7 +478,12 @@ def orca_clean_first_terminal(
         return {"ok": False, "code": "terminal_list_failed", "exit": code}
     try:
         payload = json.loads(stdout)
-        terminals = payload.get("terminals", [])
+        wrapper = payload.get("result") if isinstance(payload, dict) else None
+        terminals = (
+            wrapper.get("terminals", [])
+            if isinstance(wrapper, dict)
+            else payload.get("terminals", [])
+        )
     except json.JSONDecodeError as exc:
         return {"ok": False, "code": "terminal_list_invalid_json", "error": str(exc)}
     if any(term.get("tabId") != first_terminal.get("tabId") for term in terminals):
@@ -503,7 +515,10 @@ def orca_clean_first_terminal(
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return {"ok": False, "code": "terminal_list_invalid_json_after_close", "error": str(exc)}
-    if payload.get("totalCount", -1) != 0 or payload.get("terminals"):
+    wrapper = payload.get("result") if isinstance(payload, dict) else None
+    total = wrapper.get("totalCount") if isinstance(wrapper, dict) else payload.get("totalCount", -1)
+    terminals = wrapper.get("terminals", []) if isinstance(wrapper, dict) else payload.get("terminals", [])
+    if total != 0 or terminals:
         return {"ok": False, "code": "team_cleanup_incomplete"}
     return {"ok": True, "code": "first_terminal_cleaned"}
 

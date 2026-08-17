@@ -293,7 +293,10 @@ def test_scenario_e_no_write_handshake(e2e: dict) -> None:
     # The roster records receipts only; nothing beyond terminals + roster.
     state = mock_state(e2e["tmp"] / "orca-state.json")
     assert all(
-        term.get("agent") in ("claude", "codex", "opencode", "claudex", "kimi")
+        any(
+            term.get("command", "").startswith(cli)
+            for cli in ("claude", "codex", "opencode", "claudex", "kimi")
+        )
         for term in state["terminals"]
     )
 

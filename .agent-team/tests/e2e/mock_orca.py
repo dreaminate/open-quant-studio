@@ -217,10 +217,12 @@ def cmd_terminal_close(state: dict[str, Any], args: list[str]) -> None:
     emit({"ok": True, "closedTab": target["tabId"]}, 0)
 
 
-def cmd_terminal_start(state: dict[str, Any], args: list[str]) -> None:
+def cmd_terminal_create(state: dict[str, Any], args: list[str]) -> None:
+    # Mirrors the verified real CLI shape: orca terminal create --worktree
+    # <selector> --command <text> --json -> result.terminal.{handle,tabId,
+    # worktreeId}.
     path = worktree_selector_to_path(state, args[args.index("--worktree") + 1])
-    agent = args[args.index("--agent") + 1]
-    launch_args = args[args.index("--args") + 1] if "--args" in args else ""
+    command = args[args.index("--command") + 1] if "--command" in args else ""
     worktree = next((wt for wt in state["worktrees"] if wt["path"] == path), None)
     if worktree is None:
         emit({"ok": False, "error": f"worktree not managed: {path}"}, 1)
@@ -233,11 +235,22 @@ def cmd_terminal_start(state: dict[str, Any], args: list[str]) -> None:
             "tabId": tab_id,
             "handle": handle,
             "worktreeId": worktree["id"],
-            "agent": agent,
-            "args": launch_args,
+            "command": command,
         }
     )
-    emit({"ok": True, "tabId": tab_id, "handle": handle, "worktreeId": worktree["id"]}, 0)
+    emit(
+        {
+            "ok": True,
+            "result": {
+                "terminal": {
+                    "handle": handle,
+                    "tabId": tab_id,
+                    "worktreeId": worktree["id"],
+                }
+            },
+        },
+        0,
+    )
 
 
 def cmd_message_send(state: dict[str, Any], args: list[str]) -> None:
@@ -281,8 +294,8 @@ def main() -> None:
             cmd_terminal_list(state, args[2:])
         elif command == "terminal" and args[1] == "close":
             cmd_terminal_close(state, args[2:])
-        elif command == "terminal" and args[1] == "start":
-            cmd_terminal_start(state, args[2:])
+        elif command == "terminal" and args[1] == "create":
+            cmd_terminal_create(state, args[2:])
         elif command == "message" and args[1] == "send":
             cmd_message_send(state, args[2:])
         elif command == "message" and args[1] == "receive":
