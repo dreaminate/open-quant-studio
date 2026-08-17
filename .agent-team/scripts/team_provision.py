@@ -284,7 +284,9 @@ def build_plan(
         ),
         "acceptedCommit": accepted_commit,
         "leaderBootstrapCommit": leader_bootstrap_commit,
-        "firstBlockingCode": expected_first_blocking_code(main_class, seats),
+        "firstBlockingCode": expected_first_blocking_code(
+            main_class, seats, leader_bootstrap_commit
+        ),
         "nextStep": "review the plan, confirm the paths, then run: provision run --confirm-paths-digest <pathsDigest>",
     }
     if plan["conflicts"]:
@@ -299,13 +301,19 @@ def build_plan(
 
 
 def expected_first_blocking_code(
-    main_class: dict[str, Any], seats: dict[str, dict[str, Any]]
+    main_class: dict[str, Any],
+    seats: dict[str, dict[str, Any]],
+    leader_bootstrap_commit: str | None = None,
 ) -> str | None:
     """The first failure code a `run` will hit, for preview navigation."""
     if main_class["state"] == "existing_unattached_branch":
         return "main_attach_pending"
     leader = seats[SEATS[0]["key"]]
     if leader["branchExists"] and leader["worktree"] is None:
+        # Provenance supplied in the plan clears the verification gate; the
+        # next blocker is the Orca exact-branch CLI gap.
+        if leader_bootstrap_commit is not None:
+            return "team_create_cli_pending"
         return "leader_branch_baseline_unverified"
     if leader["worktree"] is None:
         return "team_create_cli_pending"
