@@ -86,7 +86,7 @@ def write_orca_stub(base_dir: Path, *, ready: bool, repo_path: str | None = None
     if ready:
         lines.append('case "$1" in')
         lines.append("  status)")
-        lines.append('    printf \'%s\\n\' \'{"ok":true,"runtimeId":"test-runtime","state":"ready"}\'')
+        lines.append('    printf \'%s\\n\' \'{"ok":true,"result":{"app":{"running":true},"runtime":{"state":"ready","reachable":true,"runtimeId":"test-runtime"}}}\'')
         lines.append("    ;;")
         lines.append("  repo)")
         lines.append(f'    printf \'%s\\n\' \'{{"repos":[{{"id":"repo-1","worktreeId":"wt-1","path":"{repo_path}"}}]}}\'')
@@ -421,7 +421,7 @@ def test_roster_validator_rejects_bad_fingerprint(tmp_path: Path) -> None:
 
 def test_write_initial_roster_generation_zero(tmp_path: Path) -> None:
     sys.path.insert(0, str(HELPER.parent))
-    import team_roster  # noqa: PLC0415
+    import team_roster  # noqa: PLC0415  # type: ignore[import-not-found]
 
     project, head = init_repo(tmp_path / "repo")
     base_dir = tmp_path / "worktrees"

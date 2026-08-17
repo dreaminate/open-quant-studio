@@ -71,7 +71,7 @@ def write_orca_ready_stub(base_dir: Path) -> Path:
         "#!/bin/sh\n"
         "case \"$1\" in\n"
         "  status)\n"
-        "    printf '%s\\n' '{\"ok\":true,\"runtimeId\":\"test-runtime\",\"state\":\"ready\"}'\n"
+        "    printf '%s\\n' '{\"ok\":true,\"result\":{\"app\":{\"running\":true},\"runtime\":{\"state\":\"ready\",\"reachable\":true,\"runtimeId\":\"test-runtime\"}}}'\n"
         "    ;;\n"
         "esac\n"
     )

@@ -125,7 +125,33 @@ def orca_status(orca_cli: str) -> dict[str, Any]:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return {"ready": False, "code": "orca_status_invalid_json", "error": str(exc)}
-    return {"ready": True, "code": "orca_ready", "payload": payload}
+    try:
+        result = payload.get("result") if isinstance(payload, dict) else None
+        app_running = bool(result.get("app", {}).get("running")) if isinstance(result, dict) else False
+        runtime_state = (
+            result.get("runtime", {}).get("state") if isinstance(result, dict) else None
+        )
+        runtime_reachable = bool(
+            result.get("runtime", {}).get("reachable") if isinstance(result, dict) else False
+        )
+    except (AttributeError, KeyError):
+        app_running, runtime_state, runtime_reachable = False, "unknown", False
+    ready = app_running and runtime_reachable and runtime_state not in (
+        None,
+        "not_running",
+        "none",
+        "",
+    )
+    if ready:
+        return {"ready": True, "code": "orca_ready", "payload": payload}
+    return {
+        "ready": False,
+        "code": "orca_runtime_unavailable",
+        "payload": payload,
+        "appRunning": app_running,
+        "runtimeState": runtime_state,
+        "runtimeReachable": runtime_reachable,
+    }
 
 
 def orca_repo_listed(orca_cli: str, project_path: str) -> tuple[bool, Any]:
