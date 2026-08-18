@@ -46,6 +46,17 @@ ORCA_START_SESSION_PLACEHOLDER = (
 
 CLAUDE_SEATS = ("leader-claude", "principal-fullstack-claudex")
 
+# Permission parameters that disable approvals/sandbox. Launching a seat
+# with one of these requires a per-occurrence, run-scoped authorization
+# token (--authorize-high-privilege <seat>=<exact-parameter>); it is never
+# persisted and never inherited from a previous run.
+HIGH_PRIVILEGE_PERMISSIONS = frozenset(
+    {
+        "dangerously-bypass-approvals-and-sandbox",
+        "dangerously-skip-permissions",
+    }
+)
+
 # Agent token, launch arguments, permission mode, and launch command per seat
 # (charter roster). The launch command is what `orca terminal create
 # --command` receives; opencode/kimi seats carry their configuration in
@@ -148,6 +159,7 @@ def run_quickstart(
     orca_cli: str,
     home: Path,
     mock_contract: bool = False,
+    authorized_high_privilege: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     if mock_contract:
         team_provision.require_mock_cli(orca_cli)
@@ -212,6 +224,36 @@ def run_quickstart(
             message=f"orca status exited {code}",
         )
     results["phases"]["orca"] = {"ready": True}
+
+    # Per-occurrence authorization gate for high-privilege launch
+    # parameters: every seat whose charter permission parameter disables
+    # approvals/sandbox must carry an exact authorization entry for THIS
+    # run. The entries are never persisted and never inherit.
+    high_privilege_required = {
+        seat_key: permission
+        for seat_key, (_agent, _args, permission, _cmd) in SEAT_LAUNCH.items()
+        if permission in HIGH_PRIVILEGE_PERMISSIONS
+    }
+    authorized_map = {}
+    for entry in authorized_high_privilege:
+        if "=" in entry:
+            seat_key, permission = entry.split("=", 1)
+            authorized_map[seat_key] = permission
+    missing = [
+        f"{seat_key}={permission}"
+        for seat_key, permission in sorted(high_privilege_required.items())
+        if authorized_map.get(seat_key) != permission
+    ]
+    if missing:
+        return fail(
+            "high_privilege_launch_requires_authorization",
+            "re-run with --authorize-high-privilege <seat>=<exact-parameter> for this run only",
+            results,
+            message=(
+                "Launching these seats requires a per-occurrence authorization naming the "
+                "exact parameter: " + ", ".join(missing)
+            ),
+        )
 
     # Phase 5: session lifecycle — the verified real contract (terminal
     # create); the mock CLI mirrors the same shapes for E2E runs.
@@ -402,6 +444,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="disposable E2E only: use the documented future Orca CLI contract via the mock CLI",
     )
+    parser.add_argument(
+        "--authorize-high-privilege",
+        action="append",
+        default=[],
+        metavar="SEAT=PARAMETER",
+        help="per-occurrence authorization for a high-privilege launch parameter "
+        "(this run only; never persisted)",
+    )
     return parser.parse_args()
 
 
@@ -423,6 +473,7 @@ def main() -> None:
             args.orca_cli,
             Path(args.home),
             mock_contract=args.mock_orca_contract,
+            authorized_high_privilege=tuple(args.authorize_high_privilege),
         )
         tc.emit(result, 0 if result.get("ok") else 7)
     except tc.TeamToolError as exc:

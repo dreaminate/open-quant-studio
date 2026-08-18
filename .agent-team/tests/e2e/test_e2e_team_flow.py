@@ -159,6 +159,8 @@ def quickstart_run(project: Path, home: Path, asset: Path, mock_env: dict) -> di
         "--orca-cli", str(MOCK_ORCA),
         "--home", str(home),
         "--mock-orca-contract",
+        "--authorize-high-privilege",
+        "advisor-codex=dangerously-bypass-approvals-and-sandbox",
         env=mock_env,
     )
     assert code == 0, stderr
@@ -278,6 +280,8 @@ def test_scenario_d_unrecorded_terminal_blocks_cleanup(e2e: dict) -> None:
         "--orca-cli", str(MOCK_ORCA),
         "--home", str(e2e["home"]),
         "--mock-orca-contract",
+        "--authorize-high-privilege",
+        "advisor-codex=dangerously-bypass-approvals-and-sandbox",
         env=e2e["mock_env"],
     )
     assert code == 7
