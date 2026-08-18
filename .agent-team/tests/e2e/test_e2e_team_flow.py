@@ -252,12 +252,20 @@ def test_scenario_c_idempotent_restart(e2e: dict) -> None:
 def test_scenario_d_unrecorded_terminal_blocks_cleanup(e2e: dict) -> None:
     provision_run(e2e["project"], e2e["base_dir"], e2e["mock_env"], e2e["head"])
     quickstart_run(e2e["project"], e2e["home"], e2e["asset"], e2e["mock_env"])
-    # Inject an unrelated resident terminal: cleanup must fail closed and
-    # close nothing.
+    # Inject an unrecorded terminal bound to a SEAT worktree (in cleanup
+    # scope): cleanup must fail closed and close nothing. A terminal on an
+    # unrelated worktree would be out of scope and left alone.
     state_path = e2e["tmp"] / "orca-state.json"
+    roster = json.loads((e2e["project"] / ".agent-team" / "roster.json").read_text())
+    seat_worktree_id = roster["seats"][0]["worktree"]["orcaWorktreeId"]
     state = mock_state(state_path)
     state["terminals"].append(
-        {"id": "term-9999", "tabId": "tab-9999", "handle": "term-9999", "worktreeId": "wt-0000"}
+        {
+            "id": "term-9999",
+            "tabId": "tab-9999",
+            "handle": "term-9999",
+            "worktreeId": seat_worktree_id,
+        }
     )
     state_path.write_text(json.dumps(state))
 

@@ -117,11 +117,12 @@ def test_preview_main_attached_no_seat_branches(tmp_path: Path) -> None:
     assert leader["branchExists"] is False
     assert result["plannedCreates"] == {
         "main": False,
-        "leaderBranch": True,
         "teamWorktree": True,
         "employeeWorktrees": list(SEAT_KEYS[1:]),
     }
-    assert result["firstBlockingCode"] == "team_create_cli_pending"
+    # Nothing deterministic blocks: Orca-first creation proceeds, and the
+    # remaining gates are environmental (runtime, registration).
+    assert result["firstBlockingCode"] is None
     assert result["pathsDigest"]
 
 
@@ -142,7 +143,8 @@ def test_preview_main_unattached_stops_at_attach_placeholder(tmp_path: Path) -> 
     assert result["main"]["placeholder"]
 
 
-def test_run_creates_leader_branch_then_stops_at_orca(tmp_path: Path) -> None:
+def test_run_stops_at_orca_gate_without_branch_creation(tmp_path: Path) -> None:
+    """Orca-first: no git branch is created; the run stops at the runtime gate."""
     project, head = init_repo(tmp_path / "repo")
     base_dir = tmp_path / "worktrees"
     base_dir.mkdir()
@@ -158,83 +160,33 @@ def test_run_creates_leader_branch_then_stops_at_orca(tmp_path: Path) -> None:
     assert code == 7
     result = parse(stdout)
     assert result["code"] == "orca_runtime_unavailable"
-    assert result["changesApplied"] is True
-    assert any(m["kind"] == "leader_branch_created" for m in result["mutations"])
-    # The Leader branch was created at the accepted commit; no worktree created.
-    assert git("rev-parse", "leader-claude-integration", cwd=project).stdout.strip() == head
+    assert result["changesApplied"] is False
+    assert result["mutations"] == []
+    # Orca-first: the Leader branch is created by Orca together with its
+    # worktree — never by a separate git branch command.
+    assert git("show-ref", "--verify", "--quiet", "refs/heads/leader-claude-integration", cwd=project).returncode == 1
     worktrees = git("worktree", "list", "--porcelain", cwd=project).stdout
     assert worktrees.count("worktree ") == 1
     assert result["agentsStarted"] is False
 
 
-def test_run_existing_leader_branch_requires_provenance(tmp_path: Path) -> None:
+def test_run_pre_existing_leader_branch_is_a_collision(tmp_path: Path) -> None:
+    """A pre-existing Leader branch forces the CLI to auto-suffix: fail closed."""
     project, head = init_repo(tmp_path / "repo")
     assert git("branch", "leader-claude-integration", head, cwd=project).returncode == 0
     base_dir = tmp_path / "worktrees"
     base_dir.mkdir()
     write_orca_stub(base_dir, ready=False)
 
-    # Preview without provenance, then run without provenance: the digest binds
-    # exactly what was shown, and the run fails closed at the missing receipt.
     stdout, _, code = run_helper(project, "preview", base_dir, "--accepted-commit", head)
     digest = parse(stdout)["pathsDigest"]
     stdout, _, code = run_helper(
         project, "run", base_dir, "--confirm-paths-digest", digest, "--accepted-commit", head
     )
     assert code == 7
-    assert parse(stdout)["code"] == "leader_branch_baseline_unverified"
-
-    # With provenance in the plan: a fresh preview binds it, then the run
-    # proceeds past the provenance gate to the Orca phase.
-    stdout, _, code = run_helper(
-        project,
-        "preview",
-        base_dir,
-        "--accepted-commit",
-        head,
-        "--leader-bootstrap-commit",
-        head,
-    )
-    digest2 = parse(stdout)["pathsDigest"]
-    stdout, _, code = run_helper(
-        project,
-        "run",
-        base_dir,
-        "--confirm-paths-digest",
-        digest2,
-        "--accepted-commit",
-        head,
-        "--leader-bootstrap-commit",
-        head,
-    )
-    assert code == 7
-    assert parse(stdout)["code"] == "orca_runtime_unavailable"
-
-
-def test_run_stops_at_team_placeholder_when_orca_ready(tmp_path: Path) -> None:
-    project, head = init_repo(tmp_path / "repo")
-    base_dir = tmp_path / "worktrees"
-    base_dir.mkdir()
-    write_orca_stub(base_dir, ready=True, repo_path=str(project))
-
-    stdout, _, code = run_helper(project, "preview", base_dir, "--accepted-commit", head)
-    digest = parse(stdout)["pathsDigest"]
-
-    stdout, _, code = run_helper(
-        project,
-        "run",
-        base_dir,
-        "--confirm-paths-digest",
-        digest,
-        "--accepted-commit",
-        head,
-    )
-    assert code == 7
     result = parse(stdout)
-    assert result["code"] == "team_create_cli_pending"
-    # Leader branch was created in phase 2, then the documented CLI gap stopped phase 4.
-    assert any(m["kind"] == "leader_branch_created" for m in result["mutations"])
-    assert result["rosterPublished"] is False
+    assert result["code"] == "leader_branch_collision_cleanup_required"
+    assert result["changesApplied"] is False
 
 
 def test_run_rejects_wrong_digest(tmp_path: Path) -> None:
@@ -252,13 +204,15 @@ def test_run_rejects_wrong_digest(tmp_path: Path) -> None:
     assert git("show-ref", "--verify", "--quiet", "refs/heads/leader-claude-integration", cwd=project).returncode == 1
 
 
-def test_run_requires_accepted_commit_for_creation(tmp_path: Path) -> None:
-    project, _ = init_repo(tmp_path / "repo")
+def test_run_requires_accepted_commit_for_absent_main(tmp_path: Path) -> None:
+    """Creating an absent main branch still requires an accepted commit."""
+    project, _ = init_repo(tmp_path / "repo", branch="master")
     base_dir = tmp_path / "worktrees"
     base_dir.mkdir()
     write_orca_stub(base_dir, ready=False)
 
     stdout, _, code = run_helper(project, "preview", base_dir)
+    assert code == 0
     digest = parse(stdout)["pathsDigest"]
     stdout, _, code = run_helper(project, "run", base_dir, "--confirm-paths-digest", digest)
     assert code == 7

@@ -114,40 +114,53 @@ def worktree_selector_to_path(state: dict[str, Any], selector: str) -> str:
 
 
 def cmd_worktree_create(state: dict[str, Any], args: list[str]) -> None:
-    repo_id = args[args.index("--repo") + 1]
-    branch = args[args.index("--branch") + 1]
-    path = args[args.index("--path") + 1]
-    parent = None
-    if "--parent" in args:
-        parent = args[args.index("--parent") + 1]
+    # Mirrors the verified real CLI: orca worktree create --repo id:<id>
+    # --name <name> --base-branch <base> --no-parent --json. The branch is
+    # derived from the name; a collision auto-suffixes (mirrored); the base
+    # branch must exist.
+    repo_selector = args[args.index("--repo") + 1]
+    repo_id = repo_selector[3:] if repo_selector.startswith("id:") else repo_selector
+    name = args[args.index("--name") + 1]
+    base = args[args.index("--base-branch") + 1]
     repo = find_repo(state, repo_id)
     repo_path = Path(repo["path"])
-    target = Path(path)
 
-    # Exact-branch contract: the branch must exist and the name must match
-    # byte-for-byte; any prefix/suffix derivation is refused.
-    code, out = git("show-ref", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo_path)
+    code, _ = git("show-ref", "--verify", "--quiet", f"refs/heads/{base}", cwd=repo_path)
     if code != 0:
-        emit({"ok": False, "error": f"branch {branch} does not exist exactly"}, 1)
-    if target.exists():
-        emit({"ok": False, "error": f"path already exists: {path}"}, 1)
-    if parent is not None and not any(wt["id"] == parent for wt in state["worktrees"]):
-        emit({"ok": False, "error": f"parent worktree not found: {parent}"}, 1)
+        emit({"ok": False, "error": f"base branch {base} does not exist"}, 1)
 
-    code, out = git("worktree", "add", str(target), branch, cwd=repo_path)
+    final_branch = name
+    suffix = 2
+    while True:
+        code, _ = git(
+            "show-ref", "--verify", "--quiet", f"refs/heads/{final_branch}", cwd=repo_path
+        )
+        if code == 1:
+            # Absent: the name is free.
+            break
+        if code == 0:
+            # Collision: mirror the real CLI's auto-suffix.
+            final_branch = f"{name}-{suffix}"
+            suffix += 1
+            continue
+        emit({"ok": False, "error": f"git branch probe failed with exit {code}"}, 1)
+
+    workspaces_root = Path(os.environ[STATE_ENV]).parent / "workspaces" / repo_path.name
+    target = workspaces_root / final_branch
+    code, out = git("worktree", "add", "-b", final_branch, str(target), base, cwd=repo_path)
     if code != 0:
         emit({"ok": False, "error": f"git worktree add failed: {out}"}, 1)
 
-    worktree_id = next_id(state, "wt")
     canonical_target = os.path.realpath(str(target))
+    worktree_id = f"{repo_id}::{canonical_target}"
     state["worktrees"].append(
         {
             "id": worktree_id,
             "repoId": repo_id,
             "path": canonical_target,
-            "branch": branch,
-            "parentId": parent,
-            "displayName": None,
+            "branch": f"refs/heads/{final_branch}",
+            "parentWorktreeId": None,
+            "displayName": final_branch,
         }
     )
     # Worktree creation creates a first saved terminal (as the real Orca does).
@@ -156,19 +169,49 @@ def cmd_worktree_create(state: dict[str, Any], args: list[str]) -> None:
     state["terminals"].append(
         {"id": handle, "tabId": tab_id, "handle": handle, "worktreeId": worktree_id}
     )
+    _head_code, head_out = git("rev-parse", "HEAD", cwd=Path(canonical_target))
     emit(
         {
             "ok": True,
-            "worktree": {
-                "id": worktree_id,
-                "path": canonical_target,
-                "branch": branch,
-                "parentId": parent,
+            "result": {
+                "worktree": {
+                    "id": worktree_id,
+                    "path": canonical_target,
+                    "branch": f"refs/heads/{final_branch}",
+                    "head": head_out.strip(),
+                    "parentWorktreeId": None,
+                    "displayName": final_branch,
+                },
+                "firstTerminal": {"tabId": tab_id, "handle": handle},
             },
-            "firstTerminal": {"tabId": tab_id, "handle": handle},
         },
         0,
     )
+
+
+def cmd_worktree_set(state: dict[str, Any], args: list[str]) -> None:
+    # Mirrors the verified real CLI: orca worktree set --worktree <selector>
+    # [--display-name <name>] [--parent-worktree <selector>] [--no-parent].
+    selector = args[args.index("--worktree") + 1]
+    path = worktree_selector_to_path(state, selector)
+    worktree = next((wt for wt in state["worktrees"] if wt["path"] == path), None)
+    if worktree is None:
+        emit({"ok": False, "error": f"worktree not managed: {path}"}, 1)
+        raise SystemExit(1)  # unreachable
+    if "--display-name" in args:
+        worktree["displayName"] = args[args.index("--display-name") + 1]
+    if "--parent-worktree" in args:
+        parent_path = worktree_selector_to_path(
+            state, args[args.index("--parent-worktree") + 1]
+        )
+        parent = next((wt for wt in state["worktrees"] if wt["path"] == parent_path), None)
+        if parent is None:
+            emit({"ok": False, "error": f"parent worktree not managed: {parent_path}"}, 1)
+            raise SystemExit(1)  # unreachable
+        worktree["parentWorktreeId"] = parent["id"]
+    if "--no-parent" in args:
+        worktree["parentWorktreeId"] = None
+    emit({"ok": True, "result": {"worktree": worktree}}, 0)
 
 
 def cmd_worktree_list(state: dict[str, Any], args: list[str]) -> None:
@@ -288,6 +331,8 @@ def main() -> None:
             cmd_repo_list(state, args[2:])
         elif command == "worktree" and args[1] == "create":
             cmd_worktree_create(state, args[2:])
+        elif command == "worktree" and args[1] == "set":
+            cmd_worktree_set(state, args[2:])
         elif command == "worktree" and args[1] == "list":
             cmd_worktree_list(state, args[2:])
         elif command == "terminal" and args[1] == "list":

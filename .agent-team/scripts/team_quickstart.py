@@ -213,30 +213,9 @@ def run_quickstart(
         )
     results["phases"]["orca"] = {"ready": True}
 
-    # Phase 5: session lifecycle.
+    # Phase 5: session lifecycle — the verified real contract (terminal
+    # create); the mock CLI mirrors the same shapes for E2E runs.
     prior_tabs = [seat.get("tabId") for seat in roster["seats"] if seat.get("tabId")]
-    if not mock_contract:
-        results["phases"]["sessionLifecycle"] = {
-            "priorGenerationTabs": prior_tabs,
-            "cleanupRequired": bool(prior_tabs),
-            "state": "start_session_cli_pending",
-            "placeholder": ORCA_START_SESSION_PLACEHOLDER,
-        }
-        return {
-            "ok": False,
-            "code": "start_session_cli_pending",
-            "message": (
-                "Topology, roster, permission modes, and Orca runtime all verified, but the "
-                "Orca CLI surface for starting a seat session in a target worktree is unverified. "
-                "Pending placeholder retained; fail closed; no terminal was created."
-            ),
-            "phases": results["phases"],
-            "nextStep": "wait for Orca CLI verification (pending placeholder); do not bypass",
-            "changesApplied": False,
-        }
-
-    # Mock-contract mode (disposable E2E only): generation-bound cleanup and
-    # six session creations against the mock CLI.
     listed, repo_info = team_provision.orca_repo_listed(orca_cli, str(project))
     if not listed:
         return fail("orca_repo_not_registered", "provision preview", results)
@@ -248,13 +227,32 @@ def run_quickstart(
     try:
         inventory_payload = json.loads(stdout)
         result_wrapper = inventory_payload.get("result") if isinstance(inventory_payload, dict) else None
-        terminals = (
+        all_terminals = (
             result_wrapper.get("terminals", [])
             if isinstance(result_wrapper, dict)
             else inventory_payload.get("terminals", [])
         )
     except json.JSONDecodeError as exc:
         return fail("terminal_inventory_invalid", "inspect the orca terminal inventory", results, message=str(exc))
+
+    # Scope to THIS project's worktrees: other projects' resident terminals
+    # on a shared runtime are never cleanup targets or readiness signals.
+    roster_ids = {
+        seat["worktree"]["orcaWorktreeId"]
+        for seat in roster["seats"]
+        if seat["worktree"].get("orcaWorktreeId")
+    }
+    roster_paths = {
+        team_provision.canonical_path(seat["worktree"]["path"])
+        for seat in roster["seats"]
+    }
+    terminals = [
+        term
+        for term in all_terminals
+        if term.get("worktreeId") in roster_ids
+        or team_provision.canonical_path(str(term.get("worktreePath") or term.get("path") or ""))
+        in roster_paths
+    ]
 
     prior_tab_set = set(prior_tabs)
     unrecorded = [term for term in terminals if term.get("tabId") not in prior_tab_set]
@@ -289,7 +287,26 @@ def run_quickstart(
             return fail("terminal_close_rejected", "inspect the close error, then re-run", results)
 
     code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--include-visual-layouts", "--json")
-    if code != 0 or json.loads(stdout).get("totalCount", -1) != 0:
+    if code != 0:
+        return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
+    try:
+        zero_payload = json.loads(stdout)
+        zero_wrapper = zero_payload.get("result") if isinstance(zero_payload, dict) else None
+        zero_all = (
+            zero_wrapper.get("terminals", [])
+            if isinstance(zero_wrapper, dict)
+            else zero_payload.get("terminals", [])
+        )
+    except json.JSONDecodeError:
+        zero_all = []
+    zero_scoped = [
+        term
+        for term in zero_all
+        if term.get("worktreeId") in roster_ids
+        or team_provision.canonical_path(str(term.get("worktreePath") or term.get("path") or ""))
+        in roster_paths
+    ]
+    if zero_scoped:
         return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
 
     updates: dict[str, dict[str, str]] = {}
