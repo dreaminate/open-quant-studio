@@ -135,10 +135,15 @@ def cmd_worktree_create(state: dict[str, Any], args: list[str]) -> None:
         code, _ = git(
             "show-ref", "--verify", "--quiet", f"refs/heads/{final_branch}", cwd=repo_path
         )
-        if code != 0:
+        if code == 1:
+            # Absent: the name is free.
             break
-        final_branch = f"{name}-{suffix}"
-        suffix += 1
+        if code == 0:
+            # Collision: mirror the real CLI's auto-suffix.
+            final_branch = f"{name}-{suffix}"
+            suffix += 1
+            continue
+        emit({"ok": False, "error": f"git branch probe failed with exit {code}"}, 1)
 
     workspaces_root = Path(os.environ[STATE_ENV]).parent / "workspaces" / repo_path.name
     target = workspaces_root / final_branch
@@ -202,6 +207,7 @@ def cmd_worktree_set(state: dict[str, Any], args: list[str]) -> None:
         parent = next((wt for wt in state["worktrees"] if wt["path"] == parent_path), None)
         if parent is None:
             emit({"ok": False, "error": f"parent worktree not managed: {parent_path}"}, 1)
+            raise SystemExit(1)  # unreachable
         worktree["parentWorktreeId"] = parent["id"]
     if "--no-parent" in args:
         worktree["parentWorktreeId"] = None

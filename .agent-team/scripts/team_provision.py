@@ -288,6 +288,18 @@ def build_plan(
         "firstBlockingCode": expected_first_blocking_code(
             main_class, seats, leader_bootstrap_commit
         ),
+        # Authorization surface: team worktrees are created by the Orca CLI
+        # at Orca-chosen paths, NOT at the planned local paths. The confirmed
+        # digest binds this disclosure; receipts record the actual paths.
+        "orcaChosenPaths": {
+            "applies": True,
+            "note": (
+                "team and employee worktrees are created by the Orca CLI at Orca-chosen "
+                "paths under the Orca workspaces root (~/orca/workspaces/<repo>/<branch>); "
+                "actual paths are recorded from creation receipts and the Git inventory, "
+                "never assumed from the local plan"
+            ),
+        },
         "nextStep": "review the plan, confirm the paths, then run: provision run --confirm-paths-digest <pathsDigest>",
     }
     if plan["conflicts"]:

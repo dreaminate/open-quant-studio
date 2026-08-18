@@ -410,7 +410,7 @@ def check_identity_self_test(project: str) -> dict[str, Any]:
     }
 
 
-def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
+def check_terminal_readiness(orca_cli: str, roster: dict[str, Any] | None) -> dict[str, Any]:
     code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--json")
     if code != 0:
         return {
@@ -438,20 +438,35 @@ def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
         if isinstance(result_wrapper, dict)
         else (payload.get("terminals", []) if isinstance(payload, dict) else [])
     )
-    total = (
-        result_wrapper.get("totalCount")
-        if isinstance(result_wrapper, dict)
-        else (payload.get("totalCount") if isinstance(payload, dict) else None)
-    )
-    if total is None:
-        # Fall back to the terminals list length; never count payload keys.
-        total = len(terminals) if isinstance(terminals, list) else -1
+    # Scope to this project's worktrees when a roster exists: other
+    # projects' terminals on a shared runtime are not a readiness signal.
+    if roster is not None:
+        ids = {
+            seat["worktree"]["orcaWorktreeId"]
+            for seat in roster.get("seats", [])
+            if (seat.get("worktree") or {}).get("orcaWorktreeId")
+        }
+        paths = {
+            team_provision.canonical_path((seat.get("worktree") or {}).get("path", ""))
+            for seat in roster.get("seats", [])
+            if (seat.get("worktree") or {}).get("path")
+        }
+        terminals = [
+            term
+            for term in terminals
+            if term.get("worktreeId") in ids
+            or team_provision.canonical_path(
+                str(term.get("worktreePath") or term.get("path") or "")
+            )
+            in paths
+        ]
+    total = len(terminals) if isinstance(terminals, list) else -1
     return {
         "id": "terminals",
         "label": "terminal readiness",
         "ok": total == 0,
         "code": "terminals_clean" if total == 0 else "resident_terminals_present",
-        "detail": {"totalCount": total},
+        "detail": {"totalCount": total, "scopedToProject": roster is not None},
         "nextStep": None if total == 0 else "quickstart (generation-bound cleanup) requires user authorization",
     }
 
@@ -482,6 +497,14 @@ def main() -> None:
         approval_path = project / approval_path
 
     try:
+        roster_for_terminals: dict[str, Any] | None = None
+        if roster_path.exists():
+            try:
+                loaded_roster = team_roster.load_roster(roster_path)
+                if team_roster.validate_roster(loaded_roster)["ok"]:
+                    roster_for_terminals = loaded_roster
+            except tc.TeamToolError:
+                pass
         checks = [
             check_charter(project, Path(args.asset), meta_path),
             check_pointers(project),
@@ -501,7 +524,7 @@ def main() -> None:
                 project,
             ),
             check_orca(args.orca_cli),
-            check_terminal_readiness(args.orca_cli),
+            check_terminal_readiness(args.orca_cli, roster_for_terminals),
             check_identity_self_test(str(project)),
         ]
     except tc.TeamToolError as exc:

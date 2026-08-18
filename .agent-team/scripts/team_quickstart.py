@@ -227,13 +227,32 @@ def run_quickstart(
     try:
         inventory_payload = json.loads(stdout)
         result_wrapper = inventory_payload.get("result") if isinstance(inventory_payload, dict) else None
-        terminals = (
+        all_terminals = (
             result_wrapper.get("terminals", [])
             if isinstance(result_wrapper, dict)
             else inventory_payload.get("terminals", [])
         )
     except json.JSONDecodeError as exc:
         return fail("terminal_inventory_invalid", "inspect the orca terminal inventory", results, message=str(exc))
+
+    # Scope to THIS project's worktrees: other projects' resident terminals
+    # on a shared runtime are never cleanup targets or readiness signals.
+    roster_ids = {
+        seat["worktree"]["orcaWorktreeId"]
+        for seat in roster["seats"]
+        if seat["worktree"].get("orcaWorktreeId")
+    }
+    roster_paths = {
+        team_provision.canonical_path(seat["worktree"]["path"])
+        for seat in roster["seats"]
+    }
+    terminals = [
+        term
+        for term in all_terminals
+        if term.get("worktreeId") in roster_ids
+        or team_provision.canonical_path(str(term.get("worktreePath") or term.get("path") or ""))
+        in roster_paths
+    ]
 
     prior_tab_set = set(prior_tabs)
     unrecorded = [term for term in terminals if term.get("tabId") not in prior_tab_set]
@@ -273,14 +292,21 @@ def run_quickstart(
     try:
         zero_payload = json.loads(stdout)
         zero_wrapper = zero_payload.get("result") if isinstance(zero_payload, dict) else None
-        zero_total = (
-            zero_wrapper.get("totalCount")
+        zero_all = (
+            zero_wrapper.get("terminals", [])
             if isinstance(zero_wrapper, dict)
-            else zero_payload.get("totalCount", -1)
+            else zero_payload.get("terminals", [])
         )
     except json.JSONDecodeError:
-        zero_total = -1
-    if zero_total != 0:
+        zero_all = []
+    zero_scoped = [
+        term
+        for term in zero_all
+        if term.get("worktreeId") in roster_ids
+        or team_provision.canonical_path(str(term.get("worktreePath") or term.get("path") or ""))
+        in roster_paths
+    ]
+    if zero_scoped:
         return fail("team_cleanup_incomplete", "inspect the resident terminals, then re-run", results)
 
     updates: dict[str, dict[str, str]] = {}
