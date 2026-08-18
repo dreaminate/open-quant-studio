@@ -440,6 +440,9 @@ def check_terminal_readiness(orca_cli: str, roster: dict[str, Any] | None) -> di
     )
     # Scope to this project's worktrees when a roster exists: other
     # projects' terminals on a shared runtime are not a readiness signal.
+    # Terminals bound to the current generation's recorded tab IDs are the
+    # EXPECTED live seats; only unrecorded in-scope terminals are a problem.
+    recorded_tabs: set[str] = set()
     if roster is not None:
         ids = {
             seat["worktree"]["orcaWorktreeId"]
@@ -451,6 +454,11 @@ def check_terminal_readiness(orca_cli: str, roster: dict[str, Any] | None) -> di
             for seat in roster.get("seats", [])
             if (seat.get("worktree") or {}).get("path")
         }
+        recorded_tabs = {
+            seat.get("tabId")
+            for seat in roster.get("seats", [])
+            if seat.get("tabId")
+        }
         terminals = [
             term
             for term in terminals
@@ -460,14 +468,25 @@ def check_terminal_readiness(orca_cli: str, roster: dict[str, Any] | None) -> di
             )
             in paths
         ]
-    total = len(terminals) if isinstance(terminals, list) else -1
+    unrecorded = [
+        term for term in terminals if term.get("tabId") not in recorded_tabs
+    ]
+    total = len(unrecorded)
     return {
         "id": "terminals",
         "label": "terminal readiness",
         "ok": total == 0,
         "code": "terminals_clean" if total == 0 else "resident_terminals_present",
-        "detail": {"totalCount": total, "scopedToProject": roster is not None},
-        "nextStep": None if total == 0 else "quickstart (generation-bound cleanup) requires user authorization",
+        "detail": {
+            "scopedToProject": roster is not None,
+            "recordedSeatTerminals": len(terminals) - total,
+            "unrecordedTerminals": total,
+        },
+        "nextStep": (
+            None
+            if total == 0
+            else "quickstart (generation-bound cleanup) requires user authorization"
+        ),
     }
 
 

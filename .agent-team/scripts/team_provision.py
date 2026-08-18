@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -588,11 +589,41 @@ def orca_clean_first_terminal(
         if any(term.get("tabId") != first_terminal.get("tabId") for term in terminals):
             return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
     else:
-        # Receipt-less (older runtime): the brand-new worktree must show
-        # exactly one terminal — the just-created first terminal.
-        if len(terminals) != 1 or not terminals[0].get("handle"):
+        # Receipt-less (current runtime omits the receipt): the brand-new
+        # worktree must show exactly one terminal — the just-created first
+        # terminal. Its appearance can lag the create receipt, so poll a
+        # bounded window before failing closed.
+        polled = terminals
+        for _ in range(6):
+            if len(polled) == 1 and polled[0].get("handle"):
+                break
+            if len(polled) > 1:
+                return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
+            time.sleep(2)
+            code, stdout, _ = tc.orca_run(
+                orca_cli,
+                "terminal",
+                "list",
+                "--worktree",
+                f"id:{repo_id}::{worktree_path}",
+                "--include-visual-layouts",
+                "--json",
+            )
+            if code != 0:
+                return {"ok": False, "code": "terminal_list_failed", "exit": code}
+            try:
+                payload = json.loads(stdout)
+                wrapper = payload.get("result") if isinstance(payload, dict) else None
+                polled = (
+                    wrapper.get("terminals", [])
+                    if isinstance(wrapper, dict)
+                    else payload.get("terminals", [])
+                )
+            except json.JSONDecodeError:
+                polled = []
+        if len(polled) != 1 or not polled[0].get("handle"):
             return {"ok": False, "code": "team_cleanup_scope_ambiguous"}
-        handle = terminals[0]["handle"]
+        handle = polled[0]["handle"]
     close_code, close_out, _ = tc.orca_run(
         orca_cli, "terminal", "close", "--terminal", str(handle), "--tab", "--json"
     )
