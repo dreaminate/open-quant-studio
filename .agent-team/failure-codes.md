@@ -75,6 +75,13 @@ dead end.
 | `invalid_project` | 9 | Boundary or identity check failed | Read the reported reason |
 | `mock_contract_requires_mock_cli` | 9 | `--mock-orca-contract` passed with a non-mock CLI | Remove the flag or target the mock CLI |
 
+High-privilege launch gate: `high_privilege_launch_requires_authorization`
+(7) — a seat whose charter permission parameter disables approvals/sandbox
+(`dangerously-bypass-approvals-and-sandbox`,
+`dangerously-skip-permissions`) requires a per-occurrence, run-scoped
+authorization: `--authorize-high-privilege <seat>=<exact-parameter>`. The
+token is never persisted and never inherited across runs.
+
 Session-lifecycle codes (mock/E2E path, matching the verified real CLI contract —
 `terminal create`): `quickstart_generation_published` (0),
 `team_cleanup_scope_ambiguous`, `team_cleanup_incomplete`,
