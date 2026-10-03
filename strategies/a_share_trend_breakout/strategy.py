@@ -23,7 +23,7 @@ def on_start():
 
 def order(symbol, side, position_effect):
     STATE["intent_seq"] += 1
-    return {
+    order = {
         "intent_id": f"{STRATEGY_ID}:{STATE['intent_seq']}",
         "intent_seq": STATE["intent_seq"],
         "symbol": symbol,
@@ -32,13 +32,19 @@ def order(symbol, side, position_effect):
         "quantity": str(LOT_SIZE),
         "order_type": "market",
         "limit_price_atoms": None,
-        "stop_price_atoms": None,
         "time_in_force": "day",
-        "oco_group": None,
     }
+    if STATE.get("v3"):
+        order["intent_kind"] = "order"
+        order["book"] = "cash_long"
+    else:
+        order["stop_price_atoms"] = None
+        order["oco_group"] = None
+    return order
 
 
 def on_bar(bar):
+    STATE["v3"] = "trading_status" in bar
     close = int(bar["close_atoms"])
     closes = STATE["closes"]
     prior_closes = closes[-BREAKOUT_WINDOW:]

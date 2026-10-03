@@ -17,11 +17,17 @@ readonly python_cli="${commands[python3]:A}"
 readonly jq_cli=/usr/bin/jq
 
 usage() {
-  print -r -- "Usage: ${0:t}"
+  print -r -- "Usage: ${0:t} [--authorize-high-privilege <seat>=<parameter>]..."
 }
 
+typeset -a auth_args
 while (( $# > 0 )); do
   case "$1" in
+    --authorize-high-privilege)
+      if (( $# < 2 )); then usage >&2; exit 2; fi
+      auth_args+=(--authorize-high-privilege "$2")
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -39,7 +45,8 @@ result="$(/usr/bin/env -i \
   "$python_cli" -I -B "$helper" \
   --project "$project_dir" \
   --home "$HOME" \
-  --orca-cli /Users/wzy/.homebrew/bin/orca)"
+  --orca-cli /Users/wzy/.homebrew/bin/orca \
+  "${auth_args[@]}")"
 exit_code=$?
 
 print -r -- "$result" | "$jq_cli" '{ok, code, message, phases, nextStep, changesApplied}'

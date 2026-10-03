@@ -19,3 +19,11 @@ trip and one explicitly hypothetical `research_short` round trip with T+1,
 100-share lots, commission, sell stamp duty, fixed adverse slippage, cash,
 equity, and summary metrics. It is a deterministic product test, not a market
 performance claim or evidence of ordinary cash-account shorting capability.
+
+## A-share research engine v3
+
+`a-share-research-v3-long-t1.json` starts the OQS-owned golden suite for the
+versioned A-share research engine. It freezes a public JSON/PyO3 behavior seam:
+the `cash_long` book rejects a same-session close under T+1, accepts the next
+session close, and leaves the formal cash/equity ledgers reconciled. Donor
+engines are differential references only; this fixture is the primary oracle.

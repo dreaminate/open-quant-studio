@@ -12,8 +12,11 @@ import type {
   DataSnapshotMarket,
   DataSnapshotPriceBasis,
   DataSnapshotReadModel,
+  DataSnapshotExecutionProfile,
   DataSnapshotSourceArtifact,
   DataSnapshotSourceFormat,
+  FormalEngineCorporateActionInputV3,
+  FormalRunReviewAttestation,
   DiagnosticLogListReadModel,
   FormalRunDetailReadModel,
   FormalRunListReadModel,
@@ -55,6 +58,8 @@ const JSON_BODY_LIMIT = 1024 * 1024;
 const MAX_FILES = 32;
 const MAX_TEXT_BYTES = 64 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const GIT_OID_PATTERN = /^[a-f0-9]{40}$/;
 const M4_FULL_FIXTURE_INPUT_SHA256 = "520d7c4b4faecbd63b21fa761a741f76e8aa961c09af244348441236ea854699";
 const M4_FORMAL_FIXTURE_SOURCE_REF = "76767676-7676-4676-8676-767676767676";
 const trustedM4FormalRunFixtures = new WeakSet<object>();
@@ -213,7 +218,7 @@ export interface OqsBrowserServerOptions {
 type ResolvedBrowserServerOptions = Omit<
   OqsBrowserServerOptions,
   "formalRunFixture"
-> & { formalRunFixture: M4FormalRunFixture };
+> & { formalRunFixture?: M4FormalRunFixture };
 
 interface BrowserActor {
   projectId: string;
@@ -233,10 +238,7 @@ class PublicHttpError extends Error {
 
 export function createOqsBrowserServer(options: OqsBrowserServerOptions): Server {
   const formalRunFixture = options.formalRunFixture;
-  if (formalRunFixture === undefined) {
-    throw new Error("formal Run fixture is required");
-  }
-  if (!trustedM4FormalRunFixtures.has(formalRunFixture)) {
+  if (formalRunFixture !== undefined && !trustedM4FormalRunFixtures.has(formalRunFixture)) {
     throw new Error("formal Run fixture must be loaded from the pinned fixture");
   }
   const resolvedOptions = { ...options, formalRunFixture };
@@ -515,6 +517,8 @@ async function routeRequest(
         "timezone",
         "price_basis",
         "cutoff",
+        "execution_profile",
+        "corporate_actions",
       ],
       [
         "source",
@@ -541,6 +545,12 @@ async function routeRequest(
         timezone: boundedText(body.timezone, "timezone"),
         priceBasis: dataSnapshotPriceBasis(body.price_basis),
         cutoff: boundedText(body.cutoff, "cutoff"),
+        ...(body.execution_profile === undefined
+          ? {}
+          : { executionProfile: dataSnapshotExecutionProfile(body.execution_profile) }),
+        ...(body.corporate_actions === undefined
+          ? {}
+          : { corporateActions: dataSnapshotCorporateActions(body.corporate_actions) }),
       }),
     );
     return;
@@ -690,14 +700,21 @@ async function routeRequest(
 
   if (request.method === "POST" && url.pathname === "/api/v1/variants") {
     assertNoQuery(url);
-    exactObject(await readJsonBody(request), [], []);
-    const head = await scopedProjectHead(options.revisionClient, actor);
+    const body = exactObject(
+      await readJsonBody(request),
+      ["base_revision_id"],
+      [],
+    );
+    const baseRevisionId = body.base_revision_id === undefined
+      ? (await scopedProjectHead(options.revisionClient, actor)).head_revision_id
+      : assertResourceId(body.base_revision_id as string);
+    await scopedRevision(options.revisionClient, actor, baseRevisionId);
     sendJson(
       response,
       200,
       await options.revisionClient.createStrategyVariant({
         ...actor,
-        baseRevisionId: head.head_revision_id,
+        baseRevisionId,
       }),
     );
     return;
@@ -725,9 +742,9 @@ async function routeRequest(
         expectedRevisionId: variant.head_revision_id,
         message: boundedText(body.message, "message"),
         files: revisionFiles(body.files),
-        removedPaths: body.removed_paths === undefined
-          ? undefined
-          : revisionRemovedPaths(body.removed_paths),
+        ...(body.removed_paths === undefined
+          ? {}
+          : { removedPaths: revisionRemovedPaths(body.removed_paths) }),
       }),
     );
     return;
@@ -779,7 +796,7 @@ async function routeRequest(
     assertNoQuery(url);
     const body = exactObject(
       await readJsonBody(request),
-      ["data_snapshot_id"],
+      ["data_snapshot_id", "review_attestation"],
       [],
     );
     const candidateRevisionId = assertResourceId(formalMatch[1]);
@@ -794,14 +811,23 @@ async function routeRequest(
     const dataSnapshotId = body.data_snapshot_id === undefined
       ? undefined
       : assertResourceId(body.data_snapshot_id as string);
+    const suppliedReviewAttestation = body.review_attestation === undefined
+      ? undefined
+      : parseReviewAttestation(body.review_attestation);
     let formalRunRequest: FormalRunRequest;
     if (dataSnapshotId === undefined) {
+      if (options.formalRunFixture === undefined) {
+        throw new PublicHttpError(422, "data_snapshot_required");
+      }
       formalRunRequest = {
         ...actor,
         candidateRevisionId,
         variantId: candidate.variant_id,
         strategyTreeOid: candidate.git_tree_oid,
         ...options.formalRunFixture,
+        ...(suppliedReviewAttestation === undefined
+          ? {}
+          : { reviewAttestation: suppliedReviewAttestation }),
       };
     } else {
       const snapshot = await scopedDataSnapshot(
@@ -816,6 +842,19 @@ async function routeRequest(
       if (sha256(marketInputJson) !== snapshot.market_input_sha256) {
         throw new Error("selected data snapshot market input identity changed");
       }
+      const isAShareV3 = snapshot.schema_version === 3;
+      if (isAShareV3 && suppliedReviewAttestation === undefined) {
+        throw new PublicHttpError(422, "review_attestation_required");
+      }
+      if (isAShareV3 && suppliedReviewAttestation !== undefined) {
+        if (
+          suppliedReviewAttestation.candidate_revision_id !== candidateRevisionId
+          || suppliedReviewAttestation.strategy_tree_oid !== candidate.git_tree_oid
+          || suppliedReviewAttestation.data_snapshot_sha256 !== snapshot.sha256
+        ) {
+          throw new PublicHttpError(422, "review_attestation_mismatch");
+        }
+      }
       formalRunRequest = {
         ...actor,
         candidateRevisionId,
@@ -824,17 +863,26 @@ async function routeRequest(
         marketInputJson,
         dataSnapshotId: snapshot.snapshot_id,
         dataSnapshotSha256: snapshot.sha256,
-        parametersSha256: options.formalRunFixture.parametersSha256,
-        costModelSha256: options.formalRunFixture.costModelSha256,
-        environmentLockSha256: options.formalRunFixture.environmentLockSha256,
+        parametersSha256: isAShareV3
+          ? sha256("{}")
+          : options.formalRunFixture?.parametersSha256 ?? sha256("{}"),
+        costModelSha256: isAShareV3
+          ? sha256("oqs-a-share-v3-default-costs")
+          : options.formalRunFixture?.costModelSha256 ?? sha256("oqs-a-share-v3-default-costs"),
+        environmentLockSha256: isAShareV3
+          ? sha256("oqs-local-environment")
+          : options.formalRunFixture?.environmentLockSha256 ?? sha256("oqs-local-environment"),
         priceBasis: snapshot.price_basis,
         cutoff: snapshot.cutoff,
         timezone: snapshot.timezone,
         sampleStart: snapshot.sample_start,
         sampleEnd: snapshot.sample_end,
-        randomSeed: options.formalRunFixture.randomSeed,
+        randomSeed: options.formalRunFixture?.randomSeed ?? 0,
         marketInputOriginKind: "service_generated",
         marketInputSourceRef: snapshot.market_input_artifact_id,
+        ...(suppliedReviewAttestation === undefined
+          ? {}
+          : { reviewAttestation: suppliedReviewAttestation }),
       };
     }
     sendJson(
@@ -1195,6 +1243,60 @@ function exactObject(
   return record;
 }
 
+function parseReviewAttestation(value: unknown): FormalRunReviewAttestation {
+  const record = exactObject(
+    value,
+    [
+      "attestation_id",
+      "status",
+      "candidate_revision_id",
+      "strategy_tree_oid",
+      "data_snapshot_sha256",
+      "parameters_sha256",
+      "cost_model_sha256",
+      "reviewer_id",
+      "reviewed_at",
+    ],
+    [
+      "status",
+      "candidate_revision_id",
+      "strategy_tree_oid",
+      "data_snapshot_sha256",
+      "parameters_sha256",
+      "cost_model_sha256",
+    ],
+  );
+  if (
+    record.status !== "approved"
+    || typeof record.candidate_revision_id !== "string"
+    || !UUID_PATTERN.test(record.candidate_revision_id)
+    || typeof record.strategy_tree_oid !== "string"
+    || !GIT_OID_PATTERN.test(record.strategy_tree_oid)
+    || typeof record.data_snapshot_sha256 !== "string"
+    || !SHA256_PATTERN.test(record.data_snapshot_sha256)
+    || typeof record.parameters_sha256 !== "string"
+    || !SHA256_PATTERN.test(record.parameters_sha256)
+    || typeof record.cost_model_sha256 !== "string"
+    || !SHA256_PATTERN.test(record.cost_model_sha256)
+  ) {
+    throw new PublicHttpError(422, "invalid_review_attestation");
+  }
+  if (record.attestation_id !== undefined && (
+    typeof record.attestation_id !== "string" || !UUID_PATTERN.test(record.attestation_id)
+  )) {
+    throw new PublicHttpError(422, "invalid_review_attestation");
+  }
+  if (record.reviewer_id !== undefined && (
+    typeof record.reviewer_id !== "string" || record.reviewer_id.length < 1
+  )) {
+    throw new PublicHttpError(422, "invalid_review_attestation");
+  }
+  if (record.reviewed_at !== undefined && typeof record.reviewed_at !== "string") {
+    throw new PublicHttpError(422, "invalid_review_attestation");
+  }
+  return record as FormalRunReviewAttestation;
+}
+
 function revisionFiles(value: unknown): RevisionFileInput[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_FILES) {
     throw new PublicHttpError(422, "invalid_request");
@@ -1260,13 +1362,44 @@ function dataSnapshotPriceBasis(value: unknown): DataSnapshotPriceBasis {
   return value;
 }
 
+function dataSnapshotExecutionProfile(value: unknown): DataSnapshotExecutionProfile {
+  if (value !== "legacy" && value !== "a-share-v3") {
+    throw new PublicHttpError(422, "invalid_request");
+  }
+  return value;
+}
+
+function dataSnapshotCorporateActions(value: unknown): FormalEngineCorporateActionInputV3[] {
+  if (!Array.isArray(value) || value.length > 100000) {
+    throw new PublicHttpError(422, "invalid_request");
+  }
+  // Keep the HTTP boundary strict while leaving the full semantic checks
+  // (session/symbol/status and ratio rules) to the Python snapshot builder.
+  return value.map((item) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      throw new PublicHttpError(422, "invalid_request");
+    }
+    return item as FormalEngineCorporateActionInputV3;
+  });
+}
+
 function dataSnapshotMapping(value: unknown): DataSnapshotMapping {
   const record = exactObject(
     value,
-    ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
+    [
+      "timestamp",
+      "symbol",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "trading_status",
+      "price_limit_state",
+    ],
     ["timestamp", "symbol", "open", "high", "low", "close", "volume"],
   );
-  return {
+  const mapping: DataSnapshotMapping = {
     timestamp: boundedText(record.timestamp, "timestamp"),
     symbol: boundedText(record.symbol, "symbol"),
     open: boundedText(record.open, "open"),
@@ -1275,6 +1408,13 @@ function dataSnapshotMapping(value: unknown): DataSnapshotMapping {
     close: boundedText(record.close, "close"),
     volume: boundedText(record.volume, "volume"),
   };
+  if (record.trading_status !== undefined) {
+    mapping.trading_status = boundedText(record.trading_status, "trading_status");
+  }
+  if (record.price_limit_state !== undefined) {
+    mapping.price_limit_state = boundedText(record.price_limit_state, "price_limit_state");
+  }
+  return mapping;
 }
 
 function dataSnapshotSource(

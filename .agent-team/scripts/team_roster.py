@@ -175,7 +175,12 @@ def write_initial_roster(
     """Build and atomically publish the initial generation-0 roster."""
     orca_ids = orca_worktree_ids or {}
     leader_mutation = next(
-        (m for m in mutations if m.get("kind") == "leader_branch_created"), None
+        (
+            m
+            for m in mutations
+            if m.get("kind") in ("leader_branch_created", "team_worktree_created")
+        ),
+        None,
     )
     leader_bootstrap = (
         leader_mutation.get("leaderBootstrapCommit")

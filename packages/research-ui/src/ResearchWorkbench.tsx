@@ -14,9 +14,11 @@ import type {
   DataImportPreview,
   DataImportRowError,
   DataSnapshot,
+  DataSnapshotCorporateAction,
   DataSnapshotMapping,
   DataSnapshotMarket,
   DataSnapshotPriceBasis,
+  DataSnapshotExecutionProfile,
   ForwardTest,
   LocalDataImportFile,
   LogEntry,
@@ -28,6 +30,7 @@ import type {
   RevisionComparison,
   RenderedStrategyNotebook,
   RunDetail,
+  ReviewAttestation,
   RunReportReadModel,
   RunSummary,
   Variant,
@@ -61,6 +64,12 @@ const NAV_ITEMS: Array<{ id: WorkbenchId; label: string; description: string }> 
   { id: "settings", label: "Settings", description: "Archive export" },
 ];
 
+const NAV_GROUPS: Array<{ label: string; ids: WorkbenchId[] }> = [
+  { label: "ORCHESTRATE", ids: ["canvas", "chat"] },
+  { label: "BUILD", ids: ["code", "compare", "data"] },
+  { label: "VERIFY", ids: ["backtest", "forward-test", "run-detail", "logs", "settings"] },
+];
+
 const DATA_MAPPING_FIELDS: Array<{ key: keyof DataSnapshotMapping; label: string }> = [
   { key: "timestamp", label: "Timestamp" },
   { key: "symbol", label: "Symbol" },
@@ -69,6 +78,8 @@ const DATA_MAPPING_FIELDS: Array<{ key: keyof DataSnapshotMapping; label: string
   { key: "low", label: "Low" },
   { key: "close", label: "Close" },
   { key: "volume", label: "Volume" },
+  { key: "trading_status", label: "Trading status (optional)" },
+  { key: "price_limit_state", label: "Price-limit state (optional)" },
 ];
 
 const emptyNodes: Node<CanvasNodeData>[] = [];
@@ -93,11 +104,11 @@ function renderValue(value: unknown): string {
 }
 
 function engineRecordKey(label: string, value: unknown): string {
-  const record = value as Record<string, unknown>;
-  const identity = record.trade_id
-    ?? record.event_id
-    ?? (record.intent_id === undefined ? undefined : `${record.intent_id}:${record.session_seq ?? ""}`)
-    ?? (record.session_seq === undefined ? undefined : record.session_seq);
+  const record = recordValue(value);
+  const identity = record?.trade_id
+    ?? record?.event_id
+    ?? (record?.intent_id === undefined ? undefined : `${record.intent_id}:${record.session_seq ?? ""}`)
+    ?? (record?.session_seq === undefined ? undefined : record.session_seq);
   return `${label}:${String(identity ?? JSON.stringify(value))}`;
 }
 
@@ -212,6 +223,129 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   return <div className="oqs-empty"><strong>{title}</strong><span>{body}</span></div>;
 }
 
+type ResearchOverviewProps = {
+  projectLabel: string;
+  activityLabel: string;
+  context: Context | undefined;
+  variant: Variant | undefined;
+  revision: Revision | undefined;
+  selectedStrategy: BuiltInStrategy | undefined;
+  snapshot: DataSnapshot | undefined;
+  runs: RunSummary[];
+  selectedRun: RunSummary | undefined;
+  onNavigate: (workbench: WorkbenchId) => void;
+};
+
+function OverviewState({ label, value, detail, tone = "pending" }: { label: string; value: string; detail: string; tone?: "ready" | "pending" | "active" }) {
+  return <div className={`oqs-overview-state is-${tone}`}>
+    <span className="oqs-state-dot" aria-hidden="true" />
+    <div><span className="oqs-overview-state-label">{label}</span><strong>{value}</strong><small>{detail}</small></div>
+  </div>;
+}
+
+function ResearchOverview({
+  projectLabel,
+  activityLabel,
+  context,
+  variant,
+  revision,
+  selectedStrategy,
+  snapshot,
+  runs,
+  selectedRun,
+  onNavigate,
+}: ResearchOverviewProps) {
+  const sessionValue = context?.isStreaming ? "Streaming" : context?.sessionId ? "Local session" : "Not bound";
+  const sessionTone = context?.isStreaming ? "active" : context?.sessionId ? "ready" : "pending";
+  const strategyValue = selectedStrategy?.title ?? (revision ? "Revision source" : "Choose a strategy");
+  const dataValue = snapshot?.symbol ?? (snapshot ? `${snapshot.symbols.length} symbols` : "No snapshot");
+  const runValue = selectedRun?.status ?? (runs.length > 0 ? `${runs.length} runs` : "No formal run");
+  const runTone = selectedRun?.status === "succeeded" ? "ready" : selectedRun ? "active" : "pending";
+  return <section className="oqs-overview-stack" data-testid="research-overview">
+    <div className="oqs-overview-hero">
+      <div className="oqs-overview-copy">
+        <p className="oqs-kicker">QuantBT strategy desk / Vibe Trading session fabric</p>
+        <h2>From research signal to immutable evidence.</h2>
+        <p>One local thread for strategy discovery, Python revisions, snapshot-bound runs, and historical replay. The canvas is the map; the formal engine is the ledger.</p>
+        <div className="oqs-overview-context"><span>{projectLabel}</span><span>/</span><span>{activityLabel}</span><span className="oqs-overview-context-divider" /><span className="oqs-mono">{shortId(context?.sessionId)}</span></div>
+      </div>
+      <div className="oqs-overview-actions">
+        <button className="oqs-button oqs-button-primary" onClick={() => onNavigate("chat")}>Open Pi session</button>
+        <button className="oqs-button" onClick={() => onNavigate("code")}>Shape strategy</button>
+      </div>
+    </div>
+    <div className="oqs-overview-grid">
+      <article className="oqs-overview-card oqs-overview-card-session">
+        <div className="oqs-overview-card-heading"><span className="oqs-overview-index">01</span><span className="oqs-chip">VIBE TRADING</span></div>
+        <h3>Session fabric</h3>
+        <p>Pi stays with the Activity while you move between chat, code, canvas, and evidence.</p>
+        <OverviewState label="Session" value={sessionValue} detail={shortId(context?.sessionId)} tone={sessionTone} />
+      </article>
+      <article className="oqs-overview-card oqs-overview-card-strategy">
+        <div className="oqs-overview-card-heading"><span className="oqs-overview-index">02</span><span className="oqs-chip">QUANTBT LENS</span></div>
+        <h3>Strategy bench</h3>
+        <p>Keep the source in <span className="oqs-mono">strategy.py</span>; fork revisions when ideas diverge.</p>
+        <OverviewState label="Head" value={strategyValue} detail={`${shortId(variant?.variant_id)} · rev ${shortId(revision?.revision_id)}`} tone={revision ? "ready" : "pending"} />
+      </article>
+      <article className="oqs-overview-card oqs-overview-card-data">
+        <div className="oqs-overview-card-heading"><span className="oqs-overview-index">03</span><span className="oqs-chip">DATA BINDING</span></div>
+        <h3>Snapshot gate</h3>
+        <p>Every formal action starts from a local, immutable A-share or crypto snapshot.</p>
+        <OverviewState label="Selected" value={dataValue} detail={snapshot ? `${snapshot.row_count} rows · ${snapshot.price_basis}` : "Choose Data to continue"} tone={snapshot ? "ready" : "pending"} />
+      </article>
+      <article className="oqs-overview-card oqs-overview-card-run">
+        <div className="oqs-overview-card-heading"><span className="oqs-overview-index">04</span><span className="oqs-chip">FORMAL LEDGER</span></div>
+        <h3>Run evidence</h3>
+        <p>Metrics, costs, positions, and artifacts render from the same immutable Run.</p>
+        <OverviewState label="Latest" value={runValue} detail={selectedRun ? shortId(selectedRun.run_id) : "No selected Run"} tone={runTone} />
+      </article>
+    </div>
+    <div className="oqs-overview-rail">
+      <div className="oqs-overview-rail-label"><span>RESEARCH LOOP</span><small>local-only, no order submission</small></div>
+      {[{ id: "chat" as WorkbenchId, label: "Observe", detail: "Pi context" }, { id: "code" as WorkbenchId, label: "Shape", detail: "Python source" }, { id: "backtest" as WorkbenchId, label: "Formalize", detail: "Bounded Run" }, { id: "forward-test" as WorkbenchId, label: "Replay", detail: "Historical bars" }].map((stage, index) => <button key={stage.id} className="oqs-overview-stage" onClick={() => onNavigate(stage.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{stage.label}</strong><small>{stage.detail}</small></button>)}
+    </div>
+  </section>;
+}
+
+function ContextRail({
+  projectLabel,
+  activityLabel,
+  context,
+  variant,
+  revision,
+  snapshot,
+  selectedRun,
+}: {
+  projectLabel: string;
+  activityLabel: string;
+  context: Context | undefined;
+  variant: Variant | undefined;
+  revision: Revision | undefined;
+  snapshot: DataSnapshot | undefined;
+  selectedRun: RunSummary | undefined;
+}) {
+  return <div className="oqs-context-rail" data-testid="research-context-rail">
+    <div className="oqs-context-rail-title"><span className="oqs-live-dot" />ACTIVE RESEARCH THREAD</div>
+    <div className="oqs-context-rail-item"><span>Project</span><strong>{projectLabel}</strong></div>
+    <div className="oqs-context-rail-item"><span>Activity</span><strong>{activityLabel}</strong></div>
+    <div className="oqs-context-rail-item"><span>Revision</span><strong className="oqs-mono">{shortId(revision?.revision_id)}</strong></div>
+    <div className="oqs-context-rail-item"><span>Snapshot</span><strong className="oqs-mono">{shortId(snapshot?.snapshot_id)}</strong></div>
+    <div className="oqs-context-rail-item"><span>Run</span><strong className="oqs-mono">{selectedRun ? `${shortId(selectedRun.run_id)} · ${selectedRun.status ?? "queued"}` : "—"}</strong></div>
+    <div className="oqs-context-rail-item oqs-context-rail-session"><span>Pi</span><strong className={context?.isStreaming ? "oqs-live" : "oqs-muted"}>{context?.isStreaming ? "streaming" : context?.sessionId ? "local" : "unbound"}</strong><small className="oqs-mono">{shortId(context?.sessionId)} · {shortId(variant?.variant_id)}</small></div>
+  </div>;
+}
+
+function SessionFabricAside({ context, projectLabel, activityLabel, onNavigate }: { context: Context | undefined; projectLabel: string; activityLabel: string; onNavigate: (workbench: WorkbenchId) => void }) {
+  return <aside className="oqs-session-fabric">
+    <div className="oqs-session-fabric-head"><p className="oqs-kicker">VIBE TRADING INSPIRED</p><span className="oqs-chip">PI ONLY</span></div>
+    <h2>Session fabric</h2>
+    <p>Keep the research conversation attached to this Activity while evidence moves through the OQS workbenches.</p>
+    <div className="oqs-session-id"><span>SESSION</span><strong className="oqs-mono">{shortId(context?.sessionId)}</strong><small>{projectLabel} / {activityLabel}</small></div>
+    <div className="oqs-session-steps"><div className="is-active"><span>01</span><div><strong>Observe</strong><small>Ask Pi for bounded context</small></div></div><div><span>02</span><div><strong>Shape</strong><small>Turn the idea into strategy.py</small></div></div><div><span>03</span><div><strong>Prove</strong><small>Bind data and run formally</small></div></div></div>
+    <button className="oqs-button oqs-button-primary" onClick={() => onNavigate("canvas")}>View research graph</button>
+  </aside>;
+}
+
 function ForwardTestView({
   run,
   result,
@@ -300,6 +434,8 @@ function DataImportView({
   timezone,
   priceBasis,
   cutoff,
+  executionProfile,
+  corporateActionsText,
   errors,
   snapshots,
   selectedSnapshotId,
@@ -314,6 +450,8 @@ function DataImportView({
   onTimezoneChange,
   onPriceBasisChange,
   onCutoffChange,
+  onExecutionProfileChange,
+  onCorporateActionsTextChange,
   onCreateSnapshot,
   onSelectSnapshot,
 }: {
@@ -326,6 +464,8 @@ function DataImportView({
   timezone: string;
   priceBasis: DataSnapshotPriceBasis;
   cutoff: string;
+  executionProfile: DataSnapshotExecutionProfile;
+  corporateActionsText: string;
   errors: DataImportRowError[];
   snapshots: DataSnapshot[];
   selectedSnapshotId: string;
@@ -340,6 +480,8 @@ function DataImportView({
   onTimezoneChange: (timezone: string) => void;
   onPriceBasisChange: (priceBasis: DataSnapshotPriceBasis) => void;
   onCutoffChange: (cutoff: string) => void;
+  onExecutionProfileChange: (profile: DataSnapshotExecutionProfile) => void;
+  onCorporateActionsTextChange: (value: string) => void;
   onCreateSnapshot: () => void;
   onSelectSnapshot: (snapshotId: string) => void;
 }) {
@@ -366,12 +508,14 @@ function DataImportView({
       <div className="oqs-panel-heading"><div><p className="oqs-kicker">FIELD PREVIEW</p><h2>Map source columns</h2></div><span className="oqs-chip">{preview ? `${preview.total_rows} rows` : "no preview"}</span></div>
       {preview ? <>
         <dl className="oqs-kv oqs-kv-grid"><dt>File</dt><dd>{preview.file_name}</dd><dt>Format</dt><dd>{preview.source_format}</dd><dt>Source SHA-256</dt><dd className="oqs-mono">{preview.source.sha256}</dd></dl>
-        <div className="oqs-mapping-grid">{DATA_MAPPING_FIELDS.map(({ key, label }) => <label className="oqs-field" key={key}>{label}<select aria-label={`${label} column`} value={mapping[key]} onChange={(event) => onMappingChange(key, event.target.value)}>{preview.columns.map((column) => <option value={column} key={column}>{column}</option>)}</select></label>)}</div>
+        <div className="oqs-mapping-grid">{DATA_MAPPING_FIELDS.map(({ key, label }) => <label className="oqs-field" key={key}>{label}<select aria-label={`${label} column`} value={mapping[key] ?? ""} onChange={(event) => onMappingChange(key, event.target.value)}>{key === "trading_status" || key === "price_limit_state" ? <option value="">Infer when possible</option> : null}{preview.columns.map((column) => <option value={column} key={column}>{column}</option>)}</select></label>)}</div>
         <div className="oqs-data-config-grid">
           <label className="oqs-field">Market<select aria-label="Snapshot market" value={market} onChange={(event) => onMarketChange(event.target.value as DataSnapshotMarket)}><option value="a_share_daily">A-share daily</option><option value="crypto_linear_perp">Crypto linear perpetual</option></select></label>
           <label className="oqs-field">Timezone<input aria-label="Snapshot timezone" value={timezone} onChange={(event) => onTimezoneChange(event.target.value)} /></label>
           <label className="oqs-field">Price basis<select aria-label="Snapshot price basis" value={priceBasis} onChange={(event) => onPriceBasisChange(event.target.value as DataSnapshotPriceBasis)}><option value="raw">Raw</option><option value="qfq">QFQ</option><option value="hfq">HFQ</option></select></label>
           <label className="oqs-field">Cutoff<input aria-label="Snapshot cutoff" value={cutoff} onChange={(event) => onCutoffChange(event.target.value)} /></label>
+          <label className="oqs-field">Execution profile<select aria-label="Snapshot execution profile" value={executionProfile} onChange={(event) => onExecutionProfileChange(event.target.value as DataSnapshotExecutionProfile)}><option value="legacy">Legacy compatibility</option><option value="a-share-v3">A-share research v3</option></select></label>
+          {executionProfile === "a-share-v3" ? <label className="oqs-field oqs-field-wide">Corporate actions JSON (optional)<textarea aria-label="Corporate actions JSON" value={corporateActionsText} onChange={(event) => onCorporateActionsTextChange(event.target.value)} rows={4} placeholder="[]" /></label> : null}
         </div>
         <div className="oqs-action-row"><button className="oqs-button oqs-button-primary" onClick={onCreateSnapshot} disabled={busy}>Create immutable snapshot</button></div>
         <div className="oqs-detail-block"><h3>Preview rows</h3><div className="oqs-table-wrap"><table className="oqs-table"><thead><tr>{preview.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{preview.preview_rows.map((row, index) => <tr key={index}>{preview.columns.map((column) => <td key={column}>{row[column] ?? ""}</td>)}</tr>)}</tbody></table></div></div>
@@ -470,14 +614,168 @@ function CodeView({
   </section>;
 }
 
+function StrategyRunReview({
+  strategy,
+  snapshot,
+  executionProfile,
+  revision,
+  confirmed,
+  onConfirmedChange,
+}: {
+  strategy: BuiltInStrategy | undefined;
+  snapshot: DataSnapshot | undefined;
+  executionProfile: DataSnapshotExecutionProfile;
+  revision: Revision | undefined;
+  confirmed: boolean;
+  onConfirmedChange: (confirmed: boolean) => void;
+}) {
+  const isAShareV3 = executionProfile === "a-share-v3";
+  return <section className="oqs-panel oqs-run-review" data-testid="strategy-run-review">
+    <div className="oqs-panel-heading"><div><p className="oqs-kicker">PRE-RUN REVIEW</p><h2>Strategy, parameters and costs</h2></div><span className="oqs-chip">{isAShareV3 ? "A-share v3" : "legacy profile"}</span></div>
+    <p className="oqs-muted">Review the exact strategy assumptions and market-rule profile before requesting an immutable Formal Run. The RunSpec binds these identities to the selected snapshot.</p>
+    <div className="oqs-review-grid">
+      <div><h3>Strategy</h3><dl className="oqs-kv"><dt>Selected</dt><dd>{strategy?.title ?? "Custom / revision source"}</dd><dt>Strategy ID</dt><dd className="oqs-mono">{strategy?.strategy_id ?? "—"}</dd><dt>Revision</dt><dd className="oqs-mono">{revision?.revision_id ?? "—"}</dd><dt>Tree</dt><dd className="oqs-mono">{revision?.git_tree_oid ?? "—"}</dd><dt>Source SHA-256</dt><dd className="oqs-mono">{revision?.files.find((file) => file.path === "strategy.py")?.sha256 ?? strategy?.source_sha256 ?? "—"}</dd></dl></div>
+      <div><h3>Data binding</h3><dl className="oqs-kv"><dt>Snapshot</dt><dd className="oqs-mono">{snapshot?.snapshot_id ?? "Select one in Data"}</dd><dt>Symbols</dt><dd>{snapshot?.symbols?.join(", ") ?? "—"}</dd><dt>Price basis</dt><dd>{snapshot?.price_basis ?? "—"}</dd><dt>Sessions</dt><dd>{snapshot?.session_count ?? "—"}</dd></dl></div>
+    </div>
+    {strategy?.parameters?.length ? <div className="oqs-detail-block"><h3>Parameters</h3><div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Name</th><th>Value</th><th>Meaning</th></tr></thead><tbody>{strategy.parameters.map((parameter) => <tr key={parameter.name}><td className="oqs-mono">{parameter.name}</td><td>{String(parameter.value)}</td><td>{parameter.meaning}</td></tr>)}</tbody></table></div></div> : <p className="oqs-muted">No structured strategy parameters were declared; the revision source remains the authority.</p>}
+    {strategy?.assumptions?.length ? <div className="oqs-detail-block"><h3>Strategy assumptions</h3><ul>{strategy.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul></div> : null}
+    <div className="oqs-detail-block"><h3>Execution cost and rule model</h3><dl className="oqs-kv oqs-kv-grid"><dt>Commission</dt><dd>{isAShareV3 ? "0.06% notional, minimum 0" : "Bound by selected legacy RunSpec"}</dd><dt>Stamp duty</dt><dd>{isAShareV3 ? "0.10% on sells" : "Bound by selected legacy RunSpec"}</dd><dt>Slippage</dt><dd>{isAShareV3 ? "10 price atoms at market open" : "Bound by selected legacy RunSpec"}</dd><dt>Participation</dt><dd>{isAShareV3 ? "10% of reported share volume, lot-aligned" : "Bound by selected legacy RunSpec"}</dd><dt>Position books</dt><dd>{isAShareV3 ? "cash_long + research_short (isolated)" : "Selected engine profile"}</dd><dt>Short rule</dt><dd>{isAShareV3 ? "100% margin, no leverage, no auto-liquidation; T+1 cover" : "Selected engine profile"}</dd><dt>Long rule</dt><dd>{isAShareV3 ? "T+1 sell eligibility; no implicit netting" : "Selected engine profile"}</dd></dl></div>
+    <label className="oqs-field"><span><input type="checkbox" aria-label="I reviewed strategy, parameters and costs" checked={confirmed} disabled={!snapshot || !revision} onChange={(event) => onConfirmedChange(event.target.checked)} /> I reviewed this revision, its parameters, costs and A-share rules.</span></label>
+  </section>;
+}
+
 function ComparisonView({ comparison, onMerge, busy }: { comparison: { left: Revision | undefined; right: Revision | undefined; result: RevisionComparison | undefined }; onMerge: () => void; busy: boolean }) {
   const changes = comparison.result?.changes ?? [];
   return <section className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">IMMUTABLE REVISION COMPARE</p><h2>Path and hash changes</h2></div><button className="oqs-button oqs-button-primary" onClick={onMerge} disabled={busy || changes.length === 0}>Create merge candidate</button></div><div className="oqs-compare-meta"><span>Left {shortId(comparison.result?.left_revision_id ?? comparison.left?.revision_id)}</span><span>Right {shortId(comparison.result?.right_revision_id ?? comparison.right?.revision_id)}</span></div>{changes.length === 0 ? <EmptyState title="No changed paths" body="Select two distinct revisions or save a child revision before comparing." /> : <div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Path</th><th>Status</th><th>Left SHA-256</th><th>Right SHA-256</th></tr></thead><tbody>{changes.map((change) => <tr key={change.path}><td className="oqs-mono">{change.path}</td><td>{change.status ?? "changed"}</td><td className="oqs-mono">{change.left_sha256 ?? "—"}</td><td className="oqs-mono">{change.right_sha256 ?? "—"}</td></tr>)}</tbody></table></div>}</section>;
 }
 
+type EngineTableColumn = { key: string; label: string };
+
+const ENGINE_TABLE_COLUMNS: Record<string, EngineTableColumn[]> = {
+  fills: [
+    { key: "fill_id", label: "Fill ID" },
+    { key: "intent_id", label: "Intent" },
+    { key: "symbol", label: "Symbol" },
+    { key: "book", label: "Book" },
+    { key: "session_seq", label: "Session" },
+    { key: "side", label: "Side" },
+    { key: "position_effect", label: "Effect" },
+    { key: "quantity", label: "Quantity" },
+    { key: "fill_price_atoms", label: "Price" },
+    { key: "notional_atoms", label: "Notional" },
+    { key: "fee_atoms", label: "Fee" },
+    { key: "stamp_duty_atoms", label: "Stamp duty" },
+    { key: "slippage_atoms", label: "Slippage" },
+    { key: "remaining_quantity", label: "Remaining" },
+    { key: "frozen_margin_delta_atoms", label: "Frozen margin Δ" },
+    { key: "isolated_proceeds_delta_atoms", label: "Isolated proceeds Δ" },
+  ],
+  positions: [
+    { key: "intent_id", label: "Opening intent" },
+    { key: "symbol", label: "Symbol" },
+    { key: "book", label: "Book" },
+    { key: "session_seq", label: "Session" },
+    { key: "signed_quantity", label: "Signed quantity" },
+    { key: "eligible_quantity", label: "T+1 eligible" },
+  ],
+  cash_ledger: [
+    { key: "intent_id", label: "Intent" },
+    { key: "symbol", label: "Symbol" },
+    { key: "book", label: "Book" },
+    { key: "session_seq", label: "Session" },
+    { key: "notional_delta_atoms", label: "Notional Δ" },
+    { key: "fee_delta_atoms", label: "Fee Δ" },
+    { key: "stamp_duty_delta_atoms", label: "Stamp duty Δ" },
+    { key: "realized_pnl_delta_atoms", label: "Realized P&L Δ" },
+    { key: "resulting_available_cash_atoms", label: "Available cash" },
+    { key: "frozen_margin_delta_atoms", label: "Frozen margin Δ" },
+    { key: "isolated_proceeds_delta_atoms", label: "Isolated proceeds Δ" },
+  ],
+  equity_curve: [
+    { key: "session_seq", label: "Session" },
+    { key: "timestamp", label: "Timestamp" },
+    { key: "available_cash_atoms", label: "Available cash" },
+    { key: "long_market_value_atoms", label: "Long value" },
+    { key: "short_liability_atoms", label: "Short liability" },
+    { key: "gross_market_value_atoms", label: "Gross exposure" },
+    { key: "net_market_value_atoms", label: "Net exposure" },
+    { key: "frozen_margin_atoms", label: "Frozen margin" },
+    { key: "isolated_short_proceeds_atoms", label: "Isolated short proceeds" },
+    { key: "equity_atoms", label: "Equity" },
+  ],
+  corporate_action_ledger: [
+    { key: "action_id", label: "Action" },
+    { key: "symbol", label: "Symbol" },
+    { key: "session_seq", label: "Session" },
+    { key: "action_type", label: "Type" },
+    { key: "book", label: "Book" },
+    { key: "quantity_before", label: "Quantity before" },
+    { key: "quantity_after", label: "Quantity after" },
+    { key: "available_cash_delta_atoms", label: "Cash Δ" },
+    { key: "frozen_margin_delta_atoms", label: "Margin Δ" },
+    { key: "isolated_proceeds_delta_atoms", label: "Proceeds Δ" },
+    { key: "realized_pnl_delta_atoms", label: "Realized P&L Δ" },
+  ],
+};
+
+const MAX_ENGINE_ROWS = 200;
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function displayRecordValue(value: unknown): string {
+  return value === undefined || value === null || value === "" ? "—" : renderValue(value);
+}
+
 function EngineRecordTable({ label, value }: { label: string; value: unknown }) {
-  if (!Array.isArray(value)) return null;
-  return <div className="oqs-detail-block"><h3>{label.replaceAll("_", " ")}</h3><div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>#</th><th>Record</th></tr></thead><tbody>{value.slice(0, 200).map((item, index) => <tr key={engineRecordKey(label, item)}><td>{index}</td><td><pre>{renderValue(item)}</pre></td></tr>)}</tbody></table></div></div>;
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) {
+    return <div className="oqs-detail-block"><h3>{label.replaceAll("_", " ")}</h3><pre>{renderValue(value)}</pre></div>;
+  }
+  const columns = ENGINE_TABLE_COLUMNS[label] ?? [];
+  const rows = value.slice(0, MAX_ENGINE_ROWS);
+  const truncated = value.length > MAX_ENGINE_ROWS;
+  return <div className="oqs-detail-block" data-testid={`engine-record-${label}`}>
+    <h3>{label.replaceAll("_", " ")}</h3>
+    {truncated ? <p className="oqs-muted" role="status">Showing the first {MAX_ENGINE_ROWS} of {value.length} records. Remaining records stay available in the immutable engine artifact.</p> : null}
+    <div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>#</th>{columns.length > 0 ? columns.map((column) => <th key={column.key}>{column.label}</th>) : <th>Record</th>}</tr></thead><tbody>{rows.map((item, index) => {
+      const record = recordValue(item);
+      return <tr key={`${engineRecordKey(label, item)}:${index}`}><td>{index}</td>{columns.length > 0 && record ? columns.map((column) => <td key={column.key}><pre>{displayRecordValue(record[column.key])}</pre></td>) : <td><pre>{renderValue(item)}</pre></td>}</tr>;
+    })}</tbody></table></div>
+  </div>;
+}
+
+function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function gatesFromDetail(detail: RunDetail): Record<string, unknown> | undefined {
+  const validation = recordValue(detail.validation);
+  const validationGates = recordValue(validation?.gates);
+  if (validationGates) return validationGates;
+  return recordValue(detail.manifest?.gates);
+}
+
+function RunFailurePanel({ detail }: { detail: RunDetail }) {
+  const run = recordValue(detail.run);
+  const validation = recordValue(detail.validation);
+  const errorCode = stringField(run, "error_code")
+    ?? stringField(validation, "error_code")
+    ?? stringField(detail, "error_code")
+    ?? "formal_run_failed";
+  const gates = gatesFromDetail(detail);
+  const logs = detail.logs ?? [];
+  return <div className="oqs-panel oqs-run-failure" role="alert" data-testid="run-failure-panel">
+    <div className="oqs-panel-heading"><div><p className="oqs-kicker">FORMAL RUN FAILURE</p><h2>Run did not complete</h2></div><span className="oqs-status oqs-status-failed">failed</span></div>
+    <div className="oqs-notice oqs-notice-error"><strong className="oqs-mono">{errorCode}</strong><span>The immutable Run has no result artifact to promote.</span></div>
+    <dl className="oqs-kv oqs-kv-grid"><dt>Error code</dt><dd className="oqs-mono">{errorCode}</dd><dt>Validation outcome</dt><dd>{stringField(validation, "outcome") ?? "failed"}</dd><dt>Run ID</dt><dd className="oqs-mono">{stringField(run, "run_id") ?? "—"}</dd></dl>
+    <div className="oqs-detail-block"><h3>Validation gates</h3>{gates ? <div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Gate</th><th>Outcome</th></tr></thead><tbody>{Object.entries(gates).map(([gate, outcome]) => <tr key={gate}><td className="oqs-mono">{gate}</td><td>{displayRecordValue(outcome)}</td></tr>)}</tbody></table></div> : <EmptyState title="Validation gates unavailable" body="The API did not include gate outcomes for this failed Run." />}</div>
+    <div className="oqs-detail-block"><h3>Failure logs</h3>{logs.length > 0 ? <div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Level</th><th>Priority</th><th>Event</th><th>Message</th></tr></thead><tbody>{logs.map((log) => <tr key={logRecordKey(log)}><td>{log.level ?? "—"}</td><td>{log.priority ?? "—"}</td><td className="oqs-mono">{log.event_code ?? "—"}</td><td>{log.message ?? "—"}</td></tr>)}</tbody></table></div> : <EmptyState title="No run-scoped logs" body="No diagnostic log records were attached to this failed Run." />}</div>
+  </div>;
 }
 
 function RunReportView({
@@ -532,8 +830,68 @@ function RunDetailView({ detail, report, onPromote, onDownloadReport, busy }: { 
       ? runSpec.engine_version
       : "formal";
   const run = detail?.run;
+  const runRecord = recordValue(run);
+  const validation = recordValue(detail?.validation);
+  const validationOutcome = stringField(validation, "outcome");
+  const errorCode = stringField(runRecord, "error_code")
+    ?? stringField(validation, "error_code")
+    ?? stringField(detail, "error_code");
+  const failed = run?.status === "failed" || validationOutcome === "failed" || errorCode !== undefined;
+  const status = run?.status ?? "returned";
   if (!detail) return <EmptyState title="No Run selected" body="Run a validated candidate to inspect its immutable formal artifact." />;
-  return <section className="oqs-run-detail"><div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">IMMUTABLE FORMAL ARTIFACT</p><h2>Run Detail</h2></div><div className="oqs-heading-actions"><span className="oqs-status">{run?.status ?? "returned"}</span><button className="oqs-button oqs-button-primary" onClick={onPromote} disabled={busy || run?.status !== "succeeded"}>Promote</button></div></div><dl className="oqs-kv oqs-kv-grid"><dt>RunSpec</dt><dd>{runSpec ? "bound" : "—"}</dd><dt>Run ID</dt><dd className="oqs-mono">{run?.run_id ?? "—"}</dd><dt>Validation</dt><dd>{typeof detail.validation?.outcome === "string" ? detail.validation.outcome : "—"}</dd><dt>Candidate revision</dt><dd className="oqs-mono">{run?.candidate_revision_id ?? "—"}</dd></dl>{runSpec ? <div className="oqs-detail-block"><h3>RunSpec fields</h3><pre>{renderValue(runSpec)}</pre></div> : null}</div>{run?.status === "succeeded" ? <RunReportView model={report} onDownload={onDownloadReport} busy={busy} /> : null}{engine ? <div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">RUST ENGINE OUTPUT</p><h2>Orders, trades, positions, and metrics</h2></div><span className="oqs-chip">{engineVersion}</span></div><div className="oqs-metric-grid">{typeof engine.metrics === "object" && engine.metrics !== null ? Object.entries(engine.metrics).map(([key, value]) => <div className="oqs-metric" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{renderValue(value)}</strong></div>) : <EmptyState title="Metrics unavailable" body="The formal engine did not include a metrics object in this artifact." />}</div>{["orders", "trades", "positions", "cash_ledger", "funding_ledger", "equity_curve", "drawdown_curve"].map((key) => <EngineRecordTable key={key} label={key} value={engine[key]} />)}<div className="oqs-detail-block"><h3>Costs and assumptions</h3><pre>{renderValue({ costs: engine.costs, assumptions: engine.assumptions })}</pre></div></div> : <EmptyState title="Engine result not embedded" body="The API returned a Run envelope without an engine result artifact." />}{manifest ? <div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">PROVENANCE / GATES / LOGS</p><h2>Manifest</h2></div></div><pre>{renderValue({ run_spec: runSpec, revision: manifest.revision, engine_input: manifest.engine_input, strategy_execution: manifest.strategy_execution, gates: manifest.gates, logs: manifest.logs })}</pre></div> : null}{detail.logs ? <div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">RUN-SCOPED LOGS</p><h2>Logs</h2></div><span className="oqs-chip">{detail.logs.length} entries</span></div><div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Level</th><th>Priority</th><th>Event</th><th>Message</th></tr></thead><tbody>{detail.logs.map((log) => <tr key={logRecordKey(log)}><td>{log.level ?? "—"}</td><td>{log.priority ?? "—"}</td><td className="oqs-mono">{log.event_code ?? "—"}</td><td>{log.message ?? "—"}</td></tr>)}</tbody></table></div></div> : null}</section>;
+  return (
+    <section className="oqs-run-detail">
+      <div className="oqs-panel">
+        <div className="oqs-panel-heading">
+          <div><p className="oqs-kicker">IMMUTABLE FORMAL ARTIFACT</p><h2>Run Detail</h2></div>
+          <div className="oqs-heading-actions">
+            <span className={"oqs-status" + (failed ? " oqs-status-failed" : "")}>{status}</span>
+            <button className="oqs-button oqs-button-primary" onClick={onPromote} disabled={busy || run?.status !== "succeeded"}>Promote</button>
+          </div>
+        </div>
+        <dl className="oqs-kv oqs-kv-grid">
+          <dt>RunSpec</dt><dd>{runSpec ? "bound" : "—"}</dd>
+          <dt>Run ID</dt><dd className="oqs-mono">{run?.run_id ?? "—"}</dd>
+          <dt>Validation</dt><dd>{validationOutcome ?? "—"}</dd>
+          <dt>Candidate revision</dt><dd className="oqs-mono">{run?.candidate_revision_id ?? "—"}</dd>
+        </dl>
+        {runSpec ? <div className="oqs-detail-block"><h3>RunSpec fields</h3><pre>{renderValue(runSpec)}</pre></div> : null}
+      </div>
+      {failed ? <RunFailurePanel detail={detail} /> : null}
+      {run?.status === "succeeded" ? <RunReportView model={report} onDownload={onDownloadReport} busy={busy} /> : null}
+      {engine ? <div className="oqs-panel">
+        <div className="oqs-panel-heading">
+          <div><p className="oqs-kicker">RUST ENGINE OUTPUT</p><h2>Orders, fills, positions, and metrics</h2></div>
+          <span className="oqs-chip">{engineVersion}</span>
+        </div>
+        <div className="oqs-metric-grid">
+          {typeof engine.metrics === "object" && engine.metrics !== null
+            ? Object.entries(engine.metrics).map(([key, value]) => <div className="oqs-metric" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{renderValue(value)}</strong></div>)
+            : <EmptyState title="Metrics unavailable" body="The formal engine did not include a metrics object in this artifact." />}
+        </div>
+        {["orders", "fills", "trades", "positions", "cash_ledger", "funding_ledger", "equity_curve", "drawdown_curve", "corporate_action_ledger"].map((key) => <EngineRecordTable key={key} label={key} value={engine[key]} />)}
+        <div className="oqs-detail-block"><h3>Costs and assumptions</h3><pre>{renderValue({ costs: engine.costs, assumptions: engine.assumptions })}</pre></div>
+      </div> : failed ? null : <EmptyState title="Engine result not embedded" body="The API returned a Run envelope without an engine result artifact." />}
+      {manifest ? <div className="oqs-panel">
+        <div className="oqs-panel-heading"><div><p className="oqs-kicker">PROVENANCE / GATES / LOGS</p><h2>Manifest</h2></div></div>
+        <pre>{renderValue({
+          run_spec: runSpec,
+          revision: manifest.revision,
+          engine_input: manifest.engine_input,
+          market_input: manifest.market_input,
+          resolved_engine_input: manifest.resolved_engine_input,
+          strategy_execution: manifest.strategy_execution,
+          checkpoint: manifest.checkpoint,
+          gates: manifest.gates,
+          logs: manifest.logs,
+        })}</pre>
+      </div> : null}
+      {detail.logs && !failed ? <div className="oqs-panel">
+        <div className="oqs-panel-heading"><div><p className="oqs-kicker">RUN-SCOPED LOGS</p><h2>Logs</h2></div><span className="oqs-chip">{detail.logs.length} entries</span></div>
+        <div className="oqs-table-wrap"><table className="oqs-table"><thead><tr><th>Level</th><th>Priority</th><th>Event</th><th>Message</th></tr></thead><tbody>{detail.logs.map((log) => <tr key={logRecordKey(log)}><td>{log.level ?? "—"}</td><td>{log.priority ?? "—"}</td><td className="oqs-mono">{log.event_code ?? "—"}</td><td>{log.message ?? "—"}</td></tr>)}</tbody></table></div>
+      </div> : null}
+    </section>
+  );
 }
 
 const defaultResearchApi = createResearchApi();
@@ -575,16 +933,21 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
     low: "",
     close: "",
     volume: "",
+    trading_status: "",
+    price_limit_state: "",
   });
   const [dataMarket, setDataMarket] = useState<DataSnapshotMarket>("a_share_daily");
   const [dataTimezone, setDataTimezone] = useState("Asia/Shanghai");
   const [dataPriceBasis, setDataPriceBasis] = useState<DataSnapshotPriceBasis>("raw");
   const [dataCutoff, setDataCutoff] = useState("2026-12-31T23:59:59Z");
+  const [dataExecutionProfile, setDataExecutionProfile] = useState<DataSnapshotExecutionProfile>("legacy");
+  const [dataCorporateActionsText, setDataCorporateActionsText] = useState("[]");
   const [dataImportErrors, setDataImportErrors] = useState<DataImportRowError[]>([]);
   const [dataSnapshots, setDataSnapshots] = useState<DataSnapshot[]>([]);
   const [selectedDataSnapshotId, setSelectedDataSnapshotId] = useState("");
   const [builtInStrategies, setBuiltInStrategies] = useState<BuiltInStrategy[]>([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState("");
+  const [runReviewConfirmed, setRunReviewConfirmed] = useState(false);
   const [renderedNotebook, setRenderedNotebook] = useState<RenderedStrategyNotebook>();
   const [code, setCode] = useState("");
   const [workbench, setWorkbench] = useState<WorkbenchId>("canvas");
@@ -604,6 +967,8 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
   const [edges, , onEdgesChange] = useEdgesState(canvasEdges());
   const selectedVariant = variants.find((item) => item.head_revision_id === headRevisionId) ?? variants[0];
   const selectedRun = runs.find((run) => run.run_id === selectedRunId);
+  const selectedStrategy = builtInStrategies.find((item) => item.strategy_id === selectedStrategyId);
+  const selectedSnapshot = dataSnapshots.find((item) => item.snapshot_id === selectedDataSnapshotId);
   const logRequest = useMemo<LogListFilters>(() => ({
     ...appliedLogFilters,
     runId: selectedRunId || undefined,
@@ -721,6 +1086,15 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
     }).catch(reportError);
     return () => { cancelled = true; };
   }, [api, projectId, selectedVariant?.head_revision_id, headRevisionId, reportError]);
+
+  useEffect(() => {
+    setRunReviewConfirmed(false);
+  }, [selectedDataSnapshotId, selectedStrategyId, revision?.revision_id]);
+
+  useEffect(() => {
+    candidateRevisionId.current = "";
+    setRunReviewConfirmed(false);
+  }, [activityId, projectId]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -979,7 +1353,13 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
       const response = await api.createMergeCandidate({ projectId, activityId, variantId: selectedVariant.variant_id, candidateRevisionId: revision.revision_id, message: "Merge candidate from Compare workbench", files });
       const candidate = getRevisionId(response);
       setNotice(candidate ? `Merge candidate ${shortId(candidate)} created` : "Merge candidate command accepted");
-      if (candidate) candidateRevisionId.current = candidate;
+      if (candidate) {
+        candidateRevisionId.current = candidate;
+        const nextRevision = await api.getRevision(projectId, candidate);
+        setRevision(nextRevision);
+        setCode(getCodeFromRevision(nextRevision));
+        setRunReviewConfirmed(false);
+      }
     } catch (value) {
       reportError(value);
     } finally {
@@ -1030,6 +1410,12 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
     setBusy(true);
     setError(undefined);
     try {
+      let corporateActions: DataSnapshotCorporateAction[] | undefined;
+      if (dataExecutionProfile === "a-share-v3") {
+        const parsed: unknown = JSON.parse(dataCorporateActionsText || "[]");
+        if (!Array.isArray(parsed)) throw new Error("Corporate actions JSON must be an array");
+        corporateActions = parsed as DataSnapshotCorporateAction[];
+      }
       const response = await api.createDataSnapshot({
         source: dataPreview.source,
         source_format: dataPreview.source_format,
@@ -1039,6 +1425,10 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
         timezone: dataTimezone,
         price_basis: dataPriceBasis,
         cutoff: dataCutoff,
+        ...(dataExecutionProfile === "legacy"
+          ? {}
+          : { execution_profile: dataExecutionProfile }),
+        ...(corporateActions === undefined ? {} : { corporate_actions: corporateActions }),
       });
       const snapshotId = getSnapshotId(response);
       setDataSnapshots(await api.listDataSnapshots());
@@ -1051,30 +1441,53 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
     } finally {
       setBusy(false);
     }
-  }, [api, dataCutoff, dataMapping, dataMarket, dataPreview, dataPriceBasis, dataTimezone, reportError]);
+  }, [api, dataCorporateActionsText, dataCutoff, dataExecutionProfile, dataMapping, dataMarket, dataPreview, dataPriceBasis, dataTimezone, reportError]);
 
   const formalRun = useCallback(async () => {
     const candidateRevisionIdToRun = candidateRevisionId.current || comparison.result?.right_revision_id || revision?.revision_id || selectedVariant?.head_revision_id;
     if (!candidateRevisionIdToRun || !selectedDataSnapshotId) return;
+    if (!runReviewConfirmed) {
+      setWorkbench("backtest");
+      setNotice("Review the bound strategy revision, parameters and costs before requesting a Formal Run");
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
+      const selectedSnapshot = dataSnapshots.find(
+        (snapshot) => snapshot.snapshot_id === selectedDataSnapshotId,
+      );
+      const reviewAttestation: ReviewAttestation | undefined = selectedSnapshot !== undefined
+        && (selectedSnapshot.schema_version === 3 || selectedSnapshot.execution_profile === "a-share-v3")
+        ? {
+            status: "approved",
+            candidate_revision_id: candidateRevisionIdToRun,
+            strategy_tree_oid: revision?.git_tree_oid ?? "",
+            data_snapshot_sha256: selectedSnapshot.sha256,
+            parameters_sha256: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            cost_model_sha256: "1b8c04884842ebed2127ad93926c2da822c831225c76ed08361704e95aceb8e0",
+            reviewer_id: "local-user",
+            reviewed_at: new Date().toISOString(),
+          }
+        : undefined;
       const response = await api.requestFormalRun(
         candidateRevisionIdToRun,
         selectedDataSnapshotId,
+        reviewAttestation,
       );
       const runId = getRunId(response);
       setNotice(runId ? `Formal Run ${shortId(runId)} queued` : "Formal Run command accepted");
       const nextRuns = await api.listRuns(projectId, activityId || undefined);
       setRuns(nextRuns);
       if (runId) setSelectedRunId(runId);
+      setRunReviewConfirmed(false);
       setWorkbench("backtest");
     } catch (value) {
       reportError(value);
     } finally {
       setBusy(false);
     }
-  }, [activityId, api, comparison.result, projectId, reportError, revision, selectedDataSnapshotId, selectedVariant]);
+  }, [activityId, api, comparison.result, dataSnapshots, projectId, reportError, revision, runReviewConfirmed, selectedDataSnapshotId, selectedVariant]);
 
   const confirmLogDeletion = useCallback(async () => {
     if (!pendingLogDeletion) return;
@@ -1208,17 +1621,37 @@ export function ResearchWorkbench({ api = defaultResearchApi }: ResearchWorkbenc
   const activityLabel = activities.find((activity) => activity.activity_id === activityId)?.name ?? shortId(activityId);
 
   return <div className="oqs-shell">
-    <header className="oqs-topbar"><div className="oqs-brand"><span className="oqs-mark">OQ</span><div><strong>Open Quant Studio</strong><span>local research workstation</span></div></div><div className="oqs-selectors"><label>Project<select data-testid="project-selector" value={projectId} onChange={(event) => { setProjectId(event.target.value); setActivityId(""); setSelectedDataSnapshotId(""); setDataPreview(undefined); }}><option value="">Select project</option>{projects.map((project) => <option value={project.project_id} key={project.project_id}>{project.name ?? shortId(project.project_id)}</option>)}</select></label><label>Activity<select data-testid="activity-selector" value={activityId} onChange={(event) => setActivityId(event.target.value)}><option value="">Select activity</option>{activities.map((activity) => <option value={activity.activity_id} key={activity.activity_id}>{activity.name ?? shortId(activity.activity_id)}</option>)}</select></label></div><div className="oqs-context"><span>{projectLabel} / {activityLabel}</span><span className={context?.isStreaming ? "oqs-live" : "oqs-muted"}>{context?.isStreaming ? "Pi streaming" : "local context"}</span></div></header>
-    <div className="oqs-body"><aside className="oqs-sidebar"><div className="oqs-sidebar-title">WORKBENCH</div>{NAV_ITEMS.map((item) => <button key={item.id} className={`oqs-nav-item ${workbench === item.id ? "is-active" : ""}`} onClick={() => setWorkbench(item.id)}><span>{item.label}</span><small>{item.description}</small></button>)}<div className="oqs-sidebar-footer"><span className="oqs-dot" />Research-only mode</div></aside>
-      <main className="oqs-main"><div className="oqs-main-heading"><div><p className="oqs-kicker">{projectLabel} · {activityLabel}</p><h1>{NAV_ITEMS.find((item) => item.id === workbench)?.label}</h1></div><div className="oqs-heading-actions">{selectedRunId ? <button className="oqs-button" onClick={() => setWorkbench("run-detail")}>Open Run {shortId(selectedRunId)}</button> : null}<button className="oqs-button" onClick={formalRun} disabled={busy || !revision || !selectedDataSnapshotId}>Run formal</button></div></div><ErrorNotice error={error} />{notice ? <div className="oqs-notice" role="status">{notice}<button onClick={() => setNotice(undefined)} aria-label="Dismiss notice">×</button></div> : null}
-        {workbench === "canvas" ? <section className="oqs-canvas-layout"><div className="oqs-panel oqs-canvas"><ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={(_, node) => setSelectedNode(node.id)} onNodeDragStop={() => { if (projectId && activityId) localStorage.setItem(`oqs:canvas:${projectId}:${activityId}`, JSON.stringify(nodes.map((node) => ({ id: node.id, position: node.position })))); }} proOptions={{ hideAttribution: true }}><Controls /><Background gap={20} size={1} /></ReactFlow></div><aside className="oqs-panel oqs-node-detail"><p className="oqs-kicker">SELECTED GRAPH NODE</p>{selectedNodeDetail ? <><span className="oqs-chip">{selectedNodeDetail.data.kind}</span><h2>{selectedNodeDetail.data.title}</h2><p>{selectedNodeDetail.data.detail}</p><dl className="oqs-kv"><dt>Node ID</dt><dd className="oqs-mono">{selectedNodeDetail.id}</dd><dt>Position</dt><dd>{Math.round(selectedNodeDetail.position.x)}, {Math.round(selectedNodeDetail.position.y)}</dd></dl></> : <EmptyState title="Select a node" body="Drag nodes to shape the project graph. Layout is persisted per project and activity." />}</aside></section> : null}
-        {workbench === "chat" ? <section className="oqs-panel oqs-chat"><div className="oqs-panel-heading"><div><p className="oqs-kicker">LOCAL PI SESSION</p><h2>Pi Chat</h2></div><span className="oqs-chip">{chatConnected ? "Pi connected" : "connecting…"}</span></div><div className="oqs-chat-history">{chatMessages.length === 0 ? <EmptyState title="Ask about this Activity" body="Prompt responses and Pi session events appear here." /> : chatMessages.map((message) => <div key={message.id} className={`oqs-chat-message ${message.role}`}><span>{message.role === "user" ? "You" : "Pi"}</span><p>{message.text}</p></div>)}</div><form className="oqs-chat-form" onSubmit={(event) => { event.preventDefault(); void sendChat(); }}><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask Pi about this research context…" aria-label="Chat prompt" /><button type="submit" className="oqs-button oqs-button-primary" disabled={!chatConnected || !chatInput.trim()}>Send</button></form></section> : null}
+    <header className="oqs-topbar">
+      <div className="oqs-brand">
+        <span className="oqs-mark">OQ</span>
+        <div><strong>Open Quant Studio</strong><span>strategy research operating system</span></div>
+      </div>
+      <div className="oqs-selectors">
+        <label>Project<select data-testid="project-selector" value={projectId} onChange={(event) => { setProjectId(event.target.value); setActivityId(""); setSelectedDataSnapshotId(""); setDataPreview(undefined); }}><option value="">Select project</option>{projects.map((project) => <option value={project.project_id} key={project.project_id}>{project.name ?? shortId(project.project_id)}</option>)}</select></label>
+        <label>Activity<select data-testid="activity-selector" value={activityId} onChange={(event) => setActivityId(event.target.value)}><option value="">Select activity</option>{activities.map((activity) => <option value={activity.activity_id} key={activity.activity_id}>{activity.name ?? shortId(activity.activity_id)}</option>)}</select></label>
+      </div>
+      <div className="oqs-topbar-status"><span className={context?.isStreaming ? "oqs-live" : "oqs-muted"}><span className="oqs-live-dot" />{context?.isStreaming ? "Pi streaming" : "local context"}</span><span className="oqs-topbar-divider" /><span className="oqs-mono">{shortId(context?.sessionId)}</span></div>
+      <div className="oqs-context"><span>{projectLabel} / {activityLabel}</span><span className={context?.isStreaming ? "oqs-live" : "oqs-muted"}>{context?.isStreaming ? "Pi streaming" : "local context"}</span></div>
+    </header>
+    <div className="oqs-body">
+      <aside className="oqs-sidebar">
+        <div className="oqs-sidebar-intro"><div className="oqs-sidebar-title">WORKBENCH</div><span>LOCAL / SINGLE USER</span></div>
+        {NAV_GROUPS.map((group) => <div className="oqs-nav-group" key={group.label}><div className="oqs-nav-group-label">{group.label}</div>{group.ids.map((id) => { const item = NAV_ITEMS.find((entry) => entry.id === id); if (!item) return null; return <button key={item.id} className={`oqs-nav-item ${workbench === item.id ? "is-active" : ""}`} aria-current={workbench === item.id ? "page" : undefined} onClick={() => setWorkbench(item.id)}><span>{item.label}</span><small>{item.description}</small></button>; })}</div>)}
+        <div className="oqs-sidebar-footer"><span className="oqs-dot" />Research-only mode<span className="oqs-sidebar-footer-note">no order submission</span></div>
+      </aside>
+      <main className="oqs-main">
+        <div className="oqs-main-heading"><div><p className="oqs-kicker">{projectLabel} · {activityLabel}</p><h1>{NAV_ITEMS.find((item) => item.id === workbench)?.label}</h1></div><div className="oqs-heading-actions">{selectedRunId ? <button className="oqs-button" onClick={() => setWorkbench("run-detail")}>Open Run {shortId(selectedRunId)}</button> : null}<button className="oqs-button" onClick={formalRun} disabled={busy || !revision || !selectedDataSnapshotId}>{runReviewConfirmed ? "Run formal" : "Review formal Run"}</button></div></div>
+        <ContextRail projectLabel={projectLabel} activityLabel={activityLabel} context={context} variant={selectedVariant} revision={revision} snapshot={selectedSnapshot} selectedRun={selectedRun} />
+        <ErrorNotice error={error} />
+        {notice ? <div className="oqs-notice" role="status">{notice}<button onClick={() => setNotice(undefined)} aria-label="Dismiss notice">×</button></div> : null}
+        {workbench === "canvas" ? <><ResearchOverview projectLabel={projectLabel} activityLabel={activityLabel} context={context} variant={selectedVariant} revision={revision} selectedStrategy={selectedStrategy} snapshot={selectedSnapshot} runs={runs} selectedRun={selectedRun} onNavigate={setWorkbench} /><section className="oqs-canvas-layout"><div className="oqs-panel oqs-canvas"><ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={(_, node) => setSelectedNode(node.id)} onNodeDragStop={() => { if (projectId && activityId) localStorage.setItem(`oqs:canvas:${projectId}:${activityId}`, JSON.stringify(nodes.map((node) => ({ id: node.id, position: node.position })))); }} proOptions={{ hideAttribution: true }}><Controls /><Background gap={20} size={1} /></ReactFlow></div><aside className="oqs-panel oqs-node-detail"><p className="oqs-kicker">SELECTED GRAPH NODE</p>{selectedNodeDetail ? <><span className="oqs-chip">{selectedNodeDetail.data.kind}</span><h2>{selectedNodeDetail.data.title}</h2><p>{selectedNodeDetail.data.detail}</p><dl className="oqs-kv"><dt>Node ID</dt><dd className="oqs-mono">{selectedNodeDetail.id}</dd><dt>Position</dt><dd>{Math.round(selectedNodeDetail.position.x)}, {Math.round(selectedNodeDetail.position.y)}</dd></dl></> : <EmptyState title="Select a node" body="Drag nodes to shape the project graph. Layout is persisted per project and activity." />}</aside></section></> : null}
+        {workbench === "chat" ? <section className="oqs-chat-layout"><section className="oqs-panel oqs-chat"><div className="oqs-panel-heading"><div><p className="oqs-kicker">LOCAL PI SESSION</p><h2>Pi Chat</h2></div><span className="oqs-chip">{chatConnected ? "Pi connected" : "connecting…"}</span></div><div className="oqs-chat-history">{chatMessages.length === 0 ? <EmptyState title="Ask about this Activity" body="Prompt responses and Pi session events appear here." /> : chatMessages.map((message) => <div key={message.id} className={`oqs-chat-message ${message.role}`}><span>{message.role === "user" ? "You" : "Pi"}</span><p>{message.text}</p></div>)}</div><form className="oqs-chat-form" onSubmit={(event) => { event.preventDefault(); void sendChat(); }}><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask Pi about this research context…" aria-label="Chat prompt" /><button type="submit" className="oqs-button oqs-button-primary" disabled={!chatConnected || !chatInput.trim()}>Send</button></form></section><SessionFabricAside context={context} projectLabel={projectLabel} activityLabel={activityLabel} onNavigate={setWorkbench} /></section> : null}
         {workbench === "code" ? <CodeView strategies={builtInStrategies} selectedStrategyId={selectedStrategyId} code={code} setCode={setCode} revision={revision} onSelectStrategy={selectBuiltInStrategy} onSave={() => { void saveChildRevision(); }} onFinalize={() => { void finalizeNotebook(); }} onDownload={downloadNotebook} onCompare={() => { void compare(); }} onCreateVariant={() => { void forkVariant(); }} busy={busy} /> : null}
         {workbench === "compare" ? <ComparisonView comparison={comparison} onMerge={() => { void merge(); }} busy={busy} /> : null}
-        {workbench === "backtest" ? <section className="oqs-backtest-layout"><div className="oqs-panel"><p className="oqs-kicker">FORMAL ENGINE ACTION</p><h2>Backtest</h2><p>Runs are created from the explicitly selected immutable DataSnapshot by the Python domain and Rust formal engine.</p><dl className="oqs-kv"><dt>Data snapshot</dt><dd className="oqs-mono">{selectedDataSnapshotId || "Select one in Data"}</dd></dl><div className="oqs-action-row"><button className="oqs-button oqs-button-primary" onClick={() => { void formalRun(); }} disabled={busy || !revision || !selectedDataSnapshotId}>Request formal Run</button>{selectedRunId ? <button className="oqs-button" onClick={() => setWorkbench("run-detail")}>View Run Detail</button> : null}</div></div><div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">RUN QUEUE</p><h2>Activity Runs</h2></div><span className="oqs-chip">{runs.length} total</span></div>{runs.length === 0 ? <EmptyState title="No formal Runs" body="Select an immutable snapshot, save or merge a candidate, then request a formal Run." /> : <div className="oqs-run-list">{runs.map((run) => <button key={run.run_id} className={`oqs-run-row ${selectedRunId === run.run_id ? "is-active" : ""}`} onClick={() => setSelectedRunId(run.run_id)}><span className="oqs-mono">{shortId(run.run_id)}</span><span>{run.status ?? "unknown"}</span><span>{timestamp(run.finished_at ?? run.created_at)}</span></button>)}</div>}</div></section> : null}
+        {workbench === "backtest" ? <><StrategyRunReview strategy={selectedStrategy} snapshot={selectedSnapshot} executionProfile={selectedSnapshot?.execution_profile ?? dataExecutionProfile} revision={revision} confirmed={runReviewConfirmed} onConfirmedChange={setRunReviewConfirmed} /><section className="oqs-backtest-layout"><div className="oqs-panel"><p className="oqs-kicker">QUANTBT-STYLE FORMAL LEDGER</p><h2>Backtest</h2><p>Runs are created from the explicitly selected immutable DataSnapshot by the Python domain and Rust formal engine. Review the bound strategy, costs, and market rules before you queue evidence.</p><dl className="oqs-kv"><dt>Data snapshot</dt><dd className="oqs-mono">{selectedDataSnapshotId || "Select one in Data"}</dd></dl><div className="oqs-action-row"><button className="oqs-button oqs-button-primary" onClick={() => { void formalRun(); }} disabled={busy || !revision || !selectedDataSnapshotId || !runReviewConfirmed}>Request formal Run</button>{selectedRunId ? <button className="oqs-button" onClick={() => setWorkbench("run-detail")}>View Run Detail</button> : null}</div></div><div className="oqs-panel"><div className="oqs-panel-heading"><div><p className="oqs-kicker">RUN QUEUE</p><h2>Activity Runs</h2></div><span className="oqs-chip">{runs.length} total</span></div>{runs.length === 0 ? <EmptyState title="No formal Runs" body="Select an immutable snapshot, save or merge a candidate, then request a formal Run." /> : <div className="oqs-run-list">{runs.map((run) => <button key={run.run_id} className={`oqs-run-row ${selectedRunId === run.run_id ? "is-active" : ""}`} onClick={() => setSelectedRunId(run.run_id)}><span className="oqs-mono">{shortId(run.run_id)}</span><span>{run.status ?? "unknown"}</span><span>{timestamp(run.finished_at ?? run.created_at)}</span></button>)}</div>}</div></section></> : null}
         {workbench === "run-detail" ? <RunDetailView detail={runDetail} report={runReport} onPromote={() => { void promote(); }} onDownloadReport={(format) => { void downloadRunReport(format); }} busy={busy} /> : null}
         {workbench === "forward-test" ? <ForwardTestView run={selectedRun} result={forwardTest} onRequest={() => { void requestForwardTest(); }} busy={busy} /> : null}
-        {workbench === "data" ? <><DataImportView file={dataFile} localFiles={localDataFiles} selectedLocalFile={selectedLocalDataFile} preview={dataPreview} mapping={dataMapping} market={dataMarket} timezone={dataTimezone} priceBasis={dataPriceBasis} cutoff={dataCutoff} errors={dataImportErrors} snapshots={dataSnapshots} selectedSnapshotId={selectedDataSnapshotId} busy={busy} onFileChange={(file) => { setDataFile(file); setDataPreview(undefined); setDataImportErrors([]); }} onPreviewUpload={() => { void previewDataFile(); }} onRefreshLocalFiles={() => { void loadDataCatalog(); }} onSelectedLocalFileChange={setSelectedLocalDataFile} onPreviewLocal={() => { void previewLocalDataFile(); }} onMappingChange={(field, column) => setDataMapping((current) => ({ ...current, [field]: column }))} onMarketChange={setDataMarket} onTimezoneChange={setDataTimezone} onPriceBasisChange={setDataPriceBasis} onCutoffChange={setDataCutoff} onCreateSnapshot={() => { void createDataSnapshot(); }} onSelectSnapshot={(snapshotId) => { setSelectedDataSnapshotId(snapshotId); setNotice(`Snapshot ${shortId(snapshotId)} selected for Formal Run`); }} /><ArchiveImportView archive={archiveFile} result={archiveImportResult} onArchiveChange={(file) => { setArchiveFile(file); setArchiveImportResult(undefined); }} onImport={() => { void importProjectArchive(); }} busy={busy} /></> : null}
+        {workbench === "data" ? <><DataImportView file={dataFile} localFiles={localDataFiles} selectedLocalFile={selectedLocalDataFile} preview={dataPreview} mapping={dataMapping} market={dataMarket} timezone={dataTimezone} priceBasis={dataPriceBasis} cutoff={dataCutoff} executionProfile={dataExecutionProfile} corporateActionsText={dataCorporateActionsText} errors={dataImportErrors} snapshots={dataSnapshots} selectedSnapshotId={selectedDataSnapshotId} busy={busy} onFileChange={(file) => { setDataFile(file); setDataPreview(undefined); setDataImportErrors([]); }} onPreviewUpload={() => { void previewDataFile(); }} onRefreshLocalFiles={() => { void loadDataCatalog(); }} onSelectedLocalFileChange={setSelectedLocalDataFile} onPreviewLocal={() => { void previewLocalDataFile(); }} onMappingChange={(field, column) => setDataMapping((current) => ({ ...current, [field]: column }))} onMarketChange={setDataMarket} onTimezoneChange={setDataTimezone} onPriceBasisChange={setDataPriceBasis} onCutoffChange={setDataCutoff} onExecutionProfileChange={setDataExecutionProfile} onCorporateActionsTextChange={setDataCorporateActionsText} onCreateSnapshot={() => { void createDataSnapshot(); }} onSelectSnapshot={(snapshotId) => { setSelectedDataSnapshotId(snapshotId); setNotice(`Snapshot ${shortId(snapshotId)} selected for Formal Run`); }} /><ArchiveImportView archive={archiveFile} result={archiveImportResult} onArchiveChange={(file) => { setArchiveFile(file); setArchiveImportResult(undefined); }} onImport={() => { void importProjectArchive(); }} busy={busy} /></> : null}
         {workbench === "settings" ? <ArchiveExportView projectId={projectId} selectedLogs={archiveLogSelection} onSelectedLogsChange={setArchiveLogSelection} onExport={() => { void exportProjectArchive(); }} busy={busy} /> : null}
         {workbench === "logs" ? <LogsView logs={logs} filters={logFilters} selectedRunId={selectedRunId} selectedLogIds={selectedLogIds} pendingDeletion={pendingLogDeletion} loading={logsLoading} onFiltersChange={setLogFilters} onApply={() => setAppliedLogFilters({ ...logFilters })} onRefresh={() => { void loadLogs(); }} onSelectionChange={setSelectedLogIds} onRequestDelete={(logIds) => setPendingLogDeletion(logIds)} onCancelDelete={() => setPendingLogDeletion(undefined)} onConfirmDelete={() => { void confirmLogDeletion(); }} /> : null}
       </main>

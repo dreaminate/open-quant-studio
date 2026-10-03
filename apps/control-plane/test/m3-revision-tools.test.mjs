@@ -157,19 +157,23 @@ const actor = {
   workbenchId: "code",
 };
 
-test("revision tools expose exactly seven actor-bound bounded tools", () => {
+test("revision tools expose only actor-bound bounded workspace tools", () => {
   const { client } = fakeClient();
   const revisionClient = new FetchQuantDomainRevisionClient(client, async () => {
     throw new Error("reads are not used");
   });
   const tools = createRevisionTools(revisionClient, { ...actor, workbenchId: () => "code" });
   assert.deepEqual(tools.map((tool) => tool.name), [
+    "strategy_workspace_read",
+    "revision_file_read",
     "revision_create_root",
     "strategy_variant_create",
     "revision_create_child",
     "revision_compare",
     "merge_candidate_create",
     "formal_run_request",
+    "data_snapshot_list",
+    "formal_run_snapshot",
     "revision_promote",
   ]);
   for (const tool of tools) {
@@ -178,6 +182,125 @@ test("revision tools expose exactly seven actor-bound bounded tools", () => {
     assert.equal("session_id" in tool.parameters.properties, false);
     assert.equal("workbench_id" in tool.parameters.properties, false);
   }
+});
+
+test("Pi reads verified workspace source and requests a snapshot-bound Run with OQS defaults", async () => {
+  const { createHash } = await import("node:crypto");
+  const source = "def on_bar(bar):\n    return []\n";
+  const sourceBytes = new TextEncoder().encode(source);
+  const sourceHash = createHash("sha256").update(sourceBytes).digest("hex");
+  const snapshotId = "70707070-7070-4070-8070-707070707070";
+  const requested = [];
+  const candidate = {
+    revision_id: REVISION_B_ID,
+    project_id: PROJECT_ID,
+    activity_id: ACTIVITY_ID,
+    variant_id: VARIANT_A_ID,
+    base_revision_id: REVISION_A_ID,
+    git_commit_oid: "a".repeat(40),
+    git_tree_oid: "b".repeat(40),
+    message: "candidate",
+    created_by_session_id: SESSION_ID,
+    created_at: "2026-08-14T00:00:00Z",
+    files: [{
+      path: "strategy.py",
+      artifact_id: "71717171-7171-4171-8171-717171717171",
+      git_blob_oid: "c".repeat(40),
+      sha256: sourceHash,
+      byte_size: sourceBytes.byteLength,
+      media_type: "text/plain",
+      storage_uri: `cas://sha256/${sourceHash}`,
+    }],
+  };
+  const snapshot = {
+    snapshot_id: snapshotId,
+    project_id: PROJECT_ID,
+    market_input_artifact_id: "72727272-7272-4272-8272-727272727272",
+    market_input_sha256: "d".repeat(64),
+    sha256: "e".repeat(64),
+    price_basis: "raw",
+    cutoff: "2026-01-08T00:00:00Z",
+    timezone: "Asia/Shanghai",
+    sample_start: "2026-01-05T07:00:00Z",
+    sample_end: "2026-01-08T07:00:00Z",
+    schema_version: 3,
+    execution_profile: "a-share-v3",
+  };
+  const client = {
+    async getProjectRevisionHead() {
+      return { project_id: PROJECT_ID, head_revision_id: ROOT_REVISION_ID };
+    },
+    async listVariants() {
+      return [{ variant_id: VARIANT_A_ID, head_revision_id: REVISION_A_ID }];
+    },
+    async listDataSnapshots() {
+      return { snapshots: [snapshot] };
+    },
+    async getRevision() {
+      return candidate;
+    },
+    async getArtifact() {
+      return {
+        project_id: PROJECT_ID,
+        artifact_id: candidate.files[0].artifact_id,
+        sha256: sourceHash,
+        byte_size: sourceBytes.byteLength,
+        media_type: "text/plain",
+      };
+    },
+    async getArtifactContent() {
+      return sourceBytes;
+    },
+    async getDataSnapshot() {
+      return snapshot;
+    },
+    async getDataSnapshotMarketInput() {
+      return "{\"schema_version\":3}";
+    },
+    async requestFormalRun(request) {
+      requested.push(request);
+      return { command_id: "73737373-7373-4373-8373-737373737373", disposition: "accepted" };
+    },
+  };
+  const tools = createRevisionTools(client, actor);
+  const workspaceTool = tools.find((tool) => tool.name === "strategy_workspace_read");
+  const workspaceResult = JSON.parse((await workspaceTool.execute("read-workspace", {})).content[0].text);
+  assert.equal(workspaceResult.project_head.head_revision_id, ROOT_REVISION_ID);
+  assert.equal(workspaceResult.snapshots[0].snapshot_id, snapshotId);
+
+  const sourceTool = tools.find((tool) => tool.name === "revision_file_read");
+  const sourceResult = JSON.parse((await sourceTool.execute("read-source", {
+    revision_id: REVISION_B_ID,
+    path: "strategy.py",
+  })).content[0].text);
+  assert.equal(sourceResult.body, source);
+  assert.equal(sourceResult.sha256, sourceHash);
+
+  const runTool = tools.find((tool) => tool.name === "formal_run_snapshot");
+  await runTool.execute("snapshot-run", {
+    candidate_revision_id: REVISION_B_ID,
+    variant_id: VARIANT_A_ID,
+    data_snapshot_id: snapshotId,
+    review_attestation: {
+      status: "approved",
+      candidate_revision_id: REVISION_B_ID,
+      strategy_tree_oid: candidate.git_tree_oid,
+      data_snapshot_sha256: snapshot.sha256,
+      parameters_sha256: createHash("sha256").update("{}").digest("hex"),
+      cost_model_sha256: createHash("sha256").update("oqs-a-share-v3-default-costs").digest("hex"),
+      reviewer_id: "test-user",
+      reviewed_at: "2026-08-14T00:00:00Z",
+    },
+  });
+  assert.equal(requested.length, 1);
+  assert.equal(requested[0].strategyTreeOid, candidate.git_tree_oid);
+  assert.equal(requested[0].dataSnapshotSha256, snapshot.sha256);
+  assert.equal(requested[0].parametersSha256, createHash("sha256").update("{}").digest("hex"));
+  assert.equal(
+    requested[0].costModelSha256,
+    createHash("sha256").update("oqs-a-share-v3-default-costs").digest("hex"),
+  );
+  assert.equal(requested[0].randomSeed, 0);
 });
 
 test("Pi tool retries derive one deterministic command identity from the tool call", async () => {

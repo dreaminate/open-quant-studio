@@ -304,15 +304,23 @@ test("browser actor is server-sealed and child edits use a fresh variant head", 
   });
 });
 
-test("Formal Run accepts no browser authority and injects the trusted fixture", async () => {
-  assert.throws(
-    () => createOqsBrowserServer({
-      activeSessionId: SESSION_ID,
-      registry: harness().registry,
-      revisionClient: harness().revisionClient,
-    }),
-    /formal Run fixture is required/,
-  );
+test("Formal Run requires a snapshot without a fixture and still accepts no browser authority", async () => {
+  const productionHarness = harness();
+  const productionServer = createOqsBrowserServer({
+    activeSessionId: SESSION_ID,
+    registry: productionHarness.registry,
+    revisionClient: productionHarness.revisionClient,
+  });
+  await withServer({ server: productionServer }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/v1/revisions/${CANDIDATE_REVISION_ID}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), { error: "data_snapshot_required" });
+    assert.equal(productionHarness.calls.length, 0);
+  });
   assert.throws(
     () => createOqsBrowserServer({
       activeSessionId: SESSION_ID,

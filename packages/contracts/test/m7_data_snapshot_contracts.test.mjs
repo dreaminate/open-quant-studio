@@ -78,3 +78,46 @@ test("M7 import preview, immutable snapshot, and list read models validate", () 
   badList.snapshots[0].row_count = 0;
   assert.equal(validateDataSnapshotListReadModel(badList).valid, false);
 });
+
+test("A-share-v3 data snapshots support a fixed basket with explicit symbol shape", () => {
+  const event = fixture("event.data-snapshot-created.valid.json");
+  const singleEvent = structuredClone(event);
+  singleEvent.payload.schema_version = 3;
+  singleEvent.payload.execution_profile = "a-share-v3";
+  assert.equal(validateDataSnapshotEvent(singleEvent).valid, true);
+
+  const basketEvent = structuredClone(singleEvent);
+  basketEvent.payload.symbol = null;
+  basketEvent.payload.symbols = ["000001.SZ", "600519.SH"];
+  assert.equal(validateDataSnapshotEvent(basketEvent).valid, true);
+
+  const nonNullBasketSymbol = structuredClone(basketEvent);
+  nonNullBasketSymbol.payload.symbol = "000001.SZ";
+  assert.equal(validateDataSnapshotEvent(nonNullBasketSymbol).valid, false);
+
+  const nullSingleSymbol = structuredClone(singleEvent);
+  nullSingleSymbol.payload.symbol = null;
+  assert.equal(validateDataSnapshotEvent(nullSingleSymbol).valid, false);
+
+  const mismatchedSingleSymbol = structuredClone(singleEvent);
+  mismatchedSingleSymbol.payload.symbol = "600519.SH";
+  assert.equal(validateDataSnapshotEvent(mismatchedSingleSymbol).valid, false);
+
+  const snapshot = fixture("data-snapshot-read-model.valid.json");
+  const basketSnapshot = structuredClone(snapshot);
+  basketSnapshot.schema_version = 3;
+  basketSnapshot.execution_profile = "a-share-v3";
+  basketSnapshot.symbol = null;
+  basketSnapshot.symbols = ["000001.SZ", "600519.SH"];
+  assert.equal(validateDataSnapshotReadModel(basketSnapshot).valid, true);
+
+  const invalidBasketSnapshot = structuredClone(basketSnapshot);
+  invalidBasketSnapshot.symbol = "000001.SZ";
+  assert.equal(validateDataSnapshotReadModel(invalidBasketSnapshot).valid, false);
+
+  const mismatchedSingleSnapshot = structuredClone(snapshot);
+  mismatchedSingleSnapshot.schema_version = 3;
+  mismatchedSingleSnapshot.execution_profile = "a-share-v3";
+  mismatchedSingleSnapshot.symbol = "600519.SH";
+  assert.equal(validateDataSnapshotReadModel(mismatchedSingleSnapshot).valid, false);
+});

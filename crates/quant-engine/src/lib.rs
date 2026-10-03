@@ -5,8 +5,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod a_share_v3;
 mod portfolio_v2;
 
+pub use a_share_v3::{
+    finalize_engine_checkpoint_v3, run_engine_v3, start_engine_checkpoint_v3,
+    step_engine_checkpoint_v3,
+};
 pub use portfolio_v2::{
     finalize_engine_checkpoint_v2, run_engine_v2, start_engine_checkpoint_v2,
     step_engine_checkpoint_v2,
@@ -19,6 +24,12 @@ struct Atom(i128);
 
 impl Atom {
     const ZERO: Self = Self(0);
+}
+
+impl Default for Atom {
+    fn default() -> Self {
+        Self::ZERO
+    }
 }
 
 impl<'de> Deserialize<'de> for Atom {
@@ -3580,6 +3591,58 @@ mod oqs_quant_engine {
     ) -> PyResult<Bound<'python, PyBytes>> {
         let output =
             super::finalize_engine_checkpoint_v2(input, calculation_context_sha256, checkpoint)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(PyBytes::new(python, &output))
+    }
+
+    #[pyfunction]
+    fn run_engine_v3<'python>(
+        python: Python<'python>,
+        input: &[u8],
+    ) -> PyResult<Bound<'python, PyBytes>> {
+        let output = super::run_engine_v3(input)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(PyBytes::new(python, &output))
+    }
+
+    #[pyfunction]
+    fn start_engine_checkpoint_v3<'python>(
+        python: Python<'python>,
+        input: &[u8],
+        calculation_context_sha256: &str,
+        batch_session_count: usize,
+    ) -> PyResult<Bound<'python, PyBytes>> {
+        let output = super::start_engine_checkpoint_v3(
+            input,
+            calculation_context_sha256,
+            batch_session_count,
+        )
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(PyBytes::new(python, &output))
+    }
+
+    #[pyfunction]
+    fn step_engine_checkpoint_v3<'python>(
+        python: Python<'python>,
+        input: &[u8],
+        calculation_context_sha256: &str,
+        checkpoint: &[u8],
+    ) -> PyResult<Bound<'python, PyBytes>> {
+        let output =
+            super::step_engine_checkpoint_v3(input, calculation_context_sha256, checkpoint)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(PyBytes::new(python, &output))
+    }
+
+    #[pyfunction]
+    fn finalize_engine_checkpoint_v3<'python>(
+        python: Python<'python>,
+        input: &[u8],
+        calculation_context_sha256: &str,
+        checkpoint: &[u8],
+    ) -> PyResult<Bound<'python, PyBytes>> {
+        let output =
+            super::finalize_engine_checkpoint_v3(input, calculation_context_sha256, checkpoint)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?;
         Ok(PyBytes::new(python, &output))
     }

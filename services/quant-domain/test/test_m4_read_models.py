@@ -196,7 +196,7 @@ class M4ReadModelsHttpTest(HttpTestCase):
             detail["run"]["calculation_hash"],
         )
         self.assertEqual(
-            detail["engine_result"]["metrics"]["ending_equity_atoms"], "1025534"
+            detail["engine_result"]["metrics"]["ending_equity_atoms"], "1000025534"
         )
         self.assertEqual(len(detail["engine_result"]["orders"]), 4)
         self.assertEqual(len(detail["engine_result"]["trades"]), 4)

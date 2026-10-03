@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 import oqs_quant_engine
@@ -96,6 +97,136 @@ def _v2_result() -> dict[str, object]:
     return json.loads(
         oqs_quant_engine.run_engine_v2(
             json.dumps(fixture["input"], separators=(",", ":")).encode()
+        )
+    )
+
+
+def _v3_result() -> dict[str, object]:
+    fixture = json.loads(
+        (ROOT / "fixtures/backtests/a-share-research-v3-long-t1.json").read_text()
+    )
+    return json.loads(
+        oqs_quant_engine.run_engine_v3(
+            json.dumps(fixture["input"], separators=(",", ":")).encode()
+        )
+    )
+
+
+def _v3_dual_book_input() -> dict[str, object]:
+    fixture = json.loads(
+        (ROOT / "fixtures/backtests/a-share-research-v3-long-t1.json").read_text()
+    )
+    engine_input = fixture["input"]
+    long_open = engine_input["intents"][0]
+    short_open = deepcopy(long_open)
+    short_open.update(
+        {
+            "intent_id": "short-open",
+            "intent_seq": 2,
+            "book": "research_short",
+            "side": "sell",
+            "position_effect": "open",
+        }
+    )
+    short_open["known_at"]["stable_seq"] = 2
+    short_open["effective_at"]["stable_seq"] = 2
+    engine_input["intents"] = [long_open, short_open]
+    return engine_input
+
+
+def _v3_dual_book_corporate_result() -> dict[str, object]:
+    engine_input = _v3_dual_book_input()
+    for basis in ("raw", "research"):
+        engine_input["sessions"][1]["bars"][0][basis].update(
+            {
+                "open_atoms": "500",
+                "high_atoms": "500",
+                "low_atoms": "500",
+                "close_atoms": "500",
+            }
+        )
+    engine_input["corporate_actions"] = [
+        {
+            "action_id": "dividend-1",
+            "symbol": "AAA.XSHG",
+            "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 1},
+            "action_type": "cash_dividend",
+            "cash_per_share_atoms": "10",
+            "numerator": None,
+            "denominator": None,
+            "settlement_price_atoms": None,
+        },
+        {
+            "action_id": "split-1",
+            "symbol": "AAA.XSHG",
+            "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 2},
+            "action_type": "split",
+            "cash_per_share_atoms": None,
+            "numerator": 2,
+            "denominator": 1,
+            "settlement_price_atoms": None,
+        },
+    ]
+    return json.loads(
+        oqs_quant_engine.run_engine_v3(
+            json.dumps(engine_input, separators=(",", ":")).encode()
+        )
+    )
+
+
+def _v3_dual_book_delist_result() -> dict[str, object]:
+    engine_input = _v3_dual_book_input()
+    engine_input["sessions"][1]["bars"][0]["trading_status"] = "delisted"
+    for basis in ("raw", "research"):
+        engine_input["sessions"][1]["bars"][0][basis].update(
+            {
+                "open_atoms": "900",
+                "high_atoms": "900",
+                "low_atoms": "900",
+                "close_atoms": "900",
+            }
+        )
+    engine_input["corporate_actions"] = [
+        {
+            "action_id": "delist-1",
+            "symbol": "AAA.XSHG",
+            "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 1},
+            "action_type": "delist_settlement",
+            "cash_per_share_atoms": None,
+            "numerator": None,
+            "denominator": None,
+            "settlement_price_atoms": "900",
+        }
+    ]
+    return json.loads(
+        oqs_quant_engine.run_engine_v3(
+            json.dumps(engine_input, separators=(",", ":")).encode()
+        )
+    )
+
+
+def _v3_partial_fill_result() -> dict[str, object]:
+    fixture = json.loads(
+        (ROOT / "fixtures/backtests/a-share-research-v3-long-t1.json").read_text()
+    )
+    engine_input = fixture["input"]
+    engine_input["account"]["starting_cash_atoms"] = "3000000"
+    first = deepcopy(engine_input["intents"][0])
+    first.update({"intent_id": "partial-first", "quantity": "700"})
+    second = deepcopy(first)
+    second.update(
+        {
+            "intent_id": "partial-gtc",
+            "intent_seq": 2,
+            "time_in_force": "gtc",
+        }
+    )
+    second["known_at"]["stable_seq"] = 2
+    second["effective_at"]["stable_seq"] = 2
+    engine_input["intents"] = [first, second]
+    return json.loads(
+        oqs_quant_engine.run_engine_v3(
+            json.dumps(engine_input, separators=(",", ":")).encode()
         )
     )
 
@@ -219,6 +350,36 @@ class M9RunReportTest(unittest.TestCase):
             expected_fields,
         )
 
+    def test_scaled_exit_counts_one_closed_trade(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/backtests/m3-a-share-long-short-v1.json").read_text()
+        )
+        engine_input = fixture["input"]
+        entry = {**engine_input["intents"][0], "quantity": "200"}
+        first_exit = {
+            **engine_input["intents"][1],
+            "intent_id": "long-exit-first-half",
+        }
+        second_exit = {
+            **engine_input["intents"][1],
+            "intent_id": "long-exit-second-half",
+            "intent_seq": 3,
+            "known_at": {"session_seq": 2, "phase": "close", "stable_seq": 3},
+            "effective_at": {"session_seq": 3, "phase": "open", "stable_seq": 3},
+        }
+        engine_input["intents"] = [entry, first_exit, second_exit]
+        result = json.loads(
+            oqs_quant_engine.run_engine_v1(
+                json.dumps(engine_input, separators=(",", ":")).encode()
+            )
+        )
+
+        report = build_run_report(_detail(result, run_id="scaled-exit-run"))
+
+        self.assertEqual(report["summary"]["fill_count"], 3)
+        self.assertEqual(report["summary"]["closed_trade_count"], 1)
+        self.assertTrue(report["reconciliation"]["passed"])
+
     def test_crypto_funding_and_short_are_reconciled(self) -> None:
         result = _crypto_result()
         report = build_run_report(_detail(result, run_id="crypto-run"))
@@ -241,6 +402,112 @@ class M9RunReportTest(unittest.TestCase):
         self.assertEqual(report["summary"]["net_exposure_atoms"], "0")
         self.assertEqual(report["summary"]["ending_equity_atoms"], "16000")
         self.assertTrue(report["reconciliation"]["passed"])
+
+    def test_v3_dual_book_result_without_funding_reconciles(self) -> None:
+        report = build_run_report(_detail(_v3_result(), run_id="a-share-v3-run"))
+
+        self.assertEqual(report["identities"]["engine_schema_version"], 3)
+        self.assertEqual(report["summary"]["fill_count"], 2)
+        self.assertEqual(report["summary"]["closed_trade_count"], 1)
+        self.assertEqual(report["summary"]["total_funding_atoms"], "0")
+        self.assertTrue(report["reconciliation"]["passed"])
+
+    def test_v3_dual_book_corporate_ledgers_reconcile(self) -> None:
+        report = build_run_report(
+            _detail(
+                _v3_dual_book_corporate_result(),
+                run_id="a-share-v3-corporate-run",
+            )
+        )
+
+        self.assertEqual(report["summary"]["ending_equity_atoms"], "1000000")
+        self.assertEqual(report["summary"]["gross_exposure_atoms"], "200000")
+        self.assertEqual(report["summary"]["net_exposure_atoms"], "0")
+        self.assertEqual(report["summary"]["open_position_count"], 2)
+        self.assertTrue(report["reconciliation"]["passed"])
+        self.assertEqual(
+            [
+                check["field"]
+                for check in report["reconciliation"]["checks"]
+                if check["field"].startswith("v3.")
+            ],
+            [
+                "v3.required_fields",
+                "v3.fill_accounting",
+                "v3.cash_ledger",
+                "v3.position_ledger",
+                "v3.corporate_action_ledger",
+                "v3.equity_curve",
+                "v3.drawdown_curve",
+            ],
+        )
+
+    def test_v3_delist_settlement_closes_both_books_and_releases_pools(self) -> None:
+        report = build_run_report(
+            _detail(
+                _v3_dual_book_delist_result(),
+                run_id="a-share-v3-delist-run",
+            )
+        )
+
+        self.assertEqual(report["summary"]["ending_equity_atoms"], "1000000")
+        self.assertEqual(report["summary"]["closed_trade_count"], 2)
+        self.assertEqual(report["summary"]["open_position_count"], 0)
+        self.assertEqual(report["summary"]["gross_exposure_atoms"], "0")
+        self.assertTrue(report["reconciliation"]["passed"])
+
+    def test_v3_partial_fills_reconcile_cumulative_remaining_and_volume(self) -> None:
+        report = build_run_report(
+            _detail(_v3_partial_fill_result(), run_id="a-share-v3-partial-run")
+        )
+
+        self.assertEqual(report["summary"]["fill_count"], 3)
+        self.assertEqual(report["summary"]["open_position_count"], 1)
+        self.assertTrue(report["reconciliation"]["passed"])
+
+    def test_v3_mutated_fill_notional_fails_closed(self) -> None:
+        result = _v3_result()
+        result["fills"][0]["notional_atoms"] = "99999"
+
+        report = build_run_report(_detail(result, run_id="a-share-v3-bad-fill"))
+
+        self.assertFalse(report["reconciliation"]["passed"])
+        fill_check = next(
+            check
+            for check in report["reconciliation"]["checks"]
+            if check["field"] == "v3.fill_accounting"
+        )
+        self.assertFalse(fill_check["passed"])
+        self.assertIn("notional_atoms", str(fill_check["actual"]))
+
+    def test_v3_mutated_cash_chain_and_equity_fail_reconciliation(self) -> None:
+        result = _v3_dual_book_corporate_result()
+        result["cash_ledger"][2]["resulting_available_cash_atoms"] = "801001"
+        result["equity_curve"][1]["equity_atoms"] = "1000001"
+
+        report = build_run_report(
+            _detail(result, run_id="a-share-v3-bad-ledgers")
+        )
+
+        self.assertFalse(report["reconciliation"]["passed"])
+        checks = {check["field"]: check for check in report["reconciliation"]["checks"]}
+        self.assertFalse(checks["v3.cash_ledger"]["passed"])
+        self.assertFalse(checks["v3.equity_curve"]["passed"])
+
+    def test_v3_missing_required_ledger_field_fails_closed(self) -> None:
+        result = _v3_result()
+        del result["cash_ledger"][0]["resulting_available_cash_atoms"]
+
+        report = build_run_report(_detail(result, run_id="a-share-v3-missing-ledger"))
+
+        self.assertFalse(report["reconciliation"]["passed"])
+        required = next(
+            check
+            for check in report["reconciliation"]["checks"]
+            if check["field"] == "v3.required_fields"
+        )
+        self.assertFalse(required["passed"])
+        self.assertIn("resulting_available_cash_atoms", str(required["actual"]))
 
     def test_zero_trade_output_uses_starting_equity_and_empty_period(self) -> None:
         fixture = json.loads(

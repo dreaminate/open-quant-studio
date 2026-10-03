@@ -16,6 +16,9 @@ import pyarrow.parquet as pa_parquet
 MAX_DATA_ROWS = 250_000
 PRICE_SCALE = 10_000
 RATE_SCALE = 1_000_000
+DEFAULT_EXECUTION_PROFILE = "legacy"
+A_SHARE_V3_EXECUTION_PROFILE = "a-share-v3"
+A_SHARE_V3_MARKET_RULES_VERSION = "cn-a-share-research/2026-08-14"
 _SOURCE_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "open-quant-studio/data-import/v1")
 _MAPPING_ALIASES = {
     "timestamp": ("timestamp", "date", "datetime"),
@@ -26,7 +29,22 @@ _MAPPING_ALIASES = {
     "close": ("close",),
     "volume": ("volume", "vol"),
 }
+_V3_OPTIONAL_MAPPING_ALIASES = {
+    "trading_status": ("trading_status", "market_status", "status"),
+    "price_limit_state": ("price_limit_state", "limit_state"),
+}
 _REQUIRED_MAPPING_FIELDS = tuple(_MAPPING_ALIASES)
+_V3_TRADING_STATUSES = {
+    "tradable",
+    "suspended",
+    "not_listed",
+    "delisted",
+    "non_trading",
+    "missing",
+}
+_V3_PRICE_LIMIT_STATES = {"none", "limit_up", "limit_down"}
+_V3_INFERRED_MARKET_STATE_SOURCE = "ohlcv-active-nonflat-assumption/v1"
+_V3_EXPLICIT_MARKET_STATE_SOURCE = "input-columns/v1"
 
 
 class DataImportValidationError(ValueError):
@@ -46,6 +64,7 @@ class DataSnapshotMaterial:
     row_count: int
     normalized_body: bytes
     market_input_body: bytes
+    execution_profile: str = DEFAULT_EXECUTION_PROFILE
 
     @property
     def normalized_sha256(self) -> str:
@@ -163,12 +182,69 @@ def build_data_snapshot(
     timezone: str,
     price_basis: str,
     cutoff: str,
+    execution_profile: str = DEFAULT_EXECUTION_PROFILE,
+    corporate_actions: list[dict[str, object]] | None = None,
 ) -> DataSnapshotMaterial:
+    if execution_profile not in {DEFAULT_EXECUTION_PROFILE, A_SHARE_V3_EXECUTION_PROFILE}:
+        raise DataImportValidationError(
+            [
+                {
+                    "row_number": 1,
+                    "field": "execution_profile",
+                    "message": "must be legacy or a-share-v3",
+                }
+            ]
+        )
+    if execution_profile == A_SHARE_V3_EXECUTION_PROFILE and market != "a_share_daily":
+        raise DataImportValidationError(
+            [
+                {
+                    "row_number": 1,
+                    "field": "execution_profile",
+                    "message": "a-share-v3 requires the A-share daily market",
+                }
+            ]
+        )
+    if execution_profile == A_SHARE_V3_EXECUTION_PROFILE and price_basis != "raw":
+        raise DataImportValidationError(
+            [
+                {
+                    "row_number": 1,
+                    "field": "price_basis",
+                    "message": "a-share-v3 currently supports raw prices only",
+                }
+            ]
+        )
+    if execution_profile == DEFAULT_EXECUTION_PROFILE and corporate_actions:
+        raise DataImportValidationError(
+            [{"row_number": 1, "field": "corporate_actions", "message": "corporate actions require a-share-v3"}]
+        )
     columns, rows = read_data_import(body, source_format)
     _validate_mapping(columns, mapping)
     zone = _timezone(timezone)
-    normalized_rows = _normalize_rows(rows, mapping, zone)
+    v3_market_state_columns = (
+        _v3_optional_mapping(columns, mapping)
+        if execution_profile == A_SHARE_V3_EXECUTION_PROFILE
+        else None
+    )
+    normalized_rows = _normalize_rows(
+        rows,
+        mapping,
+        zone,
+        volume_as_quantity=execution_profile == A_SHARE_V3_EXECUTION_PROFILE,
+        v3_market_state_columns=v3_market_state_columns,
+    )
     symbols = tuple(sorted({row["symbol"] for row in normalized_rows}))
+    if execution_profile == A_SHARE_V3_EXECUTION_PROFILE:
+        return _build_a_share_v3_data_snapshot(
+            normalized_rows,
+            symbols=symbols,
+            market=market,
+            timezone=timezone,
+            price_basis=price_basis,
+            cutoff=cutoff,
+            corporate_actions=corporate_actions or [],
+        )
     if len(symbols) > 1:
         if market != "a_share_daily":
             raise DataImportValidationError(
@@ -317,6 +393,251 @@ def _build_portfolio_data_snapshot(
     )
 
 
+def _build_a_share_v3_data_snapshot(
+    normalized_rows: list[dict[str, str]],
+    *,
+    symbols: tuple[str, ...],
+    market: str,
+    timezone: str,
+    price_basis: str,
+    cutoff: str,
+    corporate_actions: list[dict[str, object]],
+) -> DataSnapshotMaterial:
+    """Build the fixed-basket v3 input consumed by the versioned Rust seam."""
+    rows = sorted(normalized_rows, key=lambda row: (row["timestamp"], row["symbol"]))
+    sessions: list[dict[str, object]] = []
+    for row in rows:
+        if not sessions or sessions[-1]["timestamp"] != row["timestamp"]:
+            sessions.append({"timestamp": row["timestamp"], "bars": []})
+        bars = sessions[-1]["bars"]
+        assert isinstance(bars, list)
+        bars.append(row)
+
+    expected_symbols = list(symbols)
+    for session_index, session in enumerate(sessions, start=1):
+        bars = session["bars"]
+        assert isinstance(bars, list)
+        observed_symbols = [str(bar["symbol"]) for bar in bars]
+        if observed_symbols != expected_symbols:
+            missing = [symbol for symbol in expected_symbols if symbol not in observed_symbols]
+            unexpected = [symbol for symbol in observed_symbols if symbol not in expected_symbols]
+            details = []
+            if missing:
+                details.append(f"missing {', '.join(missing)}")
+            if unexpected:
+                details.append(f"unexpected {', '.join(unexpected)}")
+            raise DataImportValidationError(
+                [
+                    {
+                        "row_number": 1,
+                        "field": "symbol",
+                        "message": (
+                            f"unknown data gap at session {session_index}: expected basket "
+                            f"{', '.join(expected_symbols)}; {'; '.join(details)}"
+                        ),
+                    }
+                ]
+            )
+
+    normalized_actions = _normalize_v3_corporate_actions(
+        corporate_actions,
+        symbols=expected_symbols,
+        sessions=sessions,
+    )
+
+    normalized_snapshot = {
+        "schema_version": 3,
+        "execution_profile": A_SHARE_V3_EXECUTION_PROFILE,
+        "market": market,
+        "market_rules_version": A_SHARE_V3_MARKET_RULES_VERSION,
+        "symbols": expected_symbols,
+        "timezone": timezone,
+        "price_basis": price_basis,
+        "cutoff": cutoff,
+        "price_scale": PRICE_SCALE,
+        "cash_scale": PRICE_SCALE,
+        "volume_unit": "shares",
+        "market_state_sources": sorted(
+            {row["market_state_source"] for row in normalized_rows}
+        ),
+        "sessions": [
+            {
+                "timestamp": session["timestamp"],
+                "bars": [
+                    {key: value for key, value in bar.items() if key != "timestamp"}
+                    for bar in session["bars"]
+                ],
+            }
+            for session in sessions
+        ],
+        "corporate_actions": normalized_actions,
+    }
+    sessions = [
+        {
+            "session_seq": index,
+            "timestamp": session["timestamp"],
+            "bars": [
+                {
+                    "symbol": row["symbol"],
+                    "trading_status": row["trading_status"],
+                    "price_limit_state": row["price_limit_state"],
+                    "raw": {
+                        "open_atoms": row["open_atoms"],
+                        "high_atoms": row["high_atoms"],
+                        "low_atoms": row["low_atoms"],
+                        "close_atoms": row["close_atoms"],
+                        "volume_quantity": row["volume_quantity"],
+                    },
+                    "research": {
+                        "open_atoms": row["open_atoms"],
+                        "high_atoms": row["high_atoms"],
+                        "low_atoms": row["low_atoms"],
+                        "close_atoms": row["close_atoms"],
+                    },
+                }
+                for row in session["bars"]
+            ],
+        }
+        for index, session in enumerate(sessions, start=1)
+    ]
+    market_input = {
+        "schema_version": 3,
+        "market_rules_version": A_SHARE_V3_MARKET_RULES_VERSION,
+        "account": {
+            "model": "a_share_portfolio_research",
+            "symbols": expected_symbols,
+            "price_scale": PRICE_SCALE,
+            "cash_scale": PRICE_SCALE,
+            "rate_scale": RATE_SCALE,
+            "starting_cash_atoms": "1000000000",
+            "lot_size": 100,
+            "max_participation_rate_atoms": "100000",
+            "commission_rate_atoms": "600",
+            "minimum_commission_atoms": "0",
+            "stamp_duty_rate_atoms": "1000",
+            "market_slippage_atoms": "10",
+            "research_short_margin_rate_atoms": str(RATE_SCALE),
+        },
+        "sessions": sessions,
+        "corporate_actions": normalized_actions,
+        "intents": [],
+    }
+    normalized_body = _canonical_json_bytes(normalized_snapshot)
+    return DataSnapshotMaterial(
+        symbol=symbols[0] if len(symbols) == 1 else None,
+        symbols=symbols,
+        session_count=len(sessions),
+        schema_version=3,
+        sample_start=str(sessions[0]["timestamp"]),
+        sample_end=str(sessions[-1]["timestamp"]),
+        row_count=len(rows),
+        normalized_body=normalized_body,
+        market_input_body=_canonical_json_bytes(market_input),
+        execution_profile=A_SHARE_V3_EXECUTION_PROFILE,
+    )
+
+
+def _normalize_v3_corporate_actions(
+    actions: list[dict[str, object]],
+    *,
+    symbols: list[str],
+    sessions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Validate and canonicalize the typed action sidecar before hashing it."""
+
+    session_by_seq = {index: session for index, session in enumerate(sessions, start=1)}
+    normalized: list[dict[str, object]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(actions, start=1):
+        if not isinstance(raw, dict):
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "corporate_actions", "message": "must contain objects"}]
+            )
+        allowed = {
+            "action_id", "symbol", "effective_at", "action_type",
+            "cash_per_share_atoms", "numerator", "denominator", "settlement_price_atoms",
+        }
+        unknown = sorted(set(raw) - allowed)
+        if unknown:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "corporate_actions", "message": f"unknown fields: {', '.join(unknown)}"}]
+            )
+        action_id = raw.get("action_id")
+        symbol = raw.get("symbol")
+        effective_at = raw.get("effective_at")
+        action_type = raw.get("action_type")
+        if not isinstance(action_id, str) or not action_id or action_id in seen_ids:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "action_id", "message": "must be a unique non-empty string"}]
+            )
+        seen_ids.add(action_id)
+        if not isinstance(symbol, str) or symbol not in symbols:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "symbol", "message": "must name a symbol in the snapshot"}]
+            )
+        if not isinstance(effective_at, dict) or set(effective_at) != {"session_seq", "phase", "stable_seq"}:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "effective_at", "message": "must contain session_seq, phase, and stable_seq"}]
+            )
+        session_seq = effective_at.get("session_seq")
+        stable_seq = effective_at.get("stable_seq")
+        if type(session_seq) is not int or session_seq not in session_by_seq or type(stable_seq) is not int or stable_seq < 0 or effective_at.get("phase") != "open":
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "effective_at", "message": "must reference an existing open session"}]
+            )
+        if action_type not in {"cash_dividend", "split", "reverse_split", "delist_settlement"}:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "action_type", "message": "unsupported corporate action"}]
+            )
+        def atom_field(name: str, *, positive: bool = False) -> str | None:
+            value = raw.get(name)
+            if value is None:
+                return None
+            if not isinstance(value, str) or not value.isdigit() or (positive and int(value) <= 0):
+                raise DataImportValidationError(
+                    [{"row_number": index, "field": name, "message": "must be a canonical positive atom" if positive else "must be a canonical atom"}]
+                )
+            return str(int(value))
+        def integer_field(name: str) -> int | None:
+            value = raw.get(name)
+            if value is None:
+                return None
+            if type(value) is not int or value <= 0:
+                raise DataImportValidationError(
+                    [{"row_number": index, "field": name, "message": "must be a positive integer"}]
+                )
+            return value
+        cash = atom_field("cash_per_share_atoms", positive=True)
+        numerator = integer_field("numerator")
+        denominator = integer_field("denominator")
+        settlement = atom_field("settlement_price_atoms", positive=True)
+        if action_type == "cash_dividend" and cash is None:
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "cash_per_share_atoms", "message": "is required for cash_dividend"}]
+            )
+        if action_type in {"split", "reverse_split"} and (numerator is None or denominator is None or (action_type == "split" and numerator <= denominator) or (action_type == "reverse_split" and numerator >= denominator)):
+            raise DataImportValidationError(
+                [{"row_number": index, "field": "numerator", "message": "ratio is invalid for the action type"}]
+            )
+        if action_type == "delist_settlement":
+            bars = session_by_seq[session_seq]["bars"]
+            if settlement is None or not any(bar.get("symbol") == symbol and bar.get("trading_status") == "delisted" for bar in bars if isinstance(bar, dict)):
+                raise DataImportValidationError(
+                    [{"row_number": index, "field": "settlement_price_atoms", "message": "delist settlement requires a delisted bar"}]
+                )
+        normalized.append({
+            "action_id": action_id,
+            "symbol": symbol,
+            "effective_at": {"session_seq": session_seq, "phase": "open", "stable_seq": stable_seq},
+            "action_type": action_type,
+            "cash_per_share_atoms": cash,
+            "numerator": numerator,
+            "denominator": denominator,
+            "settlement_price_atoms": settlement,
+        })
+    return sorted(normalized, key=lambda item: (item["effective_at"]["session_seq"], item["effective_at"]["stable_seq"], item["action_id"]))
+
+
 def deterministic_artifact_id(kind: str, sha256: str) -> str:
     return _deterministic_uuid(f"{kind}:{sha256}")
 
@@ -325,6 +646,9 @@ def _normalize_rows(
     rows: list[dict[str, object]],
     mapping: dict[str, str],
     zone: ZoneInfo,
+    *,
+    volume_as_quantity: bool = False,
+    v3_market_state_columns: tuple[str | None, str | None] | None = None,
 ) -> list[dict[str, str]]:
     normalized: list[dict[str, str]] = []
     details: list[dict[str, object]] = []
@@ -389,23 +713,42 @@ def _normalize_rows(
             details.append(
                 {"row_number": row_index, "field": "high", "message": "must be greater than or equal to low"}
             )
-        atoms = {
+        price_atoms = {
             field: _atoms(value, field, row_index, details)
             for field, value in values.items()
+            if field != "volume"
         }
-        if any(value is None for value in atoms.values()):
-            continue
-        normalized.append(
-            {
-                "timestamp": _utc_timestamp(timestamp),
-                "symbol": row_symbol,
-                "open_atoms": atoms["open"],
-                "high_atoms": atoms["high"],
-                "low_atoms": atoms["low"],
-                "close_atoms": atoms["close"],
-                "volume_atoms": atoms["volume"],
-            }
+        volume_value = (
+            _quantity(volume, "volume", row_index, details)
+            if volume_as_quantity
+            else _atoms(volume, "volume", row_index, details)
         )
+        if any(value is None for value in price_atoms.values()) or volume_value is None:
+            continue
+        normalized_row = {
+            "timestamp": _utc_timestamp(timestamp),
+            "symbol": row_symbol,
+            "open_atoms": price_atoms["open"],
+            "high_atoms": price_atoms["high"],
+            "low_atoms": price_atoms["low"],
+            "close_atoms": price_atoms["close"],
+            "volume_quantity" if volume_as_quantity else "volume_atoms": volume_value,
+        }
+        if v3_market_state_columns is not None:
+            market_state = _v3_market_state(
+                row,
+                row_number=row_index,
+                status_column=v3_market_state_columns[0],
+                limit_column=v3_market_state_columns[1],
+                high=high_price,
+                low=low_price,
+                volume=volume,
+                details=details,
+            )
+            if market_state is None:
+                continue
+            normalized_row.update(market_state)
+        normalized.append(normalized_row)
     if details:
         raise DataImportValidationError(details)
     return normalized
@@ -423,6 +766,103 @@ def _validate_mapping(columns: list[str], mapping: dict[str, str]) -> None:
     ]
     if details:
         raise DataImportValidationError(details)
+
+
+def _v3_optional_mapping(
+    columns: list[str], mapping: dict[str, str]
+) -> tuple[str | None, str | None]:
+    by_lower = {column.lower(): column for column in columns}
+    resolved: dict[str, str | None] = {}
+    details: list[dict[str, object]] = []
+    for field, aliases in _V3_OPTIONAL_MAPPING_ALIASES.items():
+        configured = mapping.get(field) or None
+        if configured is not None:
+            if configured not in columns:
+                details.append(
+                    {
+                        "row_number": 1,
+                        "field": field,
+                        "message": "mapped column is unavailable",
+                    }
+                )
+                resolved[field] = None
+            else:
+                resolved[field] = configured
+            continue
+        resolved[field] = next(
+            (by_lower[alias] for alias in aliases if alias in by_lower), None
+        )
+    if details:
+        raise DataImportValidationError(details)
+    return resolved["trading_status"], resolved["price_limit_state"]
+
+
+def _v3_market_state(
+    row: dict[str, object],
+    *,
+    row_number: int,
+    status_column: str | None,
+    limit_column: str | None,
+    high: Decimal,
+    low: Decimal,
+    volume: Decimal,
+    details: list[dict[str, object]],
+) -> dict[str, str] | None:
+    if (status_column is None) != (limit_column is None):
+        details.append(
+            {
+                "row_number": row_number,
+                "field": "market_state",
+                "message": (
+                    "trading_status and price_limit_state must both be supplied "
+                    "or both use the declared OHLCV inference rule"
+                ),
+            }
+        )
+        return None
+    if status_column is not None and limit_column is not None:
+        status = _string_value(row.get(status_column)).strip().lower()
+        limit = _string_value(row.get(limit_column)).strip().lower()
+        if status not in _V3_TRADING_STATUSES:
+            details.append(
+                {
+                    "row_number": row_number,
+                    "field": "trading_status",
+                    "message": "is not a supported A-share v3 trading status",
+                }
+            )
+        if limit not in _V3_PRICE_LIMIT_STATES:
+            details.append(
+                {
+                    "row_number": row_number,
+                    "field": "price_limit_state",
+                    "message": "is not a supported A-share v3 price-limit state",
+                }
+            )
+        if status not in _V3_TRADING_STATUSES or limit not in _V3_PRICE_LIMIT_STATES:
+            return None
+        return {
+            "trading_status": status,
+            "price_limit_state": limit,
+            "market_state_source": _V3_EXPLICIT_MARKET_STATE_SOURCE,
+        }
+    if volume > 0 and high > low:
+        return {
+            "trading_status": "tradable",
+            "price_limit_state": "none",
+            "market_state_source": _V3_INFERRED_MARKET_STATE_SOURCE,
+        }
+    details.append(
+        {
+            "row_number": row_number,
+            "field": "market_state",
+            "message": (
+                "is unknown: provide trading_status and price_limit_state for "
+                "flat-price or zero-volume bars"
+            ),
+        }
+    )
+    return None
 
 
 def _timestamp(
@@ -497,6 +937,25 @@ def _atoms(
         )
         return None
     return str(int(value * PRICE_SCALE))
+
+
+def _quantity(
+    value: Decimal,
+    field: str,
+    row_number: int,
+    details: list[dict[str, object]],
+) -> str | None:
+    integral = value.to_integral_value()
+    if value != integral:
+        details.append(
+            {
+                "row_number": row_number,
+                "field": field,
+                "message": "must be a whole number of shares for a-share-v3",
+            }
+        )
+        return None
+    return str(int(integral))
 
 
 def _market_account(market: str, symbol: str) -> dict[str, object]:

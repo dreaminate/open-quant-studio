@@ -45,6 +45,10 @@ while (( $# > 0 )); do
       asset_path="$2"
       shift 2
       ;;
+    --fresh-install)
+      helper_args+=(--fresh-install)
+      shift
+      ;;
     --help|-h)
       usage
       exit 0

@@ -21,7 +21,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import team_adopt  # noqa: E402  # type: ignore[import-not-found]
-import team_common as tc  # noqa: E402
+import team_common as tc  # noqa: E402  # type: ignore[import-not-found]
 import team_identity  # noqa: E402  # type: ignore[import-not-found]
 import team_provision  # noqa: E402  # type: ignore[import-not-found]
 import team_quickstart  # noqa: E402  # type: ignore[import-not-found]
@@ -71,11 +71,12 @@ def check_pointers(project: Path) -> dict[str, Any]:
 
 BOUNDARY_BEGIN = "<!-- agent-team-runtime-boundary:begin -->"
 BOUNDARY_END = "<!-- agent-team-runtime-boundary:end -->"
+# Generic clauses every project's boundary block must contain; project-specific
+# wording (OQS, Pi, the game, ...) is free beyond these.
 BOUNDARY_CLAUSES = (
     "development collaboration control plane",
-    "does not enter the OQS product runtime",
-    "not constitute a second product AgentLoop",
-    "Pi remains the only AgentLoop",
+    "does not enter the",
+    "not constitute a second",
     "team doctor --json",
 )
 
@@ -409,7 +410,7 @@ def check_identity_self_test(project: str) -> dict[str, Any]:
     }
 
 
-def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
+def check_terminal_readiness(orca_cli: str, roster: dict[str, Any] | None) -> dict[str, Any]:
     code, stdout, _ = tc.orca_run(orca_cli, "terminal", "list", "--json")
     if code != 0:
         return {
@@ -431,14 +432,61 @@ def check_terminal_readiness(orca_cli: str) -> dict[str, Any]:
             "detail": [str(exc)],
             "nextStep": "inspect the orca terminal inventory",
         }
-    total = payload.get("totalCount") if isinstance(payload, dict) else len(payload)
+    result_wrapper = payload.get("result") if isinstance(payload, dict) else None
+    terminals = (
+        result_wrapper.get("terminals", [])
+        if isinstance(result_wrapper, dict)
+        else (payload.get("terminals", []) if isinstance(payload, dict) else [])
+    )
+    # Scope to this project's worktrees when a roster exists: other
+    # projects' terminals on a shared runtime are not a readiness signal.
+    # Terminals bound to the current generation's recorded tab IDs are the
+    # EXPECTED live seats; only unrecorded in-scope terminals are a problem.
+    recorded_tabs: set[str] = set()
+    if roster is not None:
+        ids = {
+            seat["worktree"]["orcaWorktreeId"]
+            for seat in roster.get("seats", [])
+            if (seat.get("worktree") or {}).get("orcaWorktreeId")
+        }
+        paths = {
+            team_provision.canonical_path((seat.get("worktree") or {}).get("path", ""))
+            for seat in roster.get("seats", [])
+            if (seat.get("worktree") or {}).get("path")
+        }
+        recorded_tabs = {
+            seat.get("tabId")
+            for seat in roster.get("seats", [])
+            if seat.get("tabId")
+        }
+        terminals = [
+            term
+            for term in terminals
+            if term.get("worktreeId") in ids
+            or team_provision.canonical_path(
+                str(term.get("worktreePath") or term.get("path") or "")
+            )
+            in paths
+        ]
+    unrecorded = [
+        term for term in terminals if term.get("tabId") not in recorded_tabs
+    ]
+    total = len(unrecorded)
     return {
         "id": "terminals",
         "label": "terminal readiness",
         "ok": total == 0,
         "code": "terminals_clean" if total == 0 else "resident_terminals_present",
-        "detail": {"totalCount": total},
-        "nextStep": None if total == 0 else "quickstart (generation-bound cleanup) requires user authorization",
+        "detail": {
+            "scopedToProject": roster is not None,
+            "recordedSeatTerminals": len(terminals) - total,
+            "unrecordedTerminals": total,
+        },
+        "nextStep": (
+            None
+            if total == 0
+            else "quickstart (generation-bound cleanup) requires user authorization"
+        ),
     }
 
 
@@ -468,6 +516,14 @@ def main() -> None:
         approval_path = project / approval_path
 
     try:
+        roster_for_terminals: dict[str, Any] | None = None
+        if roster_path.exists():
+            try:
+                loaded_roster = team_roster.load_roster(roster_path)
+                if team_roster.validate_roster(loaded_roster)["ok"]:
+                    roster_for_terminals = loaded_roster
+            except tc.TeamToolError:
+                pass
         checks = [
             check_charter(project, Path(args.asset), meta_path),
             check_pointers(project),
@@ -487,7 +543,7 @@ def main() -> None:
                 project,
             ),
             check_orca(args.orca_cli),
-            check_terminal_readiness(args.orca_cli),
+            check_terminal_readiness(args.orca_cli, roster_for_terminals),
             check_identity_self_test(str(project)),
         ]
     except tc.TeamToolError as exc:

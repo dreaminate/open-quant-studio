@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .contracts import command_errors, context_capture_errors, domain_event_errors
+from .contracts import (
+    FORMAL_ENGINE_INPUT_V3_VALIDATOR,
+    FORMAL_ENGINE_RESULT_V3_VALIDATOR,
+    command_errors,
+    context_capture_errors,
+    domain_event_errors,
+)
 from .data_import import (
     DataImportValidationError,
     build_data_snapshot,
@@ -20,7 +26,12 @@ from .formal_runner import execute_formal_run, run_strategy_host
 from .forward_replay import replay_forward_test
 from .git_workspace import GitRevisionIdentity, GitWorkspaceError, GitWorkspaceStore
 from .project_archive import ProjectArchiveError, import_project_archive
-from .run_report import build_run_report, canonical_report_json, render_run_report_html
+from .run_report import (
+    build_run_report,
+    canonical_report_json,
+    render_run_report_html,
+    validate_v3_engine_result,
+)
 
 
 MAX_PROJECT_VARIANTS = 64
@@ -102,6 +113,89 @@ def utc_now() -> str:
 
 def canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _v3_schema_errors(validator: Any, value: object) -> list[str]:
+    """Return bounded, path-stable contract errors for a worker gate."""
+
+    return [
+        f"/{'/'.join(str(part) for part in error.absolute_path)}: {error.message}"
+        for error in sorted(
+            validator.iter_errors(value),
+            key=lambda error: list(error.absolute_path),
+        )[:32]
+    ]
+
+
+def _canonicalize_a_share_v3_intents(intents: object) -> list[dict[str, object]] | None:
+    """Validate the explicit A-share v3 strategy tape without inferring a book.
+
+    The strategy is responsible for compiling conditions into ordinary orders
+    and for naming the independent long or research-short book.  The OQS
+    boundary stamps no economic defaults and never turns an ambiguous side
+    into an implicit netting decision.
+    """
+    if not isinstance(intents, list):
+        return None
+    canonical: list[dict[str, object]] = []
+    for raw in intents:
+        if not isinstance(raw, dict):
+            return None
+        item = dict(raw)
+        if "stop_price_atoms" in item or "oco_group" in item:
+            return None
+        intent_kind = item.get("intent_kind")
+        if intent_kind not in {"order", "cancel"}:
+            return None
+        intent_id = item.get("intent_id")
+        if not isinstance(intent_id, str) or not intent_id:
+            return None
+        side = item.get("side")
+        if side not in {"buy", "sell"}:
+            return None
+        intent_seq = item.get("intent_seq")
+        if type(intent_seq) is not int or intent_seq < 0:
+            return None
+        book = item.get("book")
+        position_effect = item.get("position_effect")
+        if (book, side, position_effect) not in {
+            ("cash_long", "buy", "open"),
+            ("cash_long", "sell", "close"),
+            ("research_short", "sell", "open"),
+            ("research_short", "buy", "close"),
+        }:
+            return None
+        order_type = item.get("order_type")
+        if order_type not in {"market", "limit"}:
+            return None
+        if item.get("time_in_force") not in {"day", "gtc"}:
+            return None
+        quantity = item.get("quantity")
+        if not isinstance(quantity, str) or not quantity.isdigit() or int(quantity) <= 0:
+            return None
+        limit_price = item.get("limit_price_atoms")
+        if order_type == "market" and limit_price is not None:
+            return None
+        if order_type == "limit" and (
+            not isinstance(limit_price, str)
+            or not limit_price.isdigit()
+            or int(limit_price) <= 0
+        ):
+            return None
+        condition_intent_id = item.get("condition_intent_id")
+        if condition_intent_id is not None and (
+            not isinstance(condition_intent_id, str) or not condition_intent_id
+        ):
+            return None
+        cancel_target = item.get("cancelled_intent_id")
+        if intent_kind == "cancel" and (
+            not isinstance(cancel_target, str) or not cancel_target
+        ):
+            return None
+        if intent_kind == "order" and cancel_target is not None:
+            return None
+        canonical.append(item)
+    return canonical
 
 
 class QuantDomain:
@@ -337,6 +431,8 @@ class QuantDomain:
             timezone=payload["timezone"],
             price_basis=payload["price_basis"],
             cutoff=payload["cutoff"],
+            execution_profile=payload.get("execution_profile", "legacy"),
+            corporate_actions=payload.get("corporate_actions") or [],
         )
         normalized_sha256 = material.normalized_sha256
         market_input_sha256 = material.market_input_sha256
@@ -395,8 +491,8 @@ class QuantDomain:
                         normalized_artifact_id, market_input_artifact_id, market,
                         symbol, symbols_json, timezone, price_basis, cutoff, schema_version,
                         mapping_json, sample_start, sample_end, row_count, session_count, sha256,
-                        created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        execution_profile, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         payload["snapshot_id"],
@@ -417,6 +513,7 @@ class QuantDomain:
                         material.row_count,
                         material.session_count,
                         snapshot_sha256,
+                        material.execution_profile,
                         recorded_at,
                     ),
                 )
@@ -437,6 +534,7 @@ class QuantDomain:
                     "row_count": material.row_count,
                     "session_count": material.session_count,
                     "sha256": snapshot_sha256,
+                    "execution_profile": material.execution_profile,
                     "created_at": recorded_at,
                 }
                 event = self._insert_event(
@@ -494,6 +592,177 @@ class QuantDomain:
                 raise DomainConflict("data snapshot constraint rejected the command") from error
             connection.execute("COMMIT")
         return receipt
+
+    def _normalize_review_attestation(
+        self,
+        command: dict[str, Any],
+        payload: dict[str, Any],
+        *,
+        recorded_at: str,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Normalize and bind user review evidence for the opt-in v3 gate.
+
+        The object is deliberately small: it records exactly the identities the
+        reviewer saw.  Defaults are only metadata (reviewer/time/id); the five
+        economic and lineage bindings must be supplied and equal the request.
+        """
+        if payload.get("gate_policy_version") != "a-share-v3":
+            return None, None
+        raw = payload.get("review_attestation")
+        if not isinstance(raw, dict):
+            raise DomainConflict("a-share-v3 Formal Run requires review_attestation")
+        required_bindings = {
+            "candidate_revision_id": payload["candidate_revision_id"],
+            "strategy_tree_oid": payload["strategy_tree_oid"],
+            "data_snapshot_sha256": payload["data_snapshot_sha256"],
+            "parameters_sha256": payload["parameters_sha256"],
+            "cost_model_sha256": payload["cost_model_sha256"],
+        }
+        if raw.get("status") != "approved":
+            raise DomainConflict("review_attestation must have approved status")
+        for field, expected in required_bindings.items():
+            if raw.get(field) != expected:
+                raise DomainConflict(
+                    f"review_attestation {field} is not bound to the Formal Run request"
+                )
+        attestation_id = raw.get("attestation_id")
+        if attestation_id is None:
+            attestation_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    "oqs:review-attestation:" + command["command_id"] + ":" +
+                    canonical_json(required_bindings),
+                )
+            )
+        try:
+            uuid.UUID(str(attestation_id))
+        except (ValueError, TypeError, AttributeError) as error:
+            raise DomainConflict("review_attestation attestation_id is invalid") from error
+        reviewer_id = raw.get("reviewer_id", "local-user")
+        if not isinstance(reviewer_id, str) or not reviewer_id:
+            raise DomainConflict("review_attestation reviewer_id is invalid")
+        reviewed_at = raw.get("reviewed_at", recorded_at)
+        if not isinstance(reviewed_at, str) or not reviewed_at:
+            raise DomainConflict("review_attestation reviewed_at is invalid")
+        normalized = {
+            "attestation_id": str(attestation_id),
+            "status": "approved",
+            **required_bindings,
+            "reviewer_id": reviewer_id,
+            "reviewed_at": reviewed_at,
+        }
+        digest = hashlib.sha256(canonical_json(normalized).encode()).hexdigest()
+        return normalized, digest
+
+    def _persist_review_attestation(
+        self,
+        connection: sqlite3.Connection,
+        attestation: dict[str, Any] | None,
+        attestation_sha256: str | None,
+        *,
+        project_id: str,
+        activity_id: str,
+        variant_id: str,
+        created_at: str,
+    ) -> None:
+        if attestation is None or attestation_sha256 is None:
+            return
+        existing = connection.execute(
+            "SELECT * FROM review_attestations WHERE attestation_id = ?",
+            (attestation["attestation_id"],),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["attestation_sha256"] != attestation_sha256
+                or existing["attestation_json"] != canonical_json(attestation)
+                or existing["project_id"] != project_id
+                or existing["activity_id"] != activity_id
+                or existing["variant_id"] != variant_id
+                or existing["candidate_revision_id"] != attestation["candidate_revision_id"]
+            ):
+                raise DomainConflict("review_attestation_id already belongs to different review evidence")
+            return
+        connection.execute(
+            """
+            INSERT INTO review_attestations(
+                attestation_id, project_id, activity_id, variant_id,
+                candidate_revision_id, status, strategy_tree_oid,
+                data_snapshot_sha256, parameters_sha256, cost_model_sha256,
+                reviewer_id, reviewed_at, attestation_sha256,
+                attestation_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                attestation["attestation_id"],
+                project_id,
+                activity_id,
+                variant_id,
+                attestation["candidate_revision_id"],
+                attestation["status"],
+                attestation["strategy_tree_oid"],
+                attestation["data_snapshot_sha256"],
+                attestation["parameters_sha256"],
+                attestation["cost_model_sha256"],
+                attestation["reviewer_id"],
+                attestation["reviewed_at"],
+                attestation_sha256,
+                canonical_json(attestation),
+                created_at,
+            ),
+        )
+
+    def _review_attestation_error(self, run_spec: sqlite3.Row) -> str | None:
+        """Revalidate immutable review evidence immediately before execution."""
+        if run_spec["gate_policy_version"] != "a-share-v3":
+            return None
+        attestation_id = run_spec["review_attestation_id"]
+        expected_sha = run_spec["review_attestation_sha256"]
+        raw_json = run_spec["review_attestation_json"]
+        if not attestation_id or not expected_sha or not raw_json:
+            return "review_attestation_mismatch"
+        try:
+            attestation = json.loads(raw_json)
+        except (TypeError, json.JSONDecodeError):
+            return "review_attestation_mismatch"
+        if not isinstance(attestation, dict):
+            return "review_attestation_mismatch"
+        if hashlib.sha256(canonical_json(attestation).encode()).hexdigest() != expected_sha:
+            return "review_attestation_mismatch"
+        expected = {
+            "attestation_id": attestation_id,
+            "status": "approved",
+            "candidate_revision_id": run_spec["candidate_revision_id"],
+            "strategy_tree_oid": run_spec["candidate_tree_oid"],
+            "data_snapshot_sha256": run_spec["data_snapshot_sha256"],
+            "parameters_sha256": run_spec["parameters_sha256"],
+            "cost_model_sha256": run_spec["cost_model_sha256"],
+        }
+        if any(attestation.get(key) != value for key, value in expected.items()):
+            return "review_attestation_mismatch"
+        with self.database.connect() as connection:
+            persisted = connection.execute(
+                "SELECT * FROM review_attestations WHERE attestation_id = ?",
+                (attestation_id,),
+            ).fetchone()
+        if persisted is None:
+            return "review_attestation_mismatch"
+        if (
+            persisted["project_id"] != run_spec["project_id"]
+            or persisted["activity_id"] != run_spec["activity_id"]
+            or persisted["variant_id"] != run_spec["variant_id"]
+            or persisted["candidate_revision_id"] != run_spec["candidate_revision_id"]
+            or persisted["status"] != "approved"
+            or persisted["strategy_tree_oid"] != attestation["strategy_tree_oid"]
+            or persisted["data_snapshot_sha256"] != attestation["data_snapshot_sha256"]
+            or persisted["parameters_sha256"] != attestation["parameters_sha256"]
+            or persisted["cost_model_sha256"] != attestation["cost_model_sha256"]
+            or persisted["reviewer_id"] != attestation.get("reviewer_id")
+            or persisted["reviewed_at"] != attestation.get("reviewed_at")
+            or persisted["attestation_sha256"] != expected_sha
+            or persisted["attestation_json"] != canonical_json(attestation)
+        ):
+            return "review_attestation_mismatch"
+        return None
 
     def _submit_formal_run_command(self, command: dict[str, Any]) -> dict[str, Any]:
         if command["command_type"] == "formal.run_cancel":
@@ -589,7 +858,12 @@ class QuantDomain:
                         "validation_id already belongs to another formal Run"
                     )
 
-                is_checkpointed = payload["gate_policy_version"] in {"m5-v1", "m8-v1"}
+                is_checkpointed = payload["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}
+                execution_profile = (
+                    "a-share-v3"
+                    if payload["gate_policy_version"] == "a-share-v3"
+                    else "legacy"
+                )
                 engine_input = payload["market_input"] if is_checkpointed else payload["engine_input"]
                 engine_input = {
                     **engine_input,
@@ -599,19 +873,46 @@ class QuantDomain:
                 }
                 snapshot = connection.execute(
                     """
-                    SELECT sha256, market_input_artifact_id
+                    SELECT sha256, market_input_artifact_id, execution_profile,
+                           schema_version, market, price_basis,
+                           cutoff, timezone, sample_start, sample_end
                     FROM data_snapshots
                     WHERE snapshot_id = ? AND project_id = ?
                     """,
                     (payload["data_snapshot_id"], command["project_id"]),
                 ).fetchone()
-                if snapshot is not None and (
+                if snapshot is None:
+                    raise DomainConflict(
+                        "formal Run requires an existing data snapshot"
+                    )
+                if (
                     snapshot["sha256"] != payload["data_snapshot_sha256"]
                     or snapshot["market_input_artifact_id"] != engine_input["artifact_id"]
+                    or snapshot["execution_profile"] != execution_profile
+                    or snapshot["schema_version"] != payload["output_schema_version"]
+                    or (
+                        execution_profile == "a-share-v3"
+                        and snapshot["market"] != "a_share_daily"
+                    )
+                    or any(
+                        snapshot[field] != payload[field]
+                        for field in (
+                            "price_basis",
+                            "cutoff",
+                            "timezone",
+                            "sample_start",
+                            "sample_end",
+                        )
+                    )
                 ):
                     raise DomainConflict(
                         "formal Run input does not match the selected data snapshot"
                     )
+                review_attestation, review_attestation_sha256 = (
+                    self._normalize_review_attestation(
+                        command, payload, recorded_at=recorded_at
+                    )
+                )
                 spec_identity = {
                     "schema_version": 1,
                     "project_id": command["project_id"],
@@ -634,7 +935,15 @@ class QuantDomain:
                     "random_seed": payload["random_seed"],
                     "output_schema_version": payload["output_schema_version"],
                     "gate_policy_version": payload["gate_policy_version"],
+                    "execution_profile": execution_profile,
                 }
+                if review_attestation is not None:
+                    spec_identity.update(
+                        {
+                            "review_attestation": review_attestation,
+                            "review_attestation_sha256": review_attestation_sha256,
+                        }
+                    )
                 if is_checkpointed:
                     spec_identity.update(
                         {
@@ -656,6 +965,15 @@ class QuantDomain:
                             "run_spec_id already belongs to another immutable RunSpec"
                         )
                 else:
+                    self._persist_review_attestation(
+                        connection,
+                        review_attestation,
+                        review_attestation_sha256,
+                        project_id=command["project_id"],
+                        activity_id=command["activity_id"],
+                        variant_id=command["variant_id"],
+                        created_at=recorded_at,
+                    )
                     if is_checkpointed:
                         connection.execute(
                         """
@@ -669,8 +987,14 @@ class QuantDomain:
                             sample_start, sample_end, random_seed,
                             output_schema_version, gate_policy_version,
                             strategy_protocol_version, checkpoint_batch_size,
-                            engine_checkpoint_abi, spec_hash, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            engine_checkpoint_abi, execution_profile,
+                            review_attestation_id, review_attestation_sha256,
+                            review_attestation_json, spec_hash, created_at
+                        ) VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        )
                         """,
                         (
                             payload["run_spec_id"],
@@ -697,6 +1021,10 @@ class QuantDomain:
                             payload["strategy_protocol_version"],
                             payload["checkpoint_batch_size"],
                             payload["engine_checkpoint_abi"],
+                            execution_profile,
+                            None if review_attestation is None else review_attestation["attestation_id"],
+                            review_attestation_sha256,
+                            None if review_attestation is None else canonical_json(review_attestation),
                             run_spec_hash,
                             recorded_at,
                             ),
@@ -713,8 +1041,8 @@ class QuantDomain:
                                 engine_version, price_basis, cutoff, timezone,
                                 sample_start, sample_end, random_seed,
                                 output_schema_version, gate_policy_version,
-                                spec_hash, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                execution_profile, spec_hash, created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             (
                                 payload["run_spec_id"], command["project_id"], command["activity_id"],
@@ -723,7 +1051,7 @@ class QuantDomain:
                                 payload["parameters_sha256"], payload["cost_model_sha256"], payload["environment_lock_sha256"],
                                 payload["engine_version"], payload["price_basis"], payload["cutoff"], payload["timezone"],
                                 payload["sample_start"], payload["sample_end"], payload["random_seed"], payload["output_schema_version"],
-                                payload["gate_policy_version"], run_spec_hash, recorded_at,
+                                payload["gate_policy_version"], execution_profile, run_spec_hash, recorded_at,
                             ),
                         )
 
@@ -2478,7 +2806,7 @@ class QuantDomain:
             or candidate["activity_id"] != command["activity_id"]
             or candidate["variant_id"] != command["variant_id"]
             or candidate["validation_outcome"] != "passed"
-            or candidate["gate_policy_version"] not in {"m3-v1", "m5-v1", "m8-v1"}
+            or candidate["gate_policy_version"] not in {"m3-v1", "m5-v1", "m8-v1", "a-share-v3"}
         ):
             raise PromotionConflict(
                 "promotion requires a passed validation for the exact merge candidate"
@@ -3451,7 +3779,7 @@ class QuantDomain:
                     "candidate_revision_id": claimed["candidate_revision_id"],
                     "run_spec_hash": run_spec["spec_hash"],
                 }
-                if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1"}:
+                if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}:
                     payload.update(
                         {
                             "lifecycle_version": run_spec["gate_policy_version"],
@@ -3483,7 +3811,7 @@ class QuantDomain:
                         )
                         payload[
                             "next_session_index"
-                            if run_spec["gate_policy_version"] == "m8-v1"
+                            if run_spec["gate_policy_version"] in {"m8-v1", "a-share-v3"}
                             else "next_bar_index"
                         ] = claimed["next_bar_index"]
                 started_event = self._insert_event(
@@ -3613,7 +3941,23 @@ class QuantDomain:
                 ),
                 ).fetchone()
 
-        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1"}:
+        review_error = self._review_attestation_error(run_spec)
+        if review_error is not None:
+            return self._finish_formal_job(
+                claimed,
+                run_spec,
+                gates={
+                    "contract": "failed",
+                    "strategy_import": "failed",
+                    "smoke_run": "failed",
+                },
+                engine_result_artifact=None,
+                manifest_artifact=None,
+                calculation_hash=None,
+                error_code=review_error,
+            )
+
+        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}:
             return self._run_m5_formal_job(claimed, run_spec, strategy)
 
         input_path = self.blob_path(run_spec["engine_input_sha256"])
@@ -3694,6 +4038,7 @@ class QuantDomain:
             engine_input=engine_input,
             expected_engine_version=run_spec["engine_version"],
             expected_output_schema_version=run_spec["output_schema_version"],
+            strategy_protocol_version=run_spec["strategy_protocol_version"],
         )
         if execution.error_code is not None:
             return self._finish_formal_job(
@@ -3909,10 +4254,11 @@ class QuantDomain:
         transaction below is the authority that publishes the resulting CAS identities and
         fences them to the exact running claim.
         """
-        is_portfolio = (
-            run_spec["engine_checkpoint_abi"]
-            == "oqs-quant-engine/checkpoint-v2"
-        )
+        is_a_share_v3 = run_spec["engine_checkpoint_abi"] == "oqs-quant-engine/checkpoint-v3"
+        is_portfolio = run_spec["engine_checkpoint_abi"] in {
+            "oqs-quant-engine/checkpoint-v2",
+            "oqs-quant-engine/checkpoint-v3",
+        }
         unit_key = "sessions" if is_portfolio else "bars"
         with self.database.connect() as connection:
             existing = connection.execute(
@@ -3938,6 +4284,10 @@ class QuantDomain:
                 market_input = json.loads(market_body)
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ArtifactIntegrityMismatch("M5 market input is not valid JSON") from error
+            if is_a_share_v3 and _v3_schema_errors(
+                FORMAL_ENGINE_INPUT_V3_VALIDATOR, market_input
+            ):
+                return None, "contract_gate_failed"
             if (
                 not isinstance(market_input, dict)
                 or not isinstance(market_input.get(unit_key), list)
@@ -3965,6 +4315,10 @@ class QuantDomain:
                 or len(resolved_input[unit_key]) != existing["total_bar_count"]
             ):
                 raise ArtifactIntegrityMismatch("resolved input unit count is inconsistent")
+            if is_a_share_v3 and _v3_schema_errors(
+                FORMAL_ENGINE_INPUT_V3_VALIDATOR, resolved_input
+            ):
+                return None, "contract_gate_failed"
             return (
                 {
                     "intent_artifact": dict(intent_row),
@@ -3983,6 +4337,10 @@ class QuantDomain:
         try:
             market_input = json.loads(market_body)
         except (UnicodeDecodeError, json.JSONDecodeError):
+            return None, "contract_gate_failed"
+        if is_a_share_v3 and _v3_schema_errors(
+            FORMAL_ENGINE_INPUT_V3_VALIDATOR, market_input
+        ):
             return None, "contract_gate_failed"
         units = market_input.get(unit_key) if isinstance(market_input, dict) else None
         if (
@@ -4019,7 +4377,11 @@ class QuantDomain:
                         }
                     )
             strategy_input_body = canonical_json(
-                {"schema_version": 2, "bars": streamed_bars, "intents": []}
+                {
+                    "schema_version": 3 if is_a_share_v3 else 2,
+                    "bars": streamed_bars,
+                    "intents": [],
+                }
             ).encode()
         else:
             symbol = market_input["account"]["symbol"]
@@ -4030,15 +4392,27 @@ class QuantDomain:
                     "intents": [],
                 }
             ).encode()
-        emitted = run_strategy_host(strategy_body, strategy_input_body)
+        emitted = run_strategy_host(
+            strategy_body,
+            strategy_input_body,
+            strategy_protocol_version=run_spec["strategy_protocol_version"],
+        )
         if emitted is None:
             return None, "strategy_import_failed"
+        if is_a_share_v3:
+            emitted = _canonicalize_a_share_v3_intents(emitted)
+            if emitted is None:
+                return None, "strategy_import_failed"
         intent_body = canonical_json(emitted).encode()
         resolved_input = dict(market_input)
         # Caller-supplied intents are deliberately overwritten; only the fenced host tape is
         # authoritative for the formal calculation.
         resolved_input["intents"] = emitted
         resolved_body = canonical_json(resolved_input).encode()
+        if is_a_share_v3 and _v3_schema_errors(
+            FORMAL_ENGINE_INPUT_V3_VALIDATOR, resolved_input
+        ):
+            return None, "contract_gate_failed"
         intent_hash = hashlib.sha256(intent_body).hexdigest()
         resolved_hash = hashlib.sha256(resolved_body).hexdigest()
         intent_artifact = self._m5_artifact_descriptor(
@@ -4158,10 +4532,10 @@ class QuantDomain:
         previous_next: int,
     ) -> dict[str, Any]:
         decoded = json.loads(checkpoint_body)
-        is_portfolio = (
-            run_spec["engine_checkpoint_abi"]
-            == "oqs-quant-engine/checkpoint-v2"
-        )
+        is_portfolio = run_spec["engine_checkpoint_abi"] in {
+            "oqs-quant-engine/checkpoint-v2",
+            "oqs-quant-engine/checkpoint-v3",
+        }
         cursor_key = (
             "next_unprocessed_session_index"
             if is_portfolio
@@ -4314,24 +4688,38 @@ class QuantDomain:
         from oqs_quant_engine import (
             finalize_engine_checkpoint_v1,
             finalize_engine_checkpoint_v2,
+            finalize_engine_checkpoint_v3,
             start_engine_checkpoint_v1,
             start_engine_checkpoint_v2,
+            start_engine_checkpoint_v3,
             step_engine_checkpoint_v1,
             step_engine_checkpoint_v2,
+            step_engine_checkpoint_v3,
         )
 
-        is_portfolio = (
-            run_spec["engine_checkpoint_abi"]
-            == "oqs-quant-engine/checkpoint-v2"
-        )
+        is_a_share_v3 = run_spec["engine_checkpoint_abi"] == "oqs-quant-engine/checkpoint-v3"
+        is_portfolio = run_spec["engine_checkpoint_abi"] in {
+            "oqs-quant-engine/checkpoint-v2",
+            "oqs-quant-engine/checkpoint-v3",
+        }
         start_checkpoint = (
-            start_engine_checkpoint_v2 if is_portfolio else start_engine_checkpoint_v1
+            start_engine_checkpoint_v3
+            if is_a_share_v3
+            else start_engine_checkpoint_v2
+            if is_portfolio
+            else start_engine_checkpoint_v1
         )
         step_checkpoint = (
-            step_engine_checkpoint_v2 if is_portfolio else step_engine_checkpoint_v1
+            step_engine_checkpoint_v3
+            if is_a_share_v3
+            else step_engine_checkpoint_v2
+            if is_portfolio
+            else step_engine_checkpoint_v1
         )
         finalize_checkpoint = (
-            finalize_engine_checkpoint_v2
+            finalize_engine_checkpoint_v3
+            if is_a_share_v3
+            else finalize_engine_checkpoint_v2
             if is_portfolio
             else finalize_engine_checkpoint_v1
         )
@@ -4425,7 +4813,13 @@ class QuantDomain:
             )
         except ValueError as error:
             message = str(error)
-            checkpoint_prefix = "[checkpoint_v2:" if is_portfolio else "[checkpoint_v1:"
+            checkpoint_prefix = (
+                "[checkpoint_v3:"
+                if is_a_share_v3
+                else "[checkpoint_v2:"
+                if is_portfolio
+                else "[checkpoint_v1:"
+            )
             code = "checkpoint_integrity_mismatch" if message.startswith(checkpoint_prefix) else "smoke_run_failed"
             return self._finish_formal_job(
                 claimed, run_spec, gates=import_gates, engine_result_artifact=None,
@@ -4433,6 +4827,83 @@ class QuantDomain:
                 m5_context=preparation["context"], m5_checkpoint_seq=checkpoint_seq,
                 m5_next_bar_index=next_bar_index,
             )
+        try:
+            checkpoint = json.loads(checkpoint_body)
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return self._finish_formal_job(
+                claimed,
+                run_spec,
+                gates={
+                    "contract": "failed",
+                    "strategy_import": "passed",
+                    "smoke_run": "failed",
+                },
+                engine_result_artifact=None,
+                manifest_artifact=None,
+                calculation_hash=None,
+                error_code="checkpoint_contract_failed",
+                m5_context=preparation["context"],
+                m5_checkpoint_seq=checkpoint_seq,
+                m5_next_bar_index=next_bar_index,
+            )
+        if is_a_share_v3:
+            checkpoint_ok = (
+                isinstance(checkpoint, dict)
+                and checkpoint.get("checkpoint_schema_version") == 3
+                and checkpoint.get("engine_version") == run_spec["engine_version"]
+                and checkpoint.get("input_schema_version") == 3
+                and checkpoint.get("output_schema_version") == 3
+                and checkpoint.get("account_model") == "a_share_portfolio_research"
+                and checkpoint.get("calculation_context_sha256")
+                == preparation["context"]
+                and checkpoint.get("total_session_count")
+                == preparation["total_bar_count"]
+                and checkpoint.get("next_unprocessed_session_index")
+                == preparation["total_bar_count"]
+                and checkpoint.get("status") == "complete"
+            )
+            if not checkpoint_ok:
+                return self._finish_formal_job(
+                    claimed,
+                    run_spec,
+                    gates={
+                        "contract": "failed",
+                        "strategy_import": "passed",
+                        "smoke_run": "failed",
+                    },
+                    engine_result_artifact=None,
+                    manifest_artifact=None,
+                    calculation_hash=None,
+                    error_code="checkpoint_contract_failed",
+                    m5_context=preparation["context"],
+                    m5_checkpoint_seq=checkpoint_seq,
+                    m5_next_bar_index=next_bar_index,
+                )
+            try:
+                decoded_result = json.loads(engine_result)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                decoded_result = None
+            schema_errors = _v3_schema_errors(
+                FORMAL_ENGINE_RESULT_V3_VALIDATOR, decoded_result
+            )
+            reconciliation = validate_v3_engine_result(decoded_result)
+            if schema_errors or not reconciliation.get("passed", False):
+                return self._finish_formal_job(
+                    claimed,
+                    run_spec,
+                    gates={
+                        "contract": "failed",
+                        "strategy_import": "passed",
+                        "smoke_run": "passed",
+                    },
+                    engine_result_artifact=None,
+                    manifest_artifact=None,
+                    calculation_hash=None,
+                    error_code="engine_result_contract_failed",
+                    m5_context=preparation["context"],
+                    m5_checkpoint_seq=checkpoint_seq,
+                    m5_next_bar_index=next_bar_index,
+                )
         engine_result_hash = hashlib.sha256(engine_result).hexdigest()
         engine_result_artifact = self._m5_artifact_descriptor(
             str(uuid.uuid5(uuid.NAMESPACE_URL, f"oqs:m5:result:{engine_result_hash}")),
@@ -4440,7 +4911,6 @@ class QuantDomain:
             media_type="application/json",
             source_ref=f"oqs:m5:result:{engine_result_hash}",
         )
-        checkpoint = json.loads(checkpoint_body)
         manifest = {
             "schema_version": 1,
             "manifest_version": run_spec["gate_policy_version"],
@@ -4500,6 +4970,31 @@ class QuantDomain:
             "gates": {"contract": "passed", "strategy_import": "passed", "smoke_run": "passed"},
             "logs": {"run_id": claimed["run_id"], "deletable": True, "included_in_calculation_hash": False},
         }
+        if is_a_share_v3:
+            try:
+                manifest["review_attestation"] = json.loads(
+                    run_spec["review_attestation_json"]
+                )
+            except (TypeError, json.JSONDecodeError) as error:
+                return self._finish_formal_job(
+                    claimed,
+                    run_spec,
+                    gates={
+                        "contract": "failed",
+                        "strategy_import": "passed",
+                        "smoke_run": "passed",
+                    },
+                    intent_tape_artifact=preparation["intent_artifact"],
+                    engine_result_artifact=None,
+                    manifest_artifact=None,
+                    calculation_hash=None,
+                    error_code="review_attestation_mismatch",
+                    m5_context=preparation["context"],
+                    m5_checkpoint_seq=checkpoint_seq,
+                    m5_next_bar_index=next_bar_index,
+                )
+            manifest["review_attestation_id"] = run_spec["review_attestation_id"]
+            manifest["review_attestation_sha256"] = run_spec["review_attestation_sha256"]
         manifest["checkpoint"][
             "final_next_session_index" if is_portfolio else "final_next_bar_index"
         ] = next_bar_index
@@ -4551,7 +5046,19 @@ class QuantDomain:
             "output_schema_version": run_spec["output_schema_version"],
             "gate_policy_version": run_spec["gate_policy_version"],
         }
-        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1"}:
+        if run_spec["gate_policy_version"] == "a-share-v3":
+            manifest["execution_profile"] = run_spec["execution_profile"]
+            if run_spec["review_attestation_json"] is None:
+                raise ArtifactIntegrityMismatch("a-share-v3 RunSpec has no review attestation")
+            try:
+                manifest["review_attestation"] = json.loads(
+                    run_spec["review_attestation_json"]
+                )
+            except (TypeError, json.JSONDecodeError) as error:
+                raise ArtifactIntegrityMismatch("a-share-v3 review attestation is not valid JSON") from error
+            manifest["review_attestation_id"] = run_spec["review_attestation_id"]
+            manifest["review_attestation_sha256"] = run_spec["review_attestation_sha256"]
+        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}:
             manifest.update(
                 {
                     "market_input_artifact_id": run_spec["market_input_artifact_id"],
@@ -4566,7 +5073,21 @@ class QuantDomain:
 
     def _run_spec_read_model(self, run_spec: sqlite3.Row) -> dict[str, Any]:
         detail = dict(run_spec)
-        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1"}:
+        attestation_json = detail.pop("review_attestation_json", None)
+        attestation_id = detail.pop("review_attestation_id", None)
+        attestation_sha256 = detail.pop("review_attestation_sha256", None)
+        if run_spec["gate_policy_version"] != "a-share-v3":
+            detail.pop("execution_profile", None)
+        else:
+            if attestation_json is None or attestation_id is None or attestation_sha256 is None:
+                raise ArtifactIntegrityMismatch("a-share-v3 RunSpec has no review attestation")
+            try:
+                detail["review_attestation"] = json.loads(attestation_json)
+            except (TypeError, json.JSONDecodeError) as error:
+                raise ArtifactIntegrityMismatch("a-share-v3 review attestation is not valid JSON") from error
+            detail["review_attestation_id"] = attestation_id
+            detail["review_attestation_sha256"] = attestation_sha256
+        if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}:
             detail.pop("engine_input_artifact_id", None)
         else:
             for key in (
@@ -4760,7 +5281,7 @@ class QuantDomain:
                 "calculation_hash": calculation_hash,
                 "error_code": error_code,
             }
-            if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1"}:
+            if run_spec["gate_policy_version"] in {"m5-v1", "m8-v1", "a-share-v3"}:
                 event_payload.update(
                     {
                         "lifecycle_version": run_spec["gate_policy_version"],
@@ -5467,6 +5988,20 @@ class QuantDomain:
             ) from error
         if not manifest_matches:
             raise ArtifactIntegrityMismatch("formal Run manifest identity is inconsistent")
+        if run_spec["gate_policy_version"] == "a-share-v3":
+            expected_attestation = self._run_spec_read_model(run_spec).get(
+                "review_attestation"
+            )
+            if (
+                manifest.get("review_attestation") != expected_attestation
+                or manifest.get("review_attestation_id")
+                != run_spec["review_attestation_id"]
+                or manifest.get("review_attestation_sha256")
+                != run_spec["review_attestation_sha256"]
+            ):
+                raise ArtifactIntegrityMismatch(
+                    "formal Run review attestation identity is inconsistent"
+                )
         return {
             "run": run_detail,
                 "run_spec": self._run_spec_read_model(run_spec),

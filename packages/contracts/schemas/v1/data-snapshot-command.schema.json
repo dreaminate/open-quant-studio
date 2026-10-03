@@ -21,6 +21,7 @@
       "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     },
     "dateTime": { "type": "string", "format": "date-time" },
+    "executionProfile": { "enum": ["legacy", "a-share-v3"] },
     "sourceArtifact": {
       "allOf": [
         { "$ref": "https://open-quant-studio.local/schemas/v1/artifact-ref.schema.json" },
@@ -50,12 +51,23 @@
         "high": { "type": "string", "minLength": 1 },
         "low": { "type": "string", "minLength": 1 },
         "close": { "type": "string", "minLength": 1 },
-        "volume": { "type": "string", "minLength": 1 }
+        "volume": { "type": "string", "minLength": 1 },
+        "trading_status": { "type": "string", "minLength": 1 },
+        "price_limit_state": { "type": "string", "minLength": 1 }
       }
     },
     "createPayload": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["execution_profile"],
+            "properties": { "execution_profile": { "const": "a-share-v3" } }
+          },
+          "then": { "properties": { "market": { "const": "a_share_daily" } } }
+        }
+      ],
       "required": [
         "snapshot_id",
         "source",
@@ -76,7 +88,15 @@
         "market": { "enum": ["a_share_daily", "crypto_linear_perp"] },
         "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
         "price_basis": { "enum": ["raw", "qfq", "hfq"] },
-        "cutoff": { "$ref": "#/$defs/dateTime" }
+        "cutoff": { "$ref": "#/$defs/dateTime" },
+        "execution_profile": { "$ref": "#/$defs/executionProfile" },
+        "corporate_actions": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-input-v3.schema.json#/$defs/corporateAction"
+          }
+        }
       }
     }
   }

@@ -15,8 +15,10 @@ import diagnosticCommandSchemaDocument from "../schemas/v1/diagnostic-command.sc
 import diagnosticEventSchemaDocument from "../schemas/v1/diagnostic-event.schema.json" with { type: "json" };
 import diagnosticLogReadModelSchemaDocument from "../schemas/v1/diagnostic-log-read-model.schema.json" with { type: "json" };
 import eventEnvelopeSchemaDocument from "../schemas/v1/event-envelope.schema.json" with { type: "json" };
+import formalEngineInputV3SchemaDocument from "../schemas/v1/formal-engine-input-v3.schema.json" with { type: "json" };
 import formalEngineResultSchemaDocument from "../schemas/v1/formal-engine-result.schema.json" with { type: "json" };
 import formalEngineResultV2SchemaDocument from "../schemas/v1/formal-engine-result-v2.schema.json" with { type: "json" };
+import formalEngineResultV3SchemaDocument from "../schemas/v1/formal-engine-result-v3.schema.json" with { type: "json" };
 import formalRunCommandSchemaDocument from "../schemas/v1/formal-run-command.schema.json" with { type: "json" };
 import formalRunEventSchemaDocument from "../schemas/v1/formal-run-event.schema.json" with { type: "json" };
 import formalRunManifestSchemaDocument from "../schemas/v1/formal-run-manifest.schema.json" with { type: "json" };
@@ -60,10 +62,14 @@ export const diagnosticLogReadModelSchema: Record<string, unknown> =
   diagnosticLogReadModelSchemaDocument;
 export const eventEnvelopeSchema: Record<string, unknown> =
   eventEnvelopeSchemaDocument;
+export const formalEngineInputV3Schema: Record<string, unknown> =
+  formalEngineInputV3SchemaDocument;
 export const formalEngineResultSchema: Record<string, unknown> =
   formalEngineResultSchemaDocument;
 export const formalEngineResultV2Schema: Record<string, unknown> =
   formalEngineResultV2SchemaDocument;
+export const formalEngineResultV3Schema: Record<string, unknown> =
+  formalEngineResultV3SchemaDocument;
 export const formalRunCommandSchema: Record<string, unknown> =
   formalRunCommandSchemaDocument;
 export const formalRunEventSchema: Record<string, unknown> =
@@ -556,6 +562,18 @@ export interface FormalRunRequestPayloadCommon extends Record<string, unknown> {
   checkpoint_batch_size: number;
 }
 
+export interface FormalRunReviewAttestation extends Record<string, unknown> {
+  attestation_id?: string;
+  status: "approved";
+  candidate_revision_id: string;
+  strategy_tree_oid: string;
+  data_snapshot_sha256: string;
+  parameters_sha256: string;
+  cost_model_sha256: string;
+  reviewer_id?: string;
+  reviewed_at?: string;
+}
+
 export interface FormalRunM5RequestPayload extends FormalRunRequestPayloadCommon {
   engine_version: "oqs-quant-engine/0.1.0";
   output_schema_version: 1;
@@ -572,9 +590,22 @@ export interface FormalRunM8RequestPayload extends FormalRunRequestPayloadCommon
   engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v2";
 }
 
+export interface FormalRunAShareV3RequestPayload extends FormalRunRequestPayloadCommon {
+  engine_version: "oqs-quant-engine/0.3.0";
+  output_schema_version: 3;
+  gate_policy_version: "a-share-v3";
+  strategy_protocol_version: "oqs-strategy-host/a-share-v3";
+  engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3";
+  review_attestation: FormalRunReviewAttestation;
+}
+
+/** @deprecated Prefer the acronym-preserving FormalRunAShareV3 name. */
+export type FormalRunAshareV3RequestPayload = FormalRunAShareV3RequestPayload;
+
 export type FormalRunRequestPayload =
   | FormalRunM5RequestPayload
-  | FormalRunM8RequestPayload;
+  | FormalRunM8RequestPayload
+  | FormalRunAShareV3RequestPayload;
 
 export type FormalRunRequestCommand = CommandEnvelope<FormalRunRequestPayload> & {
   command_type: "formal.run_request";
@@ -989,11 +1020,14 @@ export interface DataSnapshotMapping extends Record<string, unknown> {
   low: string;
   close: string;
   volume: string;
+  trading_status?: string;
+  price_limit_state?: string;
 }
 
 export type DataSnapshotMarket = "a_share_daily" | "crypto_linear_perp";
 export type DataSnapshotSourceFormat = "csv" | "parquet";
 export type DataSnapshotPriceBasis = "raw" | "qfq" | "hfq";
+export type DataSnapshotExecutionProfile = "legacy" | "a-share-v3";
 
 export interface DataSnapshotSourceArtifact extends M1ArtifactRef {
   media_type: "text/csv" | "application/vnd.apache.parquet";
@@ -1014,6 +1048,8 @@ export interface DataSnapshotCreatePayload extends Record<string, unknown> {
   timezone: string;
   price_basis: DataSnapshotPriceBasis;
   cutoff: string;
+  execution_profile?: DataSnapshotExecutionProfile;
+  corporate_actions?: FormalEngineCorporateActionInputV3[];
 }
 
 export type DataSnapshotCreateCommand = CommandEnvelope<DataSnapshotCreatePayload> & {
@@ -1023,18 +1059,15 @@ export type DataSnapshotCreateCommand = CommandEnvelope<DataSnapshotCreatePayloa
   base_revision_id: null;
 };
 
-export interface DataSnapshotCreatedPayload extends Record<string, unknown> {
+interface DataSnapshotCreatedPayloadCommon extends Record<string, unknown> {
   snapshot_id: string;
   source_artifact_id: string;
   normalized_artifact_id: string;
   market_input_artifact_id: string;
   market: DataSnapshotMarket;
-  symbol: string | null;
-  symbols: string[];
   timezone: string;
   price_basis: DataSnapshotPriceBasis;
   cutoff: string;
-  schema_version: 1 | 2;
   sample_start: string;
   sample_end: string;
   row_count: number;
@@ -1042,6 +1075,34 @@ export interface DataSnapshotCreatedPayload extends Record<string, unknown> {
   sha256: string;
   created_at: string;
 }
+
+export type DataSnapshotCreatedPayload =
+  | (DataSnapshotCreatedPayloadCommon & {
+      schema_version: 1;
+      symbol: string;
+      symbols: [string];
+      execution_profile?: "legacy";
+    })
+  | (DataSnapshotCreatedPayloadCommon & {
+      schema_version: 2;
+      symbol: null;
+      symbols: [string, string, ...string[]];
+      execution_profile?: "legacy";
+    })
+  | (DataSnapshotCreatedPayloadCommon & {
+      schema_version: 3;
+      execution_profile: "a-share-v3";
+      market: "a_share_daily";
+      symbol: string;
+      symbols: [string];
+    })
+  | (DataSnapshotCreatedPayloadCommon & {
+      schema_version: 3;
+      execution_profile: "a-share-v3";
+      market: "a_share_daily";
+      symbol: null;
+      symbols: [string, string, ...string[]];
+    });
 
 export type DataSnapshotCreatedEvent = EventEnvelope<DataSnapshotCreatedPayload> & {
   event_type: "data.snapshot_created";
@@ -1059,13 +1120,13 @@ export interface DataImportPreviewReadModel {
   total_rows: number;
 }
 
-export interface DataSnapshotReadModel extends DataSnapshotCreatedPayload {
+export type DataSnapshotReadModel = DataSnapshotCreatedPayload & {
   project_id: string;
   mapping: DataSnapshotMapping;
   source_sha256: string;
   normalized_sha256: string;
   market_input_sha256: string;
-}
+};
 
 export interface DataSnapshotListReadModel {
   snapshots: DataSnapshotReadModel[];
@@ -1155,6 +1216,152 @@ export interface ArtifactMetadataReadModel {
 }
 
 export type FormalAtom = string;
+
+export type FormalEngineEventPhaseV3 = "open" | "intraday" | "close";
+
+export interface FormalEngineEventKeyV3 {
+  session_seq: number;
+  phase: FormalEngineEventPhaseV3;
+  stable_seq: number;
+}
+
+export type FormalEngineTradingStatusV3 =
+  | "tradable"
+  | "suspended"
+  | "not_listed"
+  | "delisted"
+  | "non_trading"
+  | "missing";
+
+export type FormalEnginePriceLimitStateV3 = "none" | "limit_up" | "limit_down";
+
+export interface FormalEngineRawBarV3 {
+  open_atoms: FormalAtom;
+  high_atoms: FormalAtom;
+  low_atoms: FormalAtom;
+  close_atoms: FormalAtom;
+  volume_quantity: FormalAtom;
+}
+
+export interface FormalEngineResearchBarV3 {
+  open_atoms: FormalAtom;
+  high_atoms: FormalAtom;
+  low_atoms: FormalAtom;
+  close_atoms: FormalAtom;
+}
+
+export interface FormalEngineBarInputV3 {
+  symbol: string;
+  trading_status: FormalEngineTradingStatusV3;
+  price_limit_state: FormalEnginePriceLimitStateV3;
+  raw: FormalEngineRawBarV3;
+  research: FormalEngineResearchBarV3;
+}
+
+export interface FormalEngineSessionInputV3 {
+  session_seq: number;
+  timestamp: string;
+  bars: FormalEngineBarInputV3[];
+}
+
+export interface FormalEngineAccountInputV3 {
+  model: "a_share_portfolio_research";
+  symbols: string[];
+  price_scale: number;
+  cash_scale: number;
+  rate_scale: number;
+  starting_cash_atoms: FormalAtom;
+  lot_size: number;
+  max_participation_rate_atoms: FormalAtom;
+  commission_rate_atoms: FormalAtom;
+  minimum_commission_atoms: FormalAtom;
+  stamp_duty_rate_atoms: FormalAtom;
+  market_slippage_atoms: FormalAtom;
+  research_short_margin_rate_atoms: FormalAtom;
+}
+
+export type FormalEngineCorporateActionInputV3 =
+  | {
+      action_id: string;
+      symbol: string;
+      effective_at: FormalEngineEventKeyV3;
+      action_type: "cash_dividend";
+      cash_per_share_atoms: FormalAtom;
+      numerator?: null;
+      denominator?: null;
+      settlement_price_atoms?: null;
+    }
+  | {
+      action_id: string;
+      symbol: string;
+      effective_at: FormalEngineEventKeyV3;
+      action_type: "split" | "reverse_split";
+      cash_per_share_atoms?: null;
+      numerator: number;
+      denominator: number;
+      settlement_price_atoms?: null;
+    }
+  | {
+      action_id: string;
+      symbol: string;
+      effective_at: FormalEngineEventKeyV3;
+      action_type: "delist_settlement";
+      cash_per_share_atoms?: null;
+      numerator?: null;
+      denominator?: null;
+      settlement_price_atoms: FormalAtom;
+    };
+
+export type FormalEngineBookSideEffectV3 =
+  | { book: "cash_long"; side: "buy"; position_effect: "open" }
+  | { book: "cash_long"; side: "sell"; position_effect: "close" }
+  | { book: "research_short"; side: "sell"; position_effect: "open" }
+  | { book: "research_short"; side: "buy"; position_effect: "close" };
+
+export interface FormalEngineIntentInputV3Common {
+  intent_id: string;
+  intent_seq: number;
+  symbol: string;
+  known_at: FormalEngineEventKeyV3;
+  effective_at: FormalEngineEventKeyV3;
+  time_in_force: "day" | "gtc";
+  condition_intent_id?: string | null;
+}
+
+export type FormalEngineOrderIntentInputV3 =
+  & FormalEngineIntentInputV3Common
+  & FormalEngineBookSideEffectV3
+  & {
+    intent_kind: "order";
+    quantity: FormalAtom;
+    order_type: "market" | "limit";
+    limit_price_atoms: FormalAtom | null;
+    cancelled_intent_id?: null;
+  };
+
+export type FormalEngineCancelIntentInputV3 =
+  & FormalEngineIntentInputV3Common
+  & FormalEngineBookSideEffectV3
+  & {
+    intent_kind: "cancel";
+    quantity: FormalAtom;
+    order_type: "market" | "limit";
+    limit_price_atoms: FormalAtom | null;
+    cancelled_intent_id: string;
+  };
+
+export type FormalEngineIntentInputV3 =
+  | FormalEngineOrderIntentInputV3
+  | FormalEngineCancelIntentInputV3;
+
+export interface FormalEngineInputV3 {
+  schema_version: 3;
+  market_rules_version: string;
+  account: FormalEngineAccountInputV3;
+  sessions: FormalEngineSessionInputV3[];
+  corporate_actions: FormalEngineCorporateActionInputV3[];
+  intents: FormalEngineIntentInputV3[];
+}
 
 export interface FormalEngineOrderV1 {
   intent_id: string;
@@ -1307,6 +1514,159 @@ export interface FormalEngineResultV2 {
   };
 }
 
+export interface FormalEngineOrderV3 {
+  intent_id: string;
+  intent_seq: number;
+  symbol: string;
+  book: "cash_long" | "research_short";
+  status: "accepted" | "partial" | "filled" | "expired" | "cancelled" | "rejected";
+  reject_reason: string | null;
+  side: "buy" | "sell";
+  position_effect: "open" | "close";
+  order_type: "market" | "limit";
+  quantity: FormalAtom;
+  remaining_quantity: FormalAtom;
+  filled_session_seq: number | null;
+  filled_phase: "open" | null;
+  cancelled_intent_id: string | null;
+  condition_intent_id: string | null;
+}
+
+export interface FormalEngineFillV3 {
+  fill_id: string;
+  intent_id: string;
+  intent_seq: number;
+  symbol: string;
+  book: "cash_long" | "research_short";
+  session_seq: number;
+  side: "buy" | "sell";
+  position_effect: "open" | "close";
+  quantity: FormalAtom;
+  fill_price_atoms: FormalAtom;
+  notional_atoms: FormalAtom;
+  fee_atoms: FormalAtom;
+  stamp_duty_atoms: FormalAtom;
+  slippage_atoms: FormalAtom;
+  liquidity: "taker";
+  volume_before: FormalAtom;
+  volume_after: FormalAtom;
+  remaining_quantity: FormalAtom;
+  frozen_margin_delta_atoms: FormalAtom;
+  isolated_proceeds_delta_atoms: FormalAtom;
+  condition_intent_id: string | null;
+}
+
+export interface FormalEnginePositionV3 {
+  intent_id: string;
+  symbol: string;
+  book: "cash_long" | "research_short";
+  session_seq: number;
+  signed_quantity: FormalAtom;
+  eligible_quantity: FormalAtom;
+}
+
+export interface FormalEngineCashLedgerV3 {
+  intent_id: string;
+  symbol: string;
+  book: "cash_long" | "research_short";
+  session_seq: number;
+  notional_delta_atoms: FormalAtom;
+  fee_delta_atoms: FormalAtom;
+  stamp_duty_delta_atoms: FormalAtom;
+  realized_pnl_delta_atoms: FormalAtom;
+  resulting_available_cash_atoms: FormalAtom;
+  frozen_margin_delta_atoms: FormalAtom;
+  isolated_proceeds_delta_atoms: FormalAtom;
+}
+
+export interface FormalEngineEquityPointV3 {
+  session_seq: number;
+  timestamp: string;
+  available_cash_atoms: FormalAtom;
+  long_market_value_atoms: FormalAtom;
+  short_liability_atoms: FormalAtom;
+  gross_market_value_atoms: FormalAtom;
+  net_market_value_atoms: FormalAtom;
+  market_value_atoms: FormalAtom;
+  equity_atoms: FormalAtom;
+  frozen_margin_atoms: FormalAtom;
+  isolated_short_proceeds_atoms: FormalAtom;
+}
+
+export interface FormalEngineDrawdownPointV3 {
+  session_seq: number;
+  equity_atoms: FormalAtom;
+  peak_equity_atoms: FormalAtom;
+  drawdown_atoms: FormalAtom;
+  drawdown_rate_atoms: FormalAtom;
+}
+
+export interface FormalEngineMetricsV3 {
+  starting_equity_atoms: FormalAtom;
+  ending_equity_atoms: FormalAtom;
+  net_pnl_atoms: FormalAtom;
+  total_return_rate_atoms: FormalAtom;
+  max_drawdown_atoms: FormalAtom;
+  max_drawdown_rate_atoms: FormalAtom;
+  total_fees_atoms: FormalAtom;
+  total_stamp_duty_atoms: FormalAtom;
+  total_slippage_atoms: FormalAtom;
+  fill_count: number;
+  closed_trade_count: number;
+  open_position_count: number;
+}
+
+export interface FormalEngineCostsV3 {
+  commission_atoms: FormalAtom;
+  stamp_duty_atoms: FormalAtom;
+  slippage_atoms: FormalAtom;
+}
+
+export interface FormalEngineCorporateActionV3 {
+  action_id: string;
+  symbol: string;
+  session_seq: number;
+  action_type: "cash_dividend" | "split" | "reverse_split" | "delist_settlement";
+  book: "cash_long" | "research_short";
+  quantity_before: FormalAtom;
+  quantity_after: FormalAtom;
+  available_cash_delta_atoms: FormalAtom;
+  frozen_margin_delta_atoms: FormalAtom;
+  isolated_proceeds_delta_atoms: FormalAtom;
+  realized_pnl_delta_atoms: FormalAtom;
+  resulting_available_cash_atoms: FormalAtom;
+  resulting_frozen_margin_atoms: FormalAtom;
+  resulting_isolated_proceeds_atoms: FormalAtom;
+}
+
+export interface FormalEngineAssumptionsV3 {
+  fill_model: "a_share_dual_book_market_open_v3";
+  partial_fills: true;
+  liquidate_on_end: false;
+  cash_long: true;
+  research_short: true;
+  limit_orders: true;
+  corporate_actions: true;
+  tradability_gates: true;
+  t_plus_one: true;
+}
+
+export interface FormalEngineResultV3 {
+  schema_version: 3;
+  engine_version: "oqs-quant-engine/0.3.0";
+  account_model: "a_share_portfolio_research";
+  orders: FormalEngineOrderV3[];
+  fills: FormalEngineFillV3[];
+  positions: FormalEnginePositionV3[];
+  cash_ledger: FormalEngineCashLedgerV3[];
+  corporate_action_ledger: FormalEngineCorporateActionV3[];
+  equity_curve: FormalEngineEquityPointV3[];
+  drawdown_curve: FormalEngineDrawdownPointV3[];
+  metrics: FormalEngineMetricsV3;
+  costs: FormalEngineCostsV3;
+  assumptions: FormalEngineAssumptionsV3;
+}
+
 export interface FormalRunManifestRunSpecV1 {
   run_spec_id: string;
   spec_hash: string;
@@ -1374,6 +1734,28 @@ export type FormalRunManifestRunSpecM8V1 = Omit<
   engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v2";
 };
 
+export type FormalRunManifestRunSpecAShareV3V1 = Omit<
+  FormalRunManifestRunSpecM5V1,
+  | "engine_version"
+  | "output_schema_version"
+  | "gate_policy_version"
+  | "strategy_protocol_version"
+  | "engine_checkpoint_abi"
+> & {
+  execution_profile: "a-share-v3";
+  engine_version: "oqs-quant-engine/0.3.0";
+  output_schema_version: 3;
+  gate_policy_version: "a-share-v3";
+  strategy_protocol_version: "oqs-strategy-host/a-share-v3";
+  engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3";
+  review_attestation: Required<FormalRunReviewAttestation>;
+  review_attestation_id: string;
+  review_attestation_sha256: string;
+};
+
+/** @deprecated Prefer the acronym-preserving FormalRunManifestRunSpecAShareV3V1 name. */
+export type FormalRunManifestRunSpecAshareV3V1 = FormalRunManifestRunSpecAShareV3V1;
+
 export interface FormalRunManifestRevisionV1 {
   candidate_revision_id: string;
   git_commit_oid: string;
@@ -1420,6 +1802,17 @@ export type FormalRunManifestStrategyExecutionM8V1 = Omit<
   timing_authority: "oqs-strategy-host/m8-portfolio-v1";
 };
 
+export type FormalRunManifestStrategyExecutionAShareV3V1 = Omit<
+  FormalRunManifestStrategyExecutionM5V1,
+  "timing_authority"
+> & {
+  timing_authority: "oqs-strategy-host/a-share-v3";
+};
+
+/** @deprecated Prefer the acronym-preserving FormalRunManifestStrategyExecutionAShareV3V1 name. */
+export type FormalRunManifestStrategyExecutionAshareV3V1 =
+  FormalRunManifestStrategyExecutionAShareV3V1;
+
 export interface FormalRunManifestCheckpointM5V1 {
   engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v1";
   checkpoint_batch_size: number;
@@ -1435,6 +1828,17 @@ export interface FormalRunManifestCheckpointM8V1 {
   final_next_session_index: number;
   calculation_context_sha256: string;
 }
+
+export interface FormalRunManifestCheckpointAShareV3V1 {
+  engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3";
+  checkpoint_batch_size: number;
+  final_checkpoint_seq: number;
+  final_next_session_index: number;
+  calculation_context_sha256: string;
+}
+
+/** @deprecated Prefer the acronym-preserving FormalRunManifestCheckpointAShareV3V1 name. */
+export type FormalRunManifestCheckpointAshareV3V1 = FormalRunManifestCheckpointAShareV3V1;
 
 export interface FormalRunManifestEngineResultV1 {
   artifact_id: string;
@@ -1453,6 +1857,17 @@ export type FormalRunManifestEngineResultM8V1 = Omit<
   schema_version: 2;
   engine_version: "oqs-quant-engine/0.2.0";
 };
+
+export type FormalRunManifestEngineResultAShareV3V1 = Omit<
+  FormalRunManifestEngineResultV1,
+  "schema_version" | "engine_version"
+> & {
+  schema_version: 3;
+  engine_version: "oqs-quant-engine/0.3.0";
+};
+
+/** @deprecated Prefer the acronym-preserving FormalRunManifestEngineResultAShareV3V1 name. */
+export type FormalRunManifestEngineResultAshareV3V1 = FormalRunManifestEngineResultAShareV3V1;
 
 export interface FormalRunManifestM3V1 {
   schema_version: 1;
@@ -1524,10 +1939,41 @@ export interface FormalRunManifestM8V1 {
   };
 }
 
+export interface FormalRunManifestAShareV3V1 {
+  schema_version: 1;
+  manifest_version: "a-share-v3";
+  run_id: string;
+  validation_id: string;
+  run_spec: FormalRunManifestRunSpecAShareV3V1;
+  revision: FormalRunManifestRevisionV1;
+  market_input: FormalRunManifestEngineInputV1;
+  strategy_execution: FormalRunManifestStrategyExecutionAShareV3V1;
+  resolved_engine_input: FormalRunManifestEngineInputV1;
+  checkpoint: FormalRunManifestCheckpointAShareV3V1;
+  engine_result: FormalRunManifestEngineResultAShareV3V1;
+  review_attestation: Required<FormalRunReviewAttestation>;
+  review_attestation_id: string;
+  review_attestation_sha256: string;
+  gates: {
+    contract: "passed";
+    strategy_import: "passed";
+    smoke_run: "passed";
+  };
+  logs: {
+    run_id: string;
+    deletable: true;
+    included_in_calculation_hash: false;
+  };
+}
+
+/** @deprecated Prefer the acronym-preserving FormalRunManifestAShareV3V1 name. */
+export type FormalRunManifestAshareV3V1 = FormalRunManifestAShareV3V1;
+
 export type FormalRunManifestV1 =
   | FormalRunManifestM3V1
   | FormalRunManifestM5V1
-  | FormalRunManifestM8V1;
+  | FormalRunManifestM8V1
+  | FormalRunManifestAShareV3V1;
 
 export interface FormalRunSpecReadModel {
   run_spec_id: string;
@@ -1599,6 +2045,28 @@ export type FormalRunM8SpecReadModel = Omit<
   engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v2";
 };
 
+export type FormalRunAShareV3SpecReadModel = Omit<
+  FormalRunM5SpecReadModel,
+  | "engine_version"
+  | "output_schema_version"
+  | "gate_policy_version"
+  | "strategy_protocol_version"
+  | "engine_checkpoint_abi"
+> & {
+  execution_profile: "a-share-v3";
+  engine_version: "oqs-quant-engine/0.3.0";
+  output_schema_version: 3;
+  gate_policy_version: "a-share-v3";
+  strategy_protocol_version: "oqs-strategy-host/a-share-v3";
+  engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3";
+  review_attestation: Required<FormalRunReviewAttestation>;
+  review_attestation_id: string;
+  review_attestation_sha256: string;
+};
+
+/** @deprecated Prefer the acronym-preserving FormalRunAShareV3SpecReadModel name. */
+export type FormalRunAshareV3SpecReadModel = FormalRunAShareV3SpecReadModel;
+
 export type FormalRunErrorCode =
   | "contract_gate_failed"
   | "strategy_import_failed"
@@ -1608,7 +2076,9 @@ export type FormalRunErrorCode =
   | "checkpoint_integrity_mismatch"
   | "worker_interrupted_by_m5_upgrade"
   | "smoke_run_failed"
-  | "engine_result_contract_failed";
+  | "engine_result_contract_failed"
+  | "review_attestation_required"
+  | "review_attestation_mismatch";
 
 export interface FormalRunGates {
   contract: "passed" | "failed";
@@ -1647,6 +2117,17 @@ export type FormalRunM8ValidationReadModel = Omit<
   gate_policy_version: "m8-v1";
   engine_version: "oqs-quant-engine/0.2.0";
 };
+
+export type FormalRunAShareV3ValidationReadModel = Omit<
+  FormalRunM5ValidationReadModel,
+  "gate_policy_version" | "engine_version"
+> & {
+  gate_policy_version: "a-share-v3";
+  engine_version: "oqs-quant-engine/0.3.0";
+};
+
+/** @deprecated Prefer the acronym-preserving FormalRunAShareV3ValidationReadModel name. */
+export type FormalRunAshareV3ValidationReadModel = FormalRunAShareV3ValidationReadModel;
 
 export interface FormalRunActiveListEntry {
   run_id: string;
@@ -1824,6 +2305,26 @@ export interface FormalRunM8SucceededDetailReadModel
   engine_result: FormalEngineResultV2;
 }
 
+export interface FormalRunAShareV3SucceededDetailReadModel
+  extends Omit<
+    FormalRunSucceededDetailReadModel,
+    "run_spec" | "validation" | "manifest" | "engine_result" | "intent_tape"
+  > {
+  run_spec: FormalRunAShareV3SpecReadModel;
+  validation: FormalRunAShareV3ValidationReadModel & {
+    gates: FormalRunSucceededListEntry["gates"];
+    outcome: "passed";
+    manifest_artifact_id: string;
+  };
+  manifest: FormalRunManifestAShareV3V1;
+  engine_result: FormalEngineResultV3;
+  intent_tape: FormalEngineIntentInputV3[];
+}
+
+/** @deprecated Prefer the acronym-preserving FormalRunAShareV3SucceededDetailReadModel name. */
+export type FormalRunAshareV3SucceededDetailReadModel =
+  FormalRunAShareV3SucceededDetailReadModel;
+
 export interface FormalRunFailedDetailReadModel {
   run: FormalRunFailedRecord;
   run_spec: FormalRunSpecReadModel;
@@ -1855,10 +2356,30 @@ export interface FormalRunM8FailedDetailReadModel
   };
 }
 
+export interface FormalRunAShareV3FailedDetailReadModel
+  extends Omit<FormalRunFailedDetailReadModel, "run_spec" | "validation"> {
+  run_spec: FormalRunAShareV3SpecReadModel;
+  validation: FormalRunAShareV3ValidationReadModel & {
+    gates: FormalRunGates;
+    outcome: "failed";
+    manifest_artifact_id: null;
+  };
+}
+
+/** @deprecated Prefer the acronym-preserving FormalRunAShareV3FailedDetailReadModel name. */
+export type FormalRunAshareV3FailedDetailReadModel = FormalRunAShareV3FailedDetailReadModel;
+
 export interface FormalRunActiveDetailReadModel {
   run: FormalRunActiveRecord;
-  run_spec: FormalRunM5SpecReadModel | FormalRunM8SpecReadModel;
-  validation: (FormalRunM5ValidationReadModel | FormalRunM8ValidationReadModel) & {
+  run_spec:
+    | FormalRunM5SpecReadModel
+    | FormalRunM8SpecReadModel
+    | FormalRunAShareV3SpecReadModel;
+  validation: (
+    | FormalRunM5ValidationReadModel
+    | FormalRunM8ValidationReadModel
+    | FormalRunAShareV3ValidationReadModel
+  ) & {
     gates: FormalRunActiveListEntry["gates"];
     outcome: "not_run";
     manifest_artifact_id: null;
@@ -1872,8 +2393,15 @@ export interface FormalRunActiveDetailReadModel {
 
 export interface FormalRunCancelledDetailReadModel {
   run: FormalRunCancelledRecord;
-  run_spec: FormalRunM5SpecReadModel | FormalRunM8SpecReadModel;
-  validation: (FormalRunM5ValidationReadModel | FormalRunM8ValidationReadModel) & {
+  run_spec:
+    | FormalRunM5SpecReadModel
+    | FormalRunM8SpecReadModel
+    | FormalRunAShareV3SpecReadModel;
+  validation: (
+    | FormalRunM5ValidationReadModel
+    | FormalRunM8ValidationReadModel
+    | FormalRunAShareV3ValidationReadModel
+  ) & {
     gates: FormalRunActiveListEntry["gates"];
     outcome: "not_run";
     manifest_artifact_id: null;
@@ -1893,7 +2421,9 @@ export type FormalRunDetailReadModel =
   | FormalRunM5SucceededDetailReadModel
   | FormalRunM5FailedDetailReadModel
   | FormalRunM8SucceededDetailReadModel
-  | FormalRunM8FailedDetailReadModel;
+  | FormalRunM8FailedDetailReadModel
+  | FormalRunAShareV3SucceededDetailReadModel
+  | FormalRunAShareV3FailedDetailReadModel;
 
 export type ReportArtifactMediaType =
   | "application/vnd.open-quant-studio.run-report+json"
@@ -2015,6 +2545,9 @@ export type ContractValidation<T> =
 
 const validator = new Ajv2020({ allErrors: true, strict: true });
 addFormats.default(validator, ["date-time"]);
+// Register shared v3 input definitions before schemas that reference the
+// corporate-action sidecar sub-schema.
+validator.addSchema(formalEngineInputV3SchemaDocument);
 const validateCommand = validator.compile<CommandEnvelope>(commandEnvelopeSchema);
 const validateEvent = validator.compile<EventEnvelope>(eventEnvelopeSchema);
 const validateArtifact = validator.compile<ArtifactRef>(artifactRefSchema);
@@ -2084,8 +2617,14 @@ const validateArtifactMetadataSchema = validator.compile<ArtifactMetadataReadMod
 const validateFormalEngineResultSchema = validator.compile<FormalEngineResultV1>(
   formalEngineResultSchemaDocument,
 );
+const validateFormalEngineInputV3Schema = validator.compile<FormalEngineInputV3>(
+  formalEngineInputV3SchemaDocument,
+);
 const validateFormalEngineResultV2Schema = validator.compile<FormalEngineResultV2>(
   formalEngineResultV2SchemaDocument,
+);
+const validateFormalEngineResultV3Schema = validator.compile<FormalEngineResultV3>(
+  formalEngineResultV3SchemaDocument,
 );
 const validateFormalRunManifestSchema = validator.compile<FormalRunManifestV1>(
   formalRunManifestSchemaDocument,
@@ -2713,6 +3252,26 @@ export function validateFormalRunCommand(
     if (value.payload.candidate_revision_id !== value.base_revision_id) {
       errors.push("/payload/candidate_revision_id must match /base_revision_id");
     }
+    if (value.payload.gate_policy_version === "a-share-v3") {
+      const attestation = value.payload.review_attestation;
+      if (attestation.status !== "approved") {
+        errors.push("/payload/review_attestation/status must be approved");
+      }
+      const bindings = [
+        ["candidate_revision_id", value.payload.candidate_revision_id],
+        ["strategy_tree_oid", value.payload.strategy_tree_oid],
+        ["data_snapshot_sha256", value.payload.data_snapshot_sha256],
+        ["parameters_sha256", value.payload.parameters_sha256],
+        ["cost_model_sha256", value.payload.cost_model_sha256],
+      ] as const;
+      for (const [key, expected] of bindings) {
+        if (attestation[key] !== expected) {
+          errors.push(
+            `/payload/review_attestation/${key} must match /payload/${key}`,
+          );
+        }
+      }
+    }
   }
   if (
     value.command_type === "formal.run_retry" &&
@@ -2956,7 +3515,8 @@ export function validateDataSnapshotEvent(
   value: unknown,
 ): ContractValidation<DataSnapshotCreatedEvent> {
   if (validateDataSnapshotEventSchema(value)) {
-    return { valid: true, value };
+    const errors = dataSnapshotSymbolShapeErrors(value.payload, "/payload");
+    return errors.length > 0 ? { valid: false, errors } : { valid: true, value };
   }
   return {
     valid: false,
@@ -3008,7 +3568,9 @@ export function validateDataSnapshotReadModel(
       errors: ["/snapshot_id and /project_id must be present for a data snapshot"],
     };
   }
-  return { valid: true, value: value as DataSnapshotReadModel };
+  const snapshot = value as DataSnapshotReadModel;
+  const errors = dataSnapshotSymbolShapeErrors(snapshot, "");
+  return errors.length > 0 ? { valid: false, errors } : { valid: true, value: snapshot };
 }
 
 export function validateDataSnapshotListReadModel(
@@ -3026,7 +3588,37 @@ export function validateDataSnapshotListReadModel(
       errors: ["/snapshots must be present for a data snapshot list"],
     };
   }
-  return { valid: true, value: value as DataSnapshotListReadModel };
+  const list = value as DataSnapshotListReadModel;
+  const errors = list.snapshots.flatMap((snapshot, index) =>
+    dataSnapshotSymbolShapeErrors(snapshot, `/snapshots/${index}`),
+  );
+  return errors.length > 0 ? { valid: false, errors } : { valid: true, value: list };
+}
+
+function dataSnapshotSymbolShapeErrors(
+  value: unknown,
+  pathPrefix: string,
+): string[] {
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+  const candidate = value as {
+    schema_version?: unknown;
+    symbol?: unknown;
+    symbols?: unknown;
+  };
+  if (candidate.schema_version !== 3 || !Array.isArray(candidate.symbols)) {
+    return [];
+  }
+  const symbolPath = `${pathPrefix}/symbol`;
+  const symbolsPath = `${pathPrefix}/symbols`;
+  if (candidate.symbols.length === 1 && candidate.symbol !== candidate.symbols[0]) {
+    return [`${symbolPath} must match ${symbolsPath}/0 for a-share-v3 single-symbol snapshots`];
+  }
+  if (candidate.symbols.length >= 2 && candidate.symbol !== null) {
+    return [`${symbolPath} must be null for a-share-v3 basket snapshots`];
+  }
+  return [];
 }
 
 function manifestSemanticErrors(value: FormalRunManifestV1): string[] {
@@ -3099,6 +3691,33 @@ function manifestSemanticErrors(value: FormalRunManifestV1): string[] {
       );
     }
   }
+  if (value.manifest_version === "a-share-v3") {
+    const attestation = value.review_attestation;
+    if (attestation.status !== "approved") {
+      errors.push("/review_attestation/status must be approved");
+    }
+    if (value.review_attestation_id !== attestation.attestation_id) {
+      errors.push("/review_attestation_id must match /review_attestation/attestation_id");
+    }
+    const bindings = [
+      ["candidate_revision_id", value.run_spec.candidate_revision_id],
+      ["strategy_tree_oid", value.run_spec.strategy_tree_oid],
+      ["data_snapshot_sha256", value.run_spec.data_snapshot_sha256],
+      ["parameters_sha256", value.run_spec.parameters_sha256],
+      ["cost_model_sha256", value.run_spec.cost_model_sha256],
+    ] as const;
+    for (const [key, expected] of bindings) {
+      if (attestation[key] !== expected || value.run_spec.review_attestation[key] !== expected) {
+        errors.push(`/review_attestation/${key} must match /run_spec/${key}`);
+      }
+    }
+    if (value.run_spec.review_attestation_id !== value.review_attestation_id) {
+      errors.push("/run_spec/review_attestation_id must match /review_attestation_id");
+    }
+    if (value.run_spec.review_attestation_sha256 !== value.review_attestation_sha256) {
+      errors.push("/run_spec/review_attestation_sha256 must match /review_attestation_sha256");
+    }
+  }
   return errors;
 }
 
@@ -3157,6 +3776,18 @@ export function validateFormalEngineResultV1(
   return { valid: true, value };
 }
 
+export function validateFormalEngineInputV3(
+  value: unknown,
+): ContractValidation<FormalEngineInputV3> {
+  if (!validateFormalEngineInputV3Schema(value)) {
+    return {
+      valid: false,
+      errors: validationErrors(validateFormalEngineInputV3Schema.errors),
+    };
+  }
+  return { valid: true, value };
+}
+
 export function validateFormalEngineResultV2(
   value: unknown,
 ): ContractValidation<FormalEngineResultV2> {
@@ -3164,6 +3795,18 @@ export function validateFormalEngineResultV2(
     return {
       valid: false,
       errors: validationErrors(validateFormalEngineResultV2Schema.errors),
+    };
+  }
+  return { valid: true, value };
+}
+
+export function validateFormalEngineResultV3(
+  value: unknown,
+): ContractValidation<FormalEngineResultV3> {
+  if (!validateFormalEngineResultV3Schema(value)) {
+    return {
+      valid: false,
+      errors: validationErrors(validateFormalEngineResultV3Schema.errors),
     };
   }
   return { valid: true, value };
@@ -3331,6 +3974,36 @@ function formalRunDetailSemanticErrors(
   for (const [key, path] of manifestRunSpecBindings) {
     if (manifest.run_spec[key] !== runSpec[key]) {
       errors.push(`${path} must match /run_spec/${key}`);
+    }
+  }
+  if (runSpec.gate_policy_version === "a-share-v3") {
+    const v3Spec = runSpec as FormalRunAShareV3SpecReadModel;
+    const attestation = v3Spec.review_attestation;
+    if (attestation.status !== "approved") {
+      errors.push("/run_spec/review_attestation/status must be approved");
+    }
+    const bindings = [
+      ["candidate_revision_id", runSpec.candidate_revision_id],
+      ["strategy_tree_oid", runSpec.strategy_tree_oid],
+      ["data_snapshot_sha256", runSpec.data_snapshot_sha256],
+      ["parameters_sha256", runSpec.parameters_sha256],
+      ["cost_model_sha256", runSpec.cost_model_sha256],
+    ] as const;
+    for (const [key, expected] of bindings) {
+      if (attestation[key] !== expected) {
+        errors.push(`/run_spec/review_attestation/${key} must match /run_spec/${key}`);
+      }
+    }
+    if (manifest.manifest_version === "a-share-v3") {
+      if (manifest.review_attestation_id !== v3Spec.review_attestation_id) {
+        errors.push("/manifest/review_attestation_id must match /run_spec/review_attestation_id");
+      }
+      if (manifest.review_attestation_sha256 !== v3Spec.review_attestation_sha256) {
+        errors.push("/manifest/review_attestation_sha256 must match /run_spec/review_attestation_sha256");
+      }
+      if (JSON.stringify(manifest.review_attestation) !== JSON.stringify(attestation)) {
+        errors.push("/manifest/review_attestation must match /run_spec/review_attestation");
+      }
     }
   }
   if (manifest.revision.candidate_revision_id !== run.candidate_revision_id) {

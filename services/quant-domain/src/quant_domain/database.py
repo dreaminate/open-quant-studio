@@ -49,6 +49,15 @@ class Database:
             )
             for migration_path in sorted(self.migrations_dir.glob("*.sql")):
                 migration_id = migration_path.stem
+                # 011 and 012 rebuild immutable tables whose CHECK constraints
+                # are part of the v3 contract.  SQLite cannot toggle
+                # `foreign_keys` while a transaction is active, and renaming
+                # a referenced table otherwise leaves child FKs pointing at
+                # the temporary name.  The migration script performs a
+                # validated sqlite_master reference repair after copying the
+                # rows; run that bounded rebuild with FK enforcement paused,
+                # then verify and restore the invariant before returning.
+                rebuild_with_foreign_keys_off = migration_id.startswith(("011_", "012_"))
                 connection.execute("BEGIN IMMEDIATE")
                 already_applied = connection.execute(
                     "SELECT 1 FROM schema_migrations WHERE migration_id = ?",
@@ -57,6 +66,10 @@ class Database:
                 if already_applied is not None:
                     connection.execute("COMMIT")
                     continue
+                if rebuild_with_foreign_keys_off:
+                    connection.execute("ROLLBACK")
+                    connection.execute("PRAGMA foreign_keys=OFF")
+                    connection.execute("BEGIN IMMEDIATE")
                 try:
                     for statement in migration_statements(migration_path.read_text()):
                         connection.execute(statement)
@@ -69,8 +82,20 @@ class Database:
                     )
                 except sqlite3.Error:
                     connection.execute("ROLLBACK")
+                    if rebuild_with_foreign_keys_off:
+                        connection.execute("PRAGMA foreign_keys=ON")
                     raise
                 connection.execute("COMMIT")
+                if rebuild_with_foreign_keys_off:
+                    connection.execute("PRAGMA foreign_keys=ON")
+                    if connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+                        raise DatabaseConfigurationError(
+                            "SQLite foreign keys could not be restored after v3 migration"
+                        )
+                    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                        raise DatabaseConfigurationError(
+                            "v3 migration left an invalid SQLite foreign-key reference"
+                        )
 
 
 def migration_statements(script: str) -> Iterator[str]:

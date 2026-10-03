@@ -294,3 +294,77 @@ def test_zsh_entry_apply_requires_digest(tmp_path: Path, asset: Path) -> None:
     )
     assert proc.returncode == 2
     assert "confirm-digest" in proc.stderr
+
+
+def test_fresh_install_creates_charter_and_pointers(tmp_path: Path, asset: Path) -> None:
+    project = tmp_path / "fresh"
+    project.mkdir()
+
+    # Without the flag: fail closed with a navigable error.
+    stdout, _, code = run_helper(project, "preview", asset)
+    assert code == 9
+    assert "charter_missing_requires_fresh_install" in parse(stdout)["message"]
+
+    # Fresh-install preview plans creation targets.
+    stdout, _, code = run_helper(project, "preview", asset, "--fresh-install")
+    assert code == 0
+    result = parse(stdout)
+    assert result["code"] == "preview_fresh_install"
+    targets = {entry["name"]: entry for entry in result["pointerTargets"]}
+    assert targets["AGENTS.md"]["status"] == "create_pointer"
+    assert targets["CLAUDE.md"]["status"] == "create_pointer"
+
+    # Apply creates the charter and both pointer files.
+    stdout, stderr, code = run_helper(
+        project, "apply", asset, "--fresh-install", "--confirm-digest", result["confirmDigest"]
+    )
+    assert code == 0, stderr
+    applied = parse(stdout)
+    assert applied["code"] == "adopted"
+    assert (project / ".agent-team" / "TEAM.md").read_bytes() == ASSET_CONTENT
+    assert (project / "AGENTS.md").read_bytes() == CANONICAL_POINTER
+    assert (project / "CLAUDE.md").read_bytes() == CANONICAL_POINTER
+
+    stdout, _, code = run_helper(project, "check", asset)
+    assert code == 0
+    assert parse(stdout)["code"] == "charter_current"
+
+
+def test_write_new_file_refuses_symlinked_parent(tmp_path: Path, asset: Path) -> None:
+    """A symlinked parent directory must never receive team writes."""
+    import subprocess as sp
+
+    sys.path.insert(0, str(HELPER.parent))
+    import team_common as tc  # noqa: PLC0415  # type: ignore[import-not-found]
+
+    project = tmp_path / "proj"
+    (project / ".agent-team").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    # Swap the real .agent-team for a symlink to an outside directory.
+    (project / ".agent-team").rmdir()
+    (project / ".agent-team").symlink_to(outside)
+
+    try:
+        tc.write_new_file(project / ".agent-team" / "TEAM.md", b"x", 0o644)
+        raised = False
+    except tc.TeamToolError as exc:
+        raised = True
+        assert "not a real directory" in str(exc)
+    assert raised
+    assert not (outside / "TEAM.md").exists()
+
+    # Same guard on the replace path: symlinked parent refuses too.
+    legit = tmp_path / "legit"
+    legit.mkdir()
+    (legit / "f.txt").write_text("original\n")
+    (legit / "sub").mkdir()
+    (legit / "sub").rmdir()
+    (legit / "sub").symlink_to(outside)
+    try:
+        tc.atomic_replace_file(legit / "sub" / "f.txt", b"replaced\n")
+        raised2 = False
+    except tc.TeamToolError as exc:
+        raised2 = True
+        assert "not a real directory" in str(exc)
+    assert raised2

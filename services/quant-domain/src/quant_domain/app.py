@@ -483,7 +483,7 @@ async def get_message(request: Request) -> Response:
     except MessageBodyTooLarge as error:
         return JSONResponse({"error": error.code}, status_code=413)
     except (ArtifactBlobMissing, ArtifactIntegrityMismatch, DomainConflict) as error:
-        return JSONResponse({"error": getattr(error, "code", "message_unavailable")}, status_code=409)
+        return JSONResponse({"error": error.code}, status_code=409)
     if message is None:
         return JSONResponse({"error": "message_not_found"}, status_code=404)
     return JSONResponse(message)

@@ -3,11 +3,10 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECT_NAME = "oqs-m10-compose-smoke";
-const WEB_PORT = Number(process.env.OQS_M10_SMOKE_PORT ?? "4183");
+const WEB_PORT = Number(process.env.OQS_M10_SMOKE_PORT);
 const DATA_VOLUME = "oqs-m10-compose-smoke-data";
 const IMPORTS_ROOT = join(REPO_ROOT, "var", "m10-compose-smoke", "imports");
 const EXPORTS_ROOT = join(REPO_ROOT, "var", "m10-compose-smoke", "exports");
@@ -60,17 +59,8 @@ function compose(arguments_) {
   );
 }
 
-async function waitForJson(path) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try {
-      const response = await fetch(`${BASE_URL}${path}`);
-      if (response.ok) return response.json();
-    } catch {
-      // The container is still starting.
-    }
-    await delay(250);
-  }
-  throw new Error(`runtime did not become ready at ${path}`);
+async function fetchJson(path) {
+  return (await fetch(`${BASE_URL}${path}`)).json();
 }
 
 async function main() {
@@ -85,17 +75,17 @@ async function main() {
     await compose(["up", "--build", "--detach"]);
     started = true;
 
-    const contextBefore = await waitForJson("/api/v1/context");
+    const contextBefore = await fetchJson("/api/v1/context");
     await compose([
       "exec",
       "--no-TTY",
       "studio",
       "node",
       "-e",
-      "fetch('http://127.0.0.1:8765/health').then(async (response) => { const health = await response.json(); if (!response.ok || health.status !== 'ok') process.exitCode = 1; }).catch(() => { process.exitCode = 1; })",
+      "fetch('http://127.0.0.1:8765/health').then(async (response) => { const health = await response.json(); if (!response.ok || health.status !== 'ok') process.exitCode = 1; })",
     ]);
-    const projectsBefore = await waitForJson("/api/v1/projects");
-    const imports = await waitForJson("/api/v1/data-imports/local-files");
+    const projectsBefore = await fetchJson("/api/v1/projects");
+    const imports = await fetchJson("/api/v1/data-imports/local-files");
     assert.equal(contextBefore.projectId, "22222222-2222-4222-8222-222222222222");
     assert.equal(projectsBefore.projects.length, 1);
     assert.equal(projectsBefore.projects[0].project_id, contextBefore.projectId);
@@ -112,9 +102,9 @@ async function main() {
     await writeFile(join(EXPORTS_ROOT, `${contextBefore.projectId}.oqs.zip`), archive);
 
     await compose(["restart", "studio"]);
-    const contextAfter = await waitForJson("/api/v1/context");
-    const projectsAfter = await waitForJson("/api/v1/projects");
-    const importsAfter = await waitForJson("/api/v1/data-imports/local-files");
+    const contextAfter = await fetchJson("/api/v1/context");
+    const projectsAfter = await fetchJson("/api/v1/projects");
+    const importsAfter = await fetchJson("/api/v1/data-imports/local-files");
     assert.deepEqual(contextAfter, contextBefore);
     assert.deepEqual(projectsAfter, projectsBefore);
     assert.deepEqual(importsAfter, imports);

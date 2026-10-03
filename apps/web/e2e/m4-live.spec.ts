@@ -6,8 +6,10 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { expect, test } from "@playwright/test";
+import { validateFormalRunDetailReadModel } from "@open-quant-studio/contracts";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../..");
+const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 
 async function freeLoopbackPort(): Promise<number> {
   const listener = createNetServer();
@@ -55,6 +57,8 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
       OQS_DATA_ROOT: dataRoot,
       OQS_PORT: String(port),
       OQS_DOMAIN_PORT: String(domainPort),
+      OQS_PI_MODE: "fixture",
+      OQS_PI_TOOL_TRACER: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -81,6 +85,35 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     await page.getByRole("textbox", { name: "Chat prompt" }).fill("Confirm the local research context");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.locator(".oqs-chat-message.pi p").last()).toHaveText("Pi local demo is connected to the current research Activity.");
+    await page.getByRole("textbox", { name: "Chat prompt" }).fill("OQS_TOOL_TRACER: create a new strategy variant and child revision");
+    await page.getByRole("button", { name: "Send" }).click();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const variants = await (await fetch(`${baseUrl}/api/v1/variants`)).json();
+      const traced = variants.variants?.find((variant: { variant_id?: string }) =>
+        variant.variant_id === "40404040-4040-4040-8040-404040404040");
+      if (traced) break;
+      await delay(100);
+    }
+    const tracedVariants = await (await fetch(`${baseUrl}/api/v1/variants`)).json();
+    expect(tracedVariants.variants.some((variant: { variant_id?: string }) =>
+      variant.variant_id === "40404040-4040-4040-8040-404040404040")).toBe(true);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const revisionResponse = await fetch(`${baseUrl}/api/v1/revisions/30303030-3030-4030-8030-303030303030`);
+      if (revisionResponse.ok) {
+        const tracedRevision = await revisionResponse.json();
+        const strategyFile = tracedRevision.files.find((file: { path?: string }) =>
+          file.path === "strategy.py");
+        expect(strategyFile?.artifact_id).toBeTruthy();
+        const sourceResponse = await fetch(
+          `${baseUrl}/api/v1/revisions/30303030-3030-4030-8030-303030303030/files/${strategyFile.artifact_id}/content`,
+        );
+        expect(sourceResponse.ok).toBe(true);
+        expect(await sourceResponse.text()).toContain("# pi-tool-tracer");
+        break;
+      }
+      await delay(100);
+    }
+    expect((await fetch(`${baseUrl}/api/v1/revisions/30303030-3030-4030-8030-303030303030`)).ok).toBe(true);
 
     await page.getByRole("button", { name: /^Data/ }).click();
     await expect(page.locator("main h1", { hasText: "Data" })).toBeVisible();
@@ -90,6 +123,7 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     await page.getByRole("button", { name: "Preview local file" }).click();
     await expect(page.getByRole("heading", { name: "Preview rows" })).toBeVisible();
     await expect(page.getByText("SYNTH.XSHG", { exact: true }).first()).toBeVisible();
+    await page.getByLabel("Snapshot execution profile").selectOption("a-share-v3");
     await page.getByRole("button", { name: "Create immutable snapshot" }).click();
     const snapshot = page.locator('[data-testid^="snapshot-"]', { hasText: "SYNTH.XSHG" });
     await expect(snapshot).toBeVisible();
@@ -111,11 +145,39 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     await page.getByRole("button", { name: "Create merge candidate" }).click();
     await expect(page.getByText(/Merge candidate/)).toBeVisible();
 
-    await page.getByRole("button", { name: "Run formal" }).click();
+    await page.getByRole("button", { name: "Review formal Run" }).click();
     await expect(page.locator("main h1", { hasText: "Backtest" })).toBeVisible();
+    await page.getByLabel("I reviewed strategy, parameters and costs").check();
+    await page.getByRole("button", { name: "Request formal Run" }).click();
+    let queuedRuns: { runs: Array<{ run_id: string }> } = { runs: [] };
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      queuedRuns = await (await fetch(`${baseUrl}/api/v1/runs`)).json();
+      if (queuedRuns.runs.length > 0) break;
+      await delay(100);
+    }
+    expect(queuedRuns.runs).toHaveLength(1);
+    const queuedRunId = queuedRuns.runs[0].run_id;
+    let rawRunDetail: { run?: { status?: string; error_code?: string | null } } | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const response = await fetch(
+        `http://127.0.0.1:${domainPort}/v1/projects/${PROJECT_ID}/runs/${queuedRunId}`,
+      );
+      if (response.ok) {
+        rawRunDetail = await response.json();
+        if (["succeeded", "failed", "cancelled"].includes(rawRunDetail.run?.status ?? "")) break;
+      }
+      await delay(100);
+    }
+    expect(rawRunDetail?.run?.status, JSON.stringify(rawRunDetail)).toBe("succeeded");
+    const detailContract = validateFormalRunDetailReadModel(rawRunDetail);
+    expect(detailContract.valid, JSON.stringify(detailContract)).toBe(true);
     await page.locator(".oqs-nav-item", { hasText: "Run Detail" }).click();
     await expect(page.locator("main h1", { hasText: "Run Detail" })).toBeVisible();
-    await expect(page.locator(".oqs-chip", { hasText: "oqs-quant-engine/0.1.0" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".oqs-chip", { hasText: "oqs-quant-engine/0.3.0" })).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByTestId("engine-record-fills").getByRole("heading", { name: "fills", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("research_short", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("bound", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Promote" }).click();
@@ -126,8 +188,17 @@ test("real local runtime completes the browser edit to Formal Run and Promote ve
     expect(runList.runs[0].status).toBe("succeeded");
     const runDetail = await (await fetch(`${baseUrl}/api/v1/runs/${runList.runs[0].run_id}`)).json();
     const head = await (await fetch(`${baseUrl}/api/v1/revision-head`)).json();
+    expect(runDetail.run_spec.execution_profile).toBe("a-share-v3");
+    expect(runDetail.manifest.manifest_version).toBe("a-share-v3");
+    expect(runDetail.engine_result.engine_version).toBe("oqs-quant-engine/0.3.0");
     expect(runDetail.engine_result.orders).toHaveLength(4);
-    expect(runDetail.engine_result.trades).toHaveLength(4);
+    expect(runDetail.engine_result.fills).toHaveLength(4);
+    expect(new Set(runDetail.engine_result.positions.map((position: { book: string }) => position.book))).toEqual(
+      new Set(["cash_long", "research_short"]),
+    );
+    expect(runDetail.engine_result.cash_ledger).toHaveLength(4);
+    expect(runDetail.engine_result.equity_curve).toHaveLength(8);
+    expect(runDetail.artifacts.engine_result.sha256).toBe(runDetail.run.calculation_hash);
     expect(head.head_revision_id).toBe(runDetail.run.candidate_revision_id);
     expect((await fetch(`${baseUrl}/api/v1/jobs`)).status).toBe(404);
   } finally {

@@ -229,7 +229,7 @@ function descendantLeafId(entries: SessionEntry[], targetId: string): string {
   const leaf = entries.findLast(
     (entry) => descendants.has(entry.id) && !parents.has(entry.id),
   );
-  return leaf?.id ?? targetId;
+  return leaf!.id;
 }
 
 function boundedWindow(value: number, name: string): number {

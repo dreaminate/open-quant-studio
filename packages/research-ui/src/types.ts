@@ -99,6 +99,18 @@ export interface RunSummary {
   [key: string]: unknown;
 }
 
+export interface ReviewAttestation {
+  attestation_id?: string;
+  status: "approved";
+  candidate_revision_id: string;
+  strategy_tree_oid: string;
+  data_snapshot_sha256: string;
+  parameters_sha256: string;
+  cost_model_sha256: string;
+  reviewer_id?: string;
+  reviewed_at?: string;
+}
+
 export interface RunDetail {
   run?: RunSummary;
   run_spec?: Record<string, unknown>;
@@ -218,6 +230,7 @@ export interface RunReportReadModel {
 export type DataSnapshotSourceFormat = "csv" | "parquet";
 export type DataSnapshotMarket = "a_share_daily" | "crypto_linear_perp";
 export type DataSnapshotPriceBasis = "raw" | "qfq" | "hfq";
+export type DataSnapshotExecutionProfile = "legacy" | "a-share-v3";
 
 export interface DataSnapshotMapping {
   timestamp: string;
@@ -227,6 +240,19 @@ export interface DataSnapshotMapping {
   low: string;
   close: string;
   volume: string;
+  trading_status?: string;
+  price_limit_state?: string;
+}
+
+export interface DataSnapshotCorporateAction {
+  action_id: string;
+  symbol: string;
+  effective_at: { session_seq: number; phase: "open"; stable_seq: number };
+  action_type: "cash_dividend" | "split" | "reverse_split" | "delist_settlement";
+  cash_per_share_atoms?: string | null;
+  numerator?: number | null;
+  denominator?: number | null;
+  settlement_price_atoms?: string | null;
 }
 
 export interface DataSnapshotSourceArtifact {
@@ -276,7 +302,8 @@ export interface DataSnapshot {
   timezone: string;
   price_basis: DataSnapshotPriceBasis;
   cutoff: string;
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3;
+  execution_profile?: DataSnapshotExecutionProfile;
   sample_start: string;
   sample_end: string;
   row_count: number;

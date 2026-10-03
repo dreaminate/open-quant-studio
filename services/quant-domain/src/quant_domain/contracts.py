@@ -63,6 +63,16 @@ DATA_SNAPSHOT_COMMAND_VALIDATOR = Draft202012Validator(
     registry=REGISTRY,
     format_checker=FormatChecker(),
 )
+FORMAL_ENGINE_INPUT_V3_VALIDATOR = Draft202012Validator(
+    SCHEMAS["formal-engine-input-v3"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
+FORMAL_ENGINE_RESULT_V3_VALIDATOR = Draft202012Validator(
+    SCHEMAS["formal-engine-result-v3"],
+    registry=REGISTRY,
+    format_checker=FormatChecker(),
+)
 EVENT_ENVELOPE_VALIDATOR = Draft202012Validator(
     SCHEMAS["event-envelope"],
     registry=REGISTRY,
@@ -332,6 +342,25 @@ def formal_run_command_errors(command: Any) -> list[str]:
         messages.append("/payload/market_input/storage_uri must match artifact sha256")
     if payload["candidate_revision_id"] != command["base_revision_id"]:
         messages.append("/payload/candidate_revision_id must match /base_revision_id")
+    if payload.get("gate_policy_version") == "a-share-v3":
+        attestation = payload.get("review_attestation")
+        if not isinstance(attestation, dict):
+            messages.append("/payload/review_attestation is required for a-share-v3")
+        else:
+            bindings = {
+                "candidate_revision_id": payload["candidate_revision_id"],
+                "strategy_tree_oid": payload["strategy_tree_oid"],
+                "data_snapshot_sha256": payload["data_snapshot_sha256"],
+                "parameters_sha256": payload["parameters_sha256"],
+                "cost_model_sha256": payload["cost_model_sha256"],
+            }
+            if attestation.get("status") != "approved":
+                messages.append("/payload/review_attestation/status must be approved")
+            for field, expected in bindings.items():
+                if attestation.get(field) != expected:
+                    messages.append(
+                        f"/payload/review_attestation/{field} must match /payload/{field}"
+                    )
     return messages
 
 

@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-engine-input-v3.schema.json",
+  "title": "Open Quant Studio A-share research engine input v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "market_rules_version",
+    "account",
+    "sessions",
+    "corporate_actions",
+    "intents"
+  ],
+  "properties": {
+    "schema_version": { "const": 3 },
+    "market_rules_version": {
+      "type": "string",
+      "pattern": "^cn-a-share-research/.+"
+    },
+    "account": { "$ref": "#/$defs/account" },
+    "sessions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 250000,
+      "items": { "$ref": "#/$defs/session" }
+    },
+    "corporate_actions": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/corporateAction" }
+    },
+    "intents": { "$ref": "#/$defs/intents" }
+  },
+  "$defs": {
+    "atom": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "nonNegativeAtom": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "positiveAtom": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "symbol": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "book": {
+      "enum": ["cash_long", "research_short"]
+    },
+    "side": {
+      "enum": ["buy", "sell"]
+    },
+    "positionEffect": {
+      "enum": ["open", "close"]
+    },
+    "eventKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_seq", "phase", "stable_seq"],
+      "properties": {
+        "session_seq": { "$ref": "#/$defs/seq" },
+        "phase": { "enum": ["open", "intraday", "close"] },
+        "stable_seq": { "$ref": "#/$defs/seq" }
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "symbols",
+        "price_scale",
+        "cash_scale",
+        "rate_scale",
+        "starting_cash_atoms",
+        "lot_size",
+        "max_participation_rate_atoms",
+        "commission_rate_atoms",
+        "minimum_commission_atoms",
+        "stamp_duty_rate_atoms",
+        "market_slippage_atoms",
+        "research_short_margin_rate_atoms"
+      ],
+      "properties": {
+        "model": { "const": "a_share_portfolio_research" },
+        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/symbol" }
+        },
+        "price_scale": { "$ref": "#/$defs/positiveInteger" },
+        "cash_scale": { "$ref": "#/$defs/positiveInteger" },
+        "rate_scale": { "$ref": "#/$defs/positiveInteger" },
+        "starting_cash_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "lot_size": { "$ref": "#/$defs/positiveInteger" },
+        "max_participation_rate_atoms": { "$ref": "#/$defs/nonNegativeAtom" },
+        "commission_rate_atoms": { "$ref": "#/$defs/nonNegativeAtom" },
+        "minimum_commission_atoms": { "$ref": "#/$defs/nonNegativeAtom" },
+        "stamp_duty_rate_atoms": { "$ref": "#/$defs/nonNegativeAtom" },
+        "market_slippage_atoms": { "$ref": "#/$defs/nonNegativeAtom" },
+        "research_short_margin_rate_atoms": { "$ref": "#/$defs/nonNegativeAtom" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_seq", "timestamp", "bars"],
+      "properties": {
+        "session_seq": { "$ref": "#/$defs/seq" },
+        "timestamp": { "type": "string", "minLength": 1 },
+        "bars": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/bar" }
+        }
+      }
+    },
+    "bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "symbol",
+        "trading_status",
+        "price_limit_state",
+        "raw",
+        "research"
+      ],
+      "properties": {
+        "symbol": { "$ref": "#/$defs/symbol" },
+        "trading_status": {
+          "enum": [
+            "tradable",
+            "suspended",
+            "not_listed",
+            "delisted",
+            "non_trading",
+            "missing"
+          ]
+        },
+        "price_limit_state": { "enum": ["none", "limit_up", "limit_down"] },
+        "raw": { "$ref": "#/$defs/rawBar" },
+        "research": { "$ref": "#/$defs/researchBar" }
+      }
+    },
+    "rawBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "open_atoms",
+        "high_atoms",
+        "low_atoms",
+        "close_atoms",
+        "volume_quantity"
+      ],
+      "properties": {
+        "open_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "high_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "low_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "close_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "volume_quantity": { "$ref": "#/$defs/nonNegativeAtom" }
+      }
+    },
+    "researchBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["open_atoms", "high_atoms", "low_atoms", "close_atoms"],
+      "properties": {
+        "open_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "high_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "low_atoms": { "$ref": "#/$defs/positiveAtom" },
+        "close_atoms": { "$ref": "#/$defs/positiveAtom" }
+      }
+    },
+    "corporateAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_id", "symbol", "effective_at", "action_type"],
+      "properties": {
+        "action_id": { "$ref": "#/$defs/identifier" },
+        "symbol": { "$ref": "#/$defs/symbol" },
+        "effective_at": { "$ref": "#/$defs/eventKey" },
+        "action_type": {
+          "enum": ["cash_dividend", "split", "reverse_split", "delist_settlement"]
+        },
+        "cash_per_share_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/atom" }, { "type": "null" }]
+        },
+        "numerator": {
+          "oneOf": [{ "type": "integer" }, { "type": "null" }]
+        },
+        "denominator": {
+          "oneOf": [{ "type": "integer" }, { "type": "null" }]
+        },
+        "settlement_price_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/atom" }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "action_type": { "const": "cash_dividend" } },
+            "required": ["action_type"]
+          },
+          "then": {
+            "required": ["cash_per_share_atoms"],
+            "properties": {
+              "cash_per_share_atoms": { "$ref": "#/$defs/positiveAtom" },
+              "numerator": { "type": "null" },
+              "denominator": { "type": "null" },
+              "settlement_price_atoms": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "action_type": { "const": "split" } },
+            "required": ["action_type"]
+          },
+          "then": {
+            "required": ["numerator", "denominator"],
+            "properties": {
+              "cash_per_share_atoms": { "type": "null" },
+              "numerator": { "$ref": "#/$defs/positiveInteger" },
+              "denominator": { "$ref": "#/$defs/positiveInteger" },
+              "settlement_price_atoms": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "action_type": { "const": "reverse_split" } },
+            "required": ["action_type"]
+          },
+          "then": {
+            "required": ["numerator", "denominator"],
+            "properties": {
+              "cash_per_share_atoms": { "type": "null" },
+              "numerator": { "$ref": "#/$defs/positiveInteger" },
+              "denominator": { "$ref": "#/$defs/positiveInteger" },
+              "settlement_price_atoms": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "action_type": { "const": "delist_settlement" } },
+            "required": ["action_type"]
+          },
+          "then": {
+            "required": ["settlement_price_atoms"],
+            "properties": {
+              "cash_per_share_atoms": { "type": "null" },
+              "numerator": { "type": "null" },
+              "denominator": { "type": "null" },
+              "settlement_price_atoms": { "$ref": "#/$defs/positiveAtom" }
+            }
+          }
+        }
+      ]
+    },
+    "intent": {
+      "oneOf": [
+        { "$ref": "#/$defs/orderIntent" },
+        { "$ref": "#/$defs/cancelIntent" }
+      ]
+    },
+    "intents": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/intent" }
+    },
+    "orderIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_kind",
+        "intent_id",
+        "intent_seq",
+        "symbol",
+        "book",
+        "side",
+        "position_effect",
+        "quantity",
+        "order_type",
+        "known_at",
+        "effective_at",
+        "limit_price_atoms",
+        "time_in_force"
+      ],
+      "properties": {
+        "intent_kind": { "const": "order" },
+        "intent_id": { "$ref": "#/$defs/identifier" },
+        "intent_seq": { "$ref": "#/$defs/seq" },
+        "symbol": { "$ref": "#/$defs/symbol" },
+        "book": { "$ref": "#/$defs/book" },
+        "side": { "$ref": "#/$defs/side" },
+        "position_effect": { "$ref": "#/$defs/positionEffect" },
+        "quantity": { "$ref": "#/$defs/positiveAtom" },
+        "order_type": { "enum": ["market", "limit"] },
+        "known_at": { "$ref": "#/$defs/eventKey" },
+        "effective_at": { "$ref": "#/$defs/eventKey" },
+        "limit_price_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/positiveAtom" }, { "type": "null" }]
+        },
+        "time_in_force": { "enum": ["day", "gtc"] },
+        "condition_intent_id": {
+          "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+        },
+        "cancelled_intent_id": { "type": "null" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "book": { "const": "cash_long" },
+                "side": { "const": "buy" },
+                "position_effect": { "const": "open" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "cash_long" },
+                "side": { "const": "sell" },
+                "position_effect": { "const": "close" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "research_short" },
+                "side": { "const": "sell" },
+                "position_effect": { "const": "open" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "research_short" },
+                "side": { "const": "buy" },
+                "position_effect": { "const": "close" }
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "order_type": { "const": "market" } },
+            "required": ["order_type"]
+          },
+          "then": {
+            "properties": { "limit_price_atoms": { "type": "null" } }
+          },
+          "else": {
+            "properties": { "limit_price_atoms": { "$ref": "#/$defs/positiveAtom" } }
+          }
+        }
+      ]
+    },
+    "cancelIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_kind",
+        "intent_id",
+        "intent_seq",
+        "symbol",
+        "book",
+        "side",
+        "position_effect",
+        "quantity",
+        "order_type",
+        "known_at",
+        "effective_at",
+        "limit_price_atoms",
+        "time_in_force",
+        "cancelled_intent_id"
+      ],
+      "properties": {
+        "intent_kind": { "const": "cancel" },
+        "intent_id": { "$ref": "#/$defs/identifier" },
+        "intent_seq": { "$ref": "#/$defs/seq" },
+        "symbol": { "$ref": "#/$defs/symbol" },
+        "book": { "$ref": "#/$defs/book" },
+        "side": { "$ref": "#/$defs/side" },
+        "position_effect": { "$ref": "#/$defs/positionEffect" },
+        "quantity": { "$ref": "#/$defs/nonNegativeAtom" },
+        "order_type": { "enum": ["market", "limit"] },
+        "known_at": { "$ref": "#/$defs/eventKey" },
+        "effective_at": { "$ref": "#/$defs/eventKey" },
+        "limit_price_atoms": {
+          "oneOf": [{ "$ref": "#/$defs/positiveAtom" }, { "type": "null" }]
+        },
+        "time_in_force": { "enum": ["day", "gtc"] },
+        "condition_intent_id": {
+          "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+        },
+        "cancelled_intent_id": { "$ref": "#/$defs/identifier" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "book": { "const": "cash_long" },
+                "side": { "const": "buy" },
+                "position_effect": { "const": "open" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "cash_long" },
+                "side": { "const": "sell" },
+                "position_effect": { "const": "close" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "research_short" },
+                "side": { "const": "sell" },
+                "position_effect": { "const": "open" }
+              }
+            },
+            {
+              "properties": {
+                "book": { "const": "research_short" },
+                "side": { "const": "buy" },
+                "position_effect": { "const": "close" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

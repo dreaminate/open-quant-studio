@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 import test_m3_formal_runs as formal_run_scenario
-from quant_domain.domain import QuantDomain
+from quant_domain.domain import DomainConflict, QuantDomain
 from quant_domain.project_archive import export_project_archive, import_project_archive
 from test_m1_http import HttpTestCase
 from test_m2_session import (
@@ -267,6 +267,38 @@ class M7DataSnapshotDomainTest(unittest.TestCase):
                 "calculation_hash"
             ],
         )
+
+    def test_formal_run_rejects_nonexistent_data_snapshot(self) -> None:
+        self.domain.submit_command(
+            bind_command(
+                command_id="abababab-abab-4bab-8bab-abababababab",
+                workbench_id="canvas",
+            )
+        )
+
+        command = self.scenario._formal_run_command()
+        command["payload"]["data_snapshot_id"] = (
+            "edededed-eded-4ded-8ded-edededededed"
+        )
+        with self.assertRaises(DomainConflict):
+            self.domain.submit_command(command)
+
+        self.assertIsNone(
+            self.domain.run(PROJECT_ID, formal_run_scenario.RUN_ID)
+        )
+        self.assertIsNone(self.domain.run_next_job())
+
+    def test_formal_run_rejects_snapshot_metadata_drift(self) -> None:
+        command = self.scenario._formal_run_command()
+        command["payload"]["sample_end"] = "2026-01-31T07:00:00Z"
+
+        with self.assertRaises(DomainConflict):
+            self.domain.submit_command(command)
+
+        self.assertIsNone(
+            self.domain.run(PROJECT_ID, formal_run_scenario.RUN_ID)
+        )
+        self.assertIsNone(self.domain.run_next_job())
 
     def test_multi_symbol_snapshot_exposes_portfolio_sessions_and_metadata(self) -> None:
         _, accepted, snapshot = self.create_snapshot(

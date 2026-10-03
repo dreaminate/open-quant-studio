@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-quant-studio.local/schemas/v1/formal-engine-result-v3.schema.json",
+  "title": "Open Quant Studio A-share research engine result v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "engine_version", "account_model", "orders", "fills",
+    "positions", "cash_ledger", "corporate_action_ledger", "equity_curve", "drawdown_curve", "metrics",
+    "costs", "assumptions"
+  ],
+  "properties": {
+    "schema_version": { "const": 3 },
+    "engine_version": { "const": "oqs-quant-engine/0.3.0" },
+    "account_model": { "const": "a_share_portfolio_research" },
+    "orders": { "$ref": "#/$defs/orders" },
+    "fills": { "$ref": "#/$defs/fills" },
+    "positions": { "$ref": "#/$defs/positions" },
+    "cash_ledger": { "$ref": "#/$defs/cashLedger" },
+    "corporate_action_ledger": { "$ref": "#/$defs/corporateActionLedger" },
+    "equity_curve": { "$ref": "#/$defs/equityCurve" },
+    "drawdown_curve": { "$ref": "#/$defs/drawdownCurve" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "costs": { "$ref": "#/$defs/costs" },
+    "assumptions": { "$ref": "#/$defs/assumptions" }
+  },
+  "$defs": {
+    "atom": { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "symbol": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "side": { "enum": ["buy", "sell"] },
+    "book": { "enum": ["cash_long", "research_short"] },
+    "effect": { "enum": ["open", "close"] },
+    "orderType": { "enum": ["market", "limit"] },
+    "orders": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["intent_id", "intent_seq", "symbol", "book", "status", "reject_reason", "side", "position_effect", "order_type", "quantity", "remaining_quantity", "filled_session_seq", "filled_phase", "cancelled_intent_id", "condition_intent_id"],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_seq": { "$ref": "#/$defs/seq" },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "book": { "$ref": "#/$defs/book" },
+          "status": { "enum": ["accepted", "partial", "filled", "expired", "cancelled", "rejected"] },
+          "reject_reason": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }] },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/effect" },
+          "order_type": { "$ref": "#/$defs/orderType" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "remaining_quantity": { "$ref": "#/$defs/atom" },
+          "filled_session_seq": { "oneOf": [{ "$ref": "#/$defs/seq" }, { "type": "null" }] },
+          "filled_phase": { "oneOf": [{ "const": "open" }, { "type": "null" }] },
+          "cancelled_intent_id": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+          "condition_intent_id": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+        }
+      }
+    },
+    "fills": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["fill_id", "intent_id", "intent_seq", "symbol", "book", "session_seq", "side", "position_effect", "quantity", "fill_price_atoms", "notional_atoms", "fee_atoms", "stamp_duty_atoms", "slippage_atoms", "liquidity", "volume_before", "volume_after", "remaining_quantity", "frozen_margin_delta_atoms", "isolated_proceeds_delta_atoms", "condition_intent_id"],
+        "properties": {
+          "fill_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "intent_seq": { "$ref": "#/$defs/seq" },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "book": { "$ref": "#/$defs/book" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "side": { "$ref": "#/$defs/side" },
+          "position_effect": { "$ref": "#/$defs/effect" },
+          "quantity": { "$ref": "#/$defs/atom" },
+          "fill_price_atoms": { "$ref": "#/$defs/atom" },
+          "notional_atoms": { "$ref": "#/$defs/atom" },
+          "fee_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+          "slippage_atoms": { "$ref": "#/$defs/atom" },
+          "liquidity": { "const": "taker" },
+          "volume_before": { "$ref": "#/$defs/atom" },
+          "volume_after": { "$ref": "#/$defs/atom" },
+          "remaining_quantity": { "$ref": "#/$defs/atom" },
+          "frozen_margin_delta_atoms": { "$ref": "#/$defs/atom" },
+          "isolated_proceeds_delta_atoms": { "$ref": "#/$defs/atom" },
+          "condition_intent_id": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+        }
+      }
+    },
+    "positions": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["intent_id", "symbol", "book", "session_seq", "signed_quantity", "eligible_quantity"],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "book": { "$ref": "#/$defs/book" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "signed_quantity": { "$ref": "#/$defs/atom" },
+          "eligible_quantity": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "cashLedger": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["intent_id", "symbol", "book", "session_seq", "notional_delta_atoms", "fee_delta_atoms", "stamp_duty_delta_atoms", "realized_pnl_delta_atoms", "resulting_available_cash_atoms", "frozen_margin_delta_atoms", "isolated_proceeds_delta_atoms"],
+        "properties": {
+          "intent_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "book": { "$ref": "#/$defs/book" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "notional_delta_atoms": { "$ref": "#/$defs/atom" },
+          "fee_delta_atoms": { "$ref": "#/$defs/atom" },
+          "stamp_duty_delta_atoms": { "$ref": "#/$defs/atom" },
+          "realized_pnl_delta_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_available_cash_atoms": { "$ref": "#/$defs/atom" },
+          "frozen_margin_delta_atoms": { "$ref": "#/$defs/atom" },
+          "isolated_proceeds_delta_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "corporateActionLedger": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["action_id", "symbol", "session_seq", "action_type", "book", "quantity_before", "quantity_after", "available_cash_delta_atoms", "frozen_margin_delta_atoms", "isolated_proceeds_delta_atoms", "realized_pnl_delta_atoms", "resulting_available_cash_atoms", "resulting_frozen_margin_atoms", "resulting_isolated_proceeds_atoms"],
+        "properties": {
+          "action_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "symbol": { "$ref": "#/$defs/symbol" },
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "action_type": { "enum": ["cash_dividend", "split", "reverse_split", "delist_settlement"] },
+          "book": { "$ref": "#/$defs/book" },
+          "quantity_before": { "$ref": "#/$defs/atom" },
+          "quantity_after": { "$ref": "#/$defs/atom" },
+          "available_cash_delta_atoms": { "$ref": "#/$defs/atom" },
+          "frozen_margin_delta_atoms": { "$ref": "#/$defs/atom" },
+          "isolated_proceeds_delta_atoms": { "$ref": "#/$defs/atom" },
+          "realized_pnl_delta_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_available_cash_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_frozen_margin_atoms": { "$ref": "#/$defs/atom" },
+          "resulting_isolated_proceeds_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "equityCurve": {
+      "type": "array", "maxItems": 250000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["session_seq", "timestamp", "available_cash_atoms", "long_market_value_atoms", "short_liability_atoms", "gross_market_value_atoms", "net_market_value_atoms", "market_value_atoms", "equity_atoms", "frozen_margin_atoms", "isolated_short_proceeds_atoms"],
+        "properties": {
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "available_cash_atoms": { "$ref": "#/$defs/atom" },
+          "long_market_value_atoms": { "$ref": "#/$defs/atom" },
+          "short_liability_atoms": { "$ref": "#/$defs/atom" },
+          "gross_market_value_atoms": { "$ref": "#/$defs/atom" },
+          "net_market_value_atoms": { "$ref": "#/$defs/atom" },
+          "market_value_atoms": { "$ref": "#/$defs/atom" },
+          "equity_atoms": { "$ref": "#/$defs/atom" },
+          "frozen_margin_atoms": { "$ref": "#/$defs/atom" },
+          "isolated_short_proceeds_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "drawdownCurve": {
+      "type": "array", "maxItems": 250000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["session_seq", "equity_atoms", "peak_equity_atoms", "drawdown_atoms", "drawdown_rate_atoms"],
+        "properties": {
+          "session_seq": { "$ref": "#/$defs/seq" },
+          "equity_atoms": { "$ref": "#/$defs/atom" },
+          "peak_equity_atoms": { "$ref": "#/$defs/atom" },
+          "drawdown_atoms": { "$ref": "#/$defs/atom" },
+          "drawdown_rate_atoms": { "$ref": "#/$defs/atom" }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["starting_equity_atoms", "ending_equity_atoms", "net_pnl_atoms", "total_return_rate_atoms", "max_drawdown_atoms", "max_drawdown_rate_atoms", "total_fees_atoms", "total_stamp_duty_atoms", "total_slippage_atoms", "fill_count", "closed_trade_count", "open_position_count"],
+      "properties": {
+        "starting_equity_atoms": { "$ref": "#/$defs/atom" },
+        "ending_equity_atoms": { "$ref": "#/$defs/atom" },
+        "net_pnl_atoms": { "$ref": "#/$defs/atom" },
+        "total_return_rate_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_atoms": { "$ref": "#/$defs/atom" },
+        "max_drawdown_rate_atoms": { "$ref": "#/$defs/atom" },
+        "total_fees_atoms": { "$ref": "#/$defs/atom" },
+        "total_stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+        "total_slippage_atoms": { "$ref": "#/$defs/atom" },
+        "fill_count": { "type": "integer", "minimum": 0 },
+        "closed_trade_count": { "type": "integer", "minimum": 0 },
+        "open_position_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "costs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["commission_atoms", "stamp_duty_atoms", "slippage_atoms"],
+      "properties": {
+        "commission_atoms": { "$ref": "#/$defs/atom" },
+        "stamp_duty_atoms": { "$ref": "#/$defs/atom" },
+        "slippage_atoms": { "$ref": "#/$defs/atom" }
+      }
+    },
+    "assumptions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fill_model", "partial_fills", "liquidate_on_end", "cash_long", "research_short", "limit_orders", "corporate_actions", "tradability_gates", "t_plus_one"],
+      "properties": {
+        "fill_model": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "partial_fills": { "type": "boolean" },
+        "liquidate_on_end": { "const": false },
+        "cash_long": { "const": true },
+        "research_short": { "const": true },
+        "limit_orders": { "type": "boolean" },
+        "corporate_actions": { "const": true },
+        "tradability_gates": { "const": true },
+        "t_plus_one": { "const": true }
+      }
+    }
+  }
+}

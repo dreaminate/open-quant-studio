@@ -15,7 +15,9 @@ import { FetchQuantDomainRevisionClient } from "../apps/control-plane/dist/domai
 import { FetchQuantDomainSessionClient } from "../apps/control-plane/dist/domain-session-client.js";
 import { createLocalPiModel } from "../apps/control-plane/dist/local-pi-model.js";
 import { PiSessionAdapter } from "../apps/control-plane/dist/pi-session-adapter.js";
+import { createRevisionTools } from "../apps/control-plane/dist/revision-tools.js";
 import { SessionRegistry } from "../apps/control-plane/dist/session-registry.js";
+import { ModelRuntime } from "../apps/control-plane/node_modules/@earendil-works/pi-coding-agent/dist/index.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
@@ -46,37 +48,21 @@ export function resolveM4DataRoot(value = "var/m4-local") {
   return dataRoot;
 }
 
-function pythonLiteral(value) {
-  if (value === null) return "None";
-  if (value === true) return "True";
-  if (value === false) return "False";
-  if (Array.isArray(value)) return `[${value.map(pythonLiteral).join(",")}]`;
-  if (typeof value === "object") {
-    return `{${Object.entries(value)
-      .map(([key, item]) => `${JSON.stringify(key)}:${pythonLiteral(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function formalStrategySource(engineInputJson) {
-  const engineInput = JSON.parse(engineInputJson);
-  const templates = new Map();
-  for (const intent of engineInput.intents) {
-    const { known_at: knownAt, effective_at: _effectiveAt, ...template } = intent;
-    const bucket = templates.get(knownAt.session_seq) ?? [];
-    bucket.push(template);
-    templates.set(knownAt.session_seq, bucket);
-  }
-  const literal = `{${[...templates.entries()]
-    .map(([sessionSeq, intents]) => `${sessionSeq}:${pythonLiteral(intents)}`)
-    .join(",")}}`;
+function configuredStrategySource() {
   return [
-    `INTENTS = ${literal}`,
+    "STATE = {'intent_seq': 0, 'symbol': None}",
     "def on_start():",
-    "    return INTENTS.get(0, [])",
+    "    return []",
+    "def _order(symbol, book, side, position_effect):",
+    "    STATE['intent_seq'] += 1",
+    "    return {'intent_kind': 'order', 'intent_id': f'oqs-local:{STATE[\"intent_seq\"]}', 'intent_seq': STATE['intent_seq'], 'symbol': symbol, 'book': book, 'side': side, 'position_effect': position_effect, 'quantity': '100', 'order_type': 'market', 'limit_price_atoms': None, 'time_in_force': 'day'}",
     "def on_bar(bar):",
-    "    return INTENTS.get(bar['session_seq'], [])",
+    "    STATE['symbol'] = STATE['symbol'] or bar['symbol']",
+    "    if bar['symbol'] != STATE['symbol']:",
+    "        return []",
+    "    if bar['session_seq'] == 1: return [_order(bar['symbol'], 'cash_long', 'buy', 'open'), _order(bar['symbol'], 'research_short', 'sell', 'open')]",
+    "    if bar['session_seq'] == 2: return [_order(bar['symbol'], 'cash_long', 'sell', 'close'), _order(bar['symbol'], 'research_short', 'buy', 'close')]",
+    "    return []",
     "",
   ].join("\n");
 }
@@ -92,6 +78,27 @@ function startPython(arguments_, dataRoot, extraEnvironment = {}) {
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
+}
+
+async function createConfiguredPiModel(dataRoot) {
+  const providerId = process.env.OQS_PI_PROVIDER;
+  const modelId = process.env.OQS_PI_MODEL;
+  if (!providerId || !modelId) {
+    throw new Error(
+      "OQS_PI_PROVIDER and OQS_PI_MODEL are required; set OQS_PI_MODE=fixture only for deterministic local tests",
+    );
+  }
+  const modelRuntime = await ModelRuntime.create({
+    authPath: process.env.OQS_PI_AUTH_PATH ?? join(dataRoot, "pi-auth.json"),
+    modelsPath: process.env.OQS_PI_MODELS_PATH ?? null,
+    allowModelNetwork: process.env.OQS_PI_ALLOW_NETWORK === "1",
+    refreshOnCreate: false,
+  });
+  const model = modelRuntime.getModel(providerId, modelId);
+  if (model === undefined) {
+    throw new Error(`configured Pi model is unavailable: ${providerId}/${modelId}`);
+  }
+  return { model, modelRuntime, dispose: () => {} };
 }
 
 export async function waitForDomain(baseUrl, domain, instanceToken) {
@@ -161,8 +168,11 @@ async function main() {
   const controlledSessionDir = join(dataRoot, "pi-sessions");
   const importsRoot = join(dataRoot, "imports");
   const exportsRoot = join(dataRoot, "exports");
-  const formalRunFixture = await loadM4FormalRunFixture(fixturePath);
-  const strategy = formalStrategySource(formalRunFixture.strategyInputJson);
+  const fixtureMode = process.env.OQS_PI_MODE === "fixture";
+  const formalRunFixture = fixtureMode
+    ? await loadM4FormalRunFixture(fixturePath)
+    : undefined;
+  const strategy = configuredStrategySource();
 
   await access(join(webRoot, "index.html"));
   await mkdir(controlledCwd, { recursive: true });
@@ -233,7 +243,16 @@ async function main() {
       baseRevisionId: ROOT_REVISION_ID,
     });
 
-    localPiModel = await createLocalPiModel(join(dataRoot, "pi-model-auth.json"));
+    localPiModel = process.env.OQS_PI_MODE === "fixture"
+      ? await createLocalPiModel(join(dataRoot, "pi-model-auth.json"), {
+        toolTracer: process.env.OQS_PI_TOOL_TRACER === "1",
+      })
+      : await createConfiguredPiModel(dataRoot);
+    registry = new SessionRegistry();
+    const revisionTools = createRevisionTools(revisionClient, {
+      ...ACTOR,
+      workbenchId: () => registry.status(SESSION_ID)?.activeWorkbenchId ?? "canvas",
+    });
     const adapter = await PiSessionAdapter.create({
       ...ACTOR,
       controlledCwd,
@@ -241,8 +260,8 @@ async function main() {
       piSessionId: PI_SESSION_ID,
       model: localPiModel.model,
       modelRuntime: localPiModel.modelRuntime,
+      customTools: revisionTools,
     });
-    registry = new SessionRegistry();
     registry.register({ adapter, ...ACTOR });
     registry.bindWorkbench(SESSION_ID, "code");
     registry.bindWorkbench(SESSION_ID, "run-detail");
@@ -251,7 +270,7 @@ async function main() {
       activeSessionId: SESSION_ID,
       registry,
       revisionClient,
-      formalRunFixture,
+      ...(formalRunFixture === undefined ? {} : { formalRunFixture }),
       webRoot,
     });
     await listen(browserServer, host, port);

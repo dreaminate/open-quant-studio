@@ -13,6 +13,7 @@ from pathlib import Path
 
 GATE_NAMES = ("contract", "strategy_import", "smoke_run")
 STRATEGY_PROTOCOL_VERSION = 2
+A_SHARE_V3_STRATEGY_PROTOCOL = "oqs-strategy-host/a-share-v3"
 STRATEGY_RESPONSE_TIMEOUT_SECONDS = 5.0
 STRATEGY_PROCESS_EXIT_TIMEOUT_SECONDS = 1.0
 MAX_STRATEGY_FRAME_BYTES = 1_048_576
@@ -392,6 +393,7 @@ def execute_formal_run(
     engine_input: bytes,
     expected_engine_version: str,
     expected_output_schema_version: int,
+    strategy_protocol_version: str | None = None,
 ) -> FormalExecution:
     failed_gates = {gate: "failed" for gate in GATE_NAMES}
     try:
@@ -402,15 +404,33 @@ def execute_formal_run(
         return FormalExecution(None, failed_gates, "contract_gate_failed")
 
     gates = {"contract": "passed", "strategy_import": "failed", "smoke_run": "failed"}
-    strategy_intents = run_strategy_host(strategy_source, engine_input)
+    strategy_intents = run_strategy_host(
+        strategy_source,
+        engine_input,
+        strategy_protocol_version=strategy_protocol_version,
+    )
     if strategy_intents is None or strategy_intents != parsed_input.get("intents"):
         return FormalExecution(None, gates, "strategy_import_failed")
 
     gates["strategy_import"] = "passed"
-    from oqs_quant_engine import run_engine_v1
+    # The Rust/PyO3 engine is the sole formal calculation authority.  Keep the
+    # legacy v1 path intact, but select the additive A-share v3 ABI from the
+    # typed input schema instead of silently coercing it through v1.
+    if parsed_input.get("schema_version") == 3:
+        from oqs_quant_engine import run_engine_v3
+
+        run_engine = run_engine_v3
+    elif parsed_input.get("schema_version") == 2:
+        from oqs_quant_engine import run_engine_v2
+
+        run_engine = run_engine_v2
+    else:
+        from oqs_quant_engine import run_engine_v1
+
+        run_engine = run_engine_v1
 
     try:
-        engine_result = run_engine_v1(engine_input)
+        engine_result = run_engine(engine_input)
     except ValueError:
         return FormalExecution(None, gates, "smoke_run_failed")
     gates["smoke_run"] = "passed"
@@ -476,7 +496,65 @@ def _encode_frame(frame: dict[str, object]) -> bytes | None:
     return encoded
 
 
-def run_strategy_host(strategy_source: bytes, engine_input: bytes) -> list[object] | None:
+def _a_share_v3_strategy_bar(bar: object) -> dict[str, object] | None:
+    if not isinstance(bar, dict):
+        return None
+    raw = bar.get("raw")
+    research = bar.get("research")
+    if (
+        set(bar)
+        != {
+            "session_seq",
+            "timestamp",
+            "session_end",
+            "symbol",
+            "trading_status",
+            "price_limit_state",
+            "raw",
+            "research",
+        }
+        or type(bar.get("session_seq")) is not int
+        or not isinstance(bar.get("timestamp"), str)
+        or type(bar.get("session_end")) is not bool
+        or not isinstance(bar.get("symbol"), str)
+        or not isinstance(bar.get("trading_status"), str)
+        or not isinstance(bar.get("price_limit_state"), str)
+        or not isinstance(raw, dict)
+        or set(raw)
+        != {
+            "open_atoms",
+            "high_atoms",
+            "low_atoms",
+            "close_atoms",
+            "volume_quantity",
+        }
+        or not isinstance(research, dict)
+        or set(research) != {"open_atoms", "high_atoms", "low_atoms", "close_atoms"}
+        or any(not isinstance(value, str) for value in raw.values())
+        or any(not isinstance(value, str) for value in research.values())
+    ):
+        return None
+    return {
+        "session_seq": bar["session_seq"],
+        "timestamp": bar["timestamp"],
+        "session_end": bar["session_end"],
+        "symbol": bar["symbol"],
+        "trading_status": bar["trading_status"],
+        "price_limit_state": bar["price_limit_state"],
+        "open_atoms": research["open_atoms"],
+        "high_atoms": research["high_atoms"],
+        "low_atoms": research["low_atoms"],
+        "close_atoms": research["close_atoms"],
+        "volume_quantity": raw["volume_quantity"],
+    }
+
+
+def run_strategy_host(
+    strategy_source: bytes,
+    engine_input: bytes,
+    *,
+    strategy_protocol_version: str | None = None,
+) -> list[object] | None:
     try:
         parsed_input = json.loads(engine_input)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -494,6 +572,13 @@ def run_strategy_host(strategy_source: bytes, engine_input: bytes) -> list[objec
         )
     ):
         return None
+    if parsed_input.get("schema_version") == 3:
+        if strategy_protocol_version != A_SHARE_V3_STRATEGY_PROTOCOL:
+            return None
+        strategy_bars = [_a_share_v3_strategy_bar(bar) for bar in bars]
+        if any(bar is None for bar in strategy_bars):
+            return None
+        bars = [bar for bar in strategy_bars if bar is not None]
     with tempfile.TemporaryDirectory(prefix="oqs-strategy-import-") as temporary:
         root = Path(temporary)
         (root / "strategy.py").write_bytes(strategy_source)
@@ -647,12 +732,20 @@ def run_strategy_host(strategy_source: bytes, engine_input: bytes) -> list[objec
                 intents = read_response("bar_response", request_id, request_token)
                 if intents is None:
                     return None
-                if index == len(bars) - 1:
+                next_session_seq = next(
+                    (
+                        candidate["session_seq"]
+                        for candidate in bars[index + 1 :]
+                        if candidate["session_seq"] > bar["session_seq"]
+                    ),
+                    None,
+                )
+                if next_session_seq is None:
                     continue
                 if not append_intents(
                     intents,
                     bar["session_seq"],
-                    bars[index + 1]["session_seq"],
+                    next_session_seq,
                 ):
                     return None
 

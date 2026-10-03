@@ -67,6 +67,7 @@ export async function startM10Runtime(): Promise<M10Runtime> {
       OQS_DATA_ROOT: dataRoot,
       OQS_PORT: String(port),
       OQS_DOMAIN_PORT: String(domainPort),
+      OQS_PI_MODE: "fixture",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

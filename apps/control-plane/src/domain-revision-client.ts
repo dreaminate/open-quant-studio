@@ -13,11 +13,14 @@ import {
   type DataSnapshotReadModel,
   type DataSnapshotSourceArtifact,
   type DataSnapshotSourceFormat,
+  type DataSnapshotExecutionProfile,
+  type FormalEngineCorporateActionInputV3,
   type DiagnosticCommand,
   type DiagnosticLog,
   type DiagnosticLogListReadModel,
   type FormalRunCommand,
   type FormalRunRequestPayload,
+  type FormalRunReviewAttestation,
   type FormalRunDetailReadModel,
   type FormalRunListReadModel,
   type ForwardTestCommand,
@@ -155,6 +158,7 @@ export interface FormalRunRequest extends RevisionCommandContext {
   runSpecId?: string;
   runId?: string;
   validationId?: string;
+  reviewAttestation?: FormalRunReviewAttestation;
 }
 
 export interface DataSnapshotCreateRequest extends RevisionCommandContext {
@@ -166,6 +170,8 @@ export interface DataSnapshotCreateRequest extends RevisionCommandContext {
   timezone: string;
   priceBasis: DataSnapshotPriceBasis;
   cutoff: string;
+  executionProfile?: DataSnapshotExecutionProfile;
+  corporateActions?: FormalEngineCorporateActionInputV3[];
   snapshotId?: string;
 }
 
@@ -449,6 +455,12 @@ export class FetchQuantDomainRevisionClient {
         timezone: request.timezone,
         price_basis: request.priceBasis,
         cutoff: request.cutoff,
+        ...(request.executionProfile === undefined
+          ? {}
+          : { execution_profile: request.executionProfile }),
+        ...(request.corporateActions === undefined
+          ? {}
+          : { corporate_actions: request.corporateActions }),
       },
     };
     return assertValidCommand(
@@ -1124,7 +1136,15 @@ export class FetchQuantDomainRevisionClient {
       JSON.parse(request.marketInputJson),
       "Formal Run market input",
     ).schema_version;
-    const engineProfile = inputSchemaVersion === 2
+    const engineProfile = inputSchemaVersion === 3
+      ? {
+          engine_version: "oqs-quant-engine/0.3.0" as const,
+          output_schema_version: 3 as const,
+          gate_policy_version: "a-share-v3" as const,
+          strategy_protocol_version: "oqs-strategy-host/a-share-v3" as const,
+          engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3" as const,
+        }
+      : inputSchemaVersion === 2
       ? {
           engine_version: "oqs-quant-engine/0.2.0" as const,
           output_schema_version: 2 as const,
@@ -1139,7 +1159,23 @@ export class FetchQuantDomainRevisionClient {
           strategy_protocol_version: "oqs-strategy-host/m5-stream-v2" as const,
           engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v1" as const,
         };
-    const payload: FormalRunRequestPayload = {
+    if (inputSchemaVersion === 3 && request.reviewAttestation === undefined) {
+      throw new Error("a-share-v3 Formal Run requires an approved review attestation");
+    }
+    if (inputSchemaVersion === 3 && request.reviewAttestation !== undefined) {
+      const attestation = request.reviewAttestation;
+      if (
+        attestation.status !== "approved"
+        || attestation.candidate_revision_id !== request.candidateRevisionId
+        || attestation.strategy_tree_oid !== request.strategyTreeOid
+        || attestation.data_snapshot_sha256 !== request.dataSnapshotSha256
+        || attestation.parameters_sha256 !== request.parametersSha256
+        || attestation.cost_model_sha256 !== request.costModelSha256
+      ) {
+        throw new Error("review attestation is not bound to the Formal Run request");
+      }
+    }
+    const payload = {
       run_spec_id: request.runSpecId ?? stableIdentityUuid(`${commandId}:run-spec`),
       run_id: request.runId ?? stableIdentityUuid(`${commandId}:run`),
       validation_id: request.validationId ?? stableIdentityUuid(`${commandId}:validation`),
@@ -1159,7 +1195,10 @@ export class FetchQuantDomainRevisionClient {
       random_seed: request.randomSeed,
       checkpoint_batch_size: request.checkpointBatchSize ?? 4096,
       ...engineProfile,
-    };
+      ...(inputSchemaVersion === 3
+        ? { review_attestation: request.reviewAttestation as FormalRunReviewAttestation }
+        : {}),
+    } as FormalRunRequestPayload;
     const command: FormalRunCommand = {
       command_id: commandId,
       schema_version: 1,

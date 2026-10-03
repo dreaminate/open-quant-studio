@@ -5,6 +5,7 @@ import {
   validateActivityListReadModel,
   validateArtifactMetadataReadModel,
   validateFormalEngineResultV1,
+  validateFormalEngineResultV3,
   validateFormalRunDetailReadModel,
   validateFormalRunListReadModel,
   validateFormalRunManifestV1,
@@ -406,4 +407,156 @@ test("M4 Run detail rejects a manifest engine identity mismatch", () => {
       "/manifest/engine_result/sha256 must match /run/calculation_hash",
     ],
   });
+});
+
+test("A-share v3 Run detail binds the v3 read-model profile", () => {
+  const detail = succeededDetail();
+  const marketInput = {
+    artifact_id: INPUT_ARTIFACT_ID,
+    sha256: HASH_A,
+    media_type: "application/json",
+    byte_size: 1024,
+    storage_uri: `cas://sha256/${HASH_A}`,
+  };
+  const reviewAttestation = {
+    attestation_id: "a9a9a9a9-a9a9-49a9-89a9-a9a9a9a9a9a9",
+    status: "approved",
+    candidate_revision_id: runSpec().candidate_revision_id,
+    strategy_tree_oid: runSpec().strategy_tree_oid,
+    data_snapshot_sha256: runSpec().data_snapshot_sha256,
+    parameters_sha256: runSpec().parameters_sha256,
+    cost_model_sha256: runSpec().cost_model_sha256,
+    reviewer_id: "test-user",
+    reviewed_at: "2026-08-13T00:00:00Z",
+  };
+  detail.run_spec = {
+    ...runSpec(),
+    execution_profile: "a-share-v3",
+    market_input_artifact_id: INPUT_ARTIFACT_ID,
+    engine_version: "oqs-quant-engine/0.3.0",
+    output_schema_version: 3,
+    gate_policy_version: "a-share-v3",
+    strategy_protocol_version: "oqs-strategy-host/a-share-v3",
+    checkpoint_batch_size: 256,
+    engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3",
+    review_attestation: reviewAttestation,
+    review_attestation_id: reviewAttestation.attestation_id,
+    review_attestation_sha256: HASH_A,
+  };
+  delete detail.run_spec.engine_input_artifact_id;
+  detail.validation = {
+    ...validation(),
+    gate_policy_version: "a-share-v3",
+    engine_version: "oqs-quant-engine/0.3.0",
+  };
+  detail.manifest = {
+    ...manifest(),
+    manifest_version: "a-share-v3",
+    run_spec: {
+      ...manifest().run_spec,
+      execution_profile: "a-share-v3",
+      market_input_artifact_id: INPUT_ARTIFACT_ID,
+      engine_version: "oqs-quant-engine/0.3.0",
+      output_schema_version: 3,
+      gate_policy_version: "a-share-v3",
+      strategy_protocol_version: "oqs-strategy-host/a-share-v3",
+      checkpoint_batch_size: 256,
+      engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3",
+      review_attestation: reviewAttestation,
+      review_attestation_id: reviewAttestation.attestation_id,
+      review_attestation_sha256: HASH_A,
+    },
+    market_input: marketInput,
+    strategy_execution: {
+      ...manifest().strategy_execution,
+      timing_authority: "oqs-strategy-host/a-share-v3",
+      frozen: true,
+    },
+    resolved_engine_input: {
+      artifact_id: "80808080-8080-4080-8080-808080808080",
+      sha256: HASH_B,
+      media_type: "application/json",
+      byte_size: 1024,
+      storage_uri: `cas://sha256/${HASH_B}`,
+    },
+    checkpoint: {
+      engine_checkpoint_abi: "oqs-quant-engine/checkpoint-v3",
+      checkpoint_batch_size: 256,
+      final_checkpoint_seq: 1,
+      final_next_session_index: 1,
+      calculation_context_sha256: HASH_A,
+    },
+    engine_result: {
+      ...manifest().engine_result,
+      schema_version: 3,
+      engine_version: "oqs-quant-engine/0.3.0",
+    },
+    review_attestation: reviewAttestation,
+    review_attestation_id: reviewAttestation.attestation_id,
+    review_attestation_sha256: HASH_A,
+  };
+  delete detail.manifest.engine_input;
+  detail.engine_result = {
+    schema_version: 3,
+    engine_version: "oqs-quant-engine/0.3.0",
+    account_model: "a_share_portfolio_research",
+    orders: [],
+    fills: [],
+    positions: [],
+    cash_ledger: [],
+    corporate_action_ledger: [],
+    equity_curve: [],
+    drawdown_curve: [],
+    metrics: {
+      starting_equity_atoms: "1000000",
+      ending_equity_atoms: "1000000",
+      net_pnl_atoms: "0",
+      total_return_rate_atoms: "0",
+      max_drawdown_atoms: "0",
+      max_drawdown_rate_atoms: "0",
+      total_fees_atoms: "0",
+      total_stamp_duty_atoms: "0",
+      total_slippage_atoms: "0",
+      fill_count: 0,
+      closed_trade_count: 0,
+      open_position_count: 0,
+    },
+    costs: {
+      commission_atoms: "0",
+      stamp_duty_atoms: "0",
+      slippage_atoms: "0",
+    },
+    assumptions: {
+      fill_model: "a_share_dual_book_market_open_v3",
+      partial_fills: true,
+      liquidate_on_end: false,
+      cash_long: true,
+      research_short: true,
+      limit_orders: true,
+      corporate_actions: true,
+      tradability_gates: true,
+      t_plus_one: true,
+    },
+  };
+  detail.intent_tape = [{
+    intent_kind: "order",
+    intent_id: "v3-long-open",
+    intent_seq: 1,
+    symbol: "600000.XSHG",
+    book: "cash_long",
+    side: "buy",
+    position_effect: "open",
+    quantity: "100",
+    order_type: "market",
+    known_at: { session_seq: 1, phase: "close", stable_seq: 1 },
+    effective_at: { session_seq: 2, phase: "open", stable_seq: 1 },
+    limit_price_atoms: null,
+    time_in_force: "day",
+    condition_intent_id: null,
+  }];
+  assert.equal(validateFormalEngineResultV3(detail.engine_result).valid, true);
+  assert.equal(validateFormalRunDetailReadModel(detail).valid, true);
+  const missingProfile = structuredClone(detail);
+  delete missingProfile.run_spec.execution_profile;
+  assert.equal(validateFormalRunDetailReadModel(missingProfile).valid, false);
 });

@@ -117,8 +117,195 @@ class M1DomainTest(unittest.TestCase):
                 ("008_m5_forward_tests",),
                 ("009_m7_data_snapshots",),
                 ("010_m9_run_reports",),
+                ("011_v3_contracts",),
+                ("012_a_share_v3_validation",),
+                ("013_review_attestations",),
             ],
         )
+
+    def test_v3_migration_rebuilds_legacy_tables_and_restores_foreign_keys(self) -> None:
+        source_migrations = (
+            Path(__file__).parents[1] / "src" / "quant_domain" / "migrations"
+        )
+        staged_migrations = self.data_root / "staged-v3-migrations"
+        staged_migrations.mkdir()
+        for migration in sorted(source_migrations.glob("00[1-9]_*.sql")):
+            shutil.copyfile(migration, staged_migrations / migration.name)
+        shutil.copyfile(
+            source_migrations / "010_m9_run_reports.sql",
+            staged_migrations / "010_m9_run_reports.sql",
+        )
+        database_path = self.data_root / "v3-upgrade.sqlite3"
+        legacy = Database(database_path, migrations_dir=staged_migrations)
+        recorded_at = "2026-08-12T00:00:00Z"
+        project_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        artifact_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        with legacy.connect() as connection:
+            connection.execute(
+                "INSERT INTO research_projects(project_id, created_at) VALUES (?, ?)",
+                (project_id, recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO artifacts(
+                    artifact_id, sha256, media_type, byte_size, storage_uri,
+                    producing_revision_id, producing_run_id, origin_kind,
+                    source_ref, created_at
+                ) VALUES (?, ?, 'application/json', 2, ?, NULL, NULL,
+                          'fixture', ?, ?)
+                """,
+                (artifact_id, "a" * 64, "cas://sha256/" + "a" * 64, "fixture", recorded_at),
+            )
+            connection.execute(
+                """
+                INSERT INTO data_snapshots(
+                    snapshot_id, project_id, source_artifact_id,
+                    normalized_artifact_id, market_input_artifact_id, market,
+                    symbol, symbols_json, timezone, price_basis, cutoff,
+                    schema_version, mapping_json, sample_start, sample_end,
+                    row_count, session_count, sha256, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'a_share_daily', 'AAA.XSHG', ?,
+                          'UTC', 'raw', ?, 1, ?, ?, ?, 1, 1, ?, ?)
+                """,
+                (
+                    "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    project_id,
+                    artifact_id,
+                    artifact_id,
+                    artifact_id,
+                    '["AAA.XSHG"]',
+                    recorded_at,
+                    '{"timestamp":"timestamp"}',
+                    recorded_at,
+                    recorded_at,
+                    "a" * 64,
+                    recorded_at,
+                ),
+            )
+        upgraded = Database(database_path, migrations_dir=source_migrations)
+        with upgraded.connect() as connection:
+            snapshot = connection.execute(
+                "SELECT schema_version, execution_profile, symbol FROM data_snapshots"
+            ).fetchone()
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO data_snapshots(
+                        snapshot_id, project_id, source_artifact_id,
+                        normalized_artifact_id, market_input_artifact_id, market,
+                        symbol, symbols_json, timezone, price_basis, cutoff,
+                        schema_version, mapping_json, sample_start, sample_end,
+                        row_count, session_count, sha256, execution_profile, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 'a_share_daily', 'AAA.XSHG', ?,
+                              'UTC', 'raw', ?, 3, ?, ?, ?, 1, 1, ?, 'legacy', ?)
+                    """,
+                    (
+                        "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                        project_id,
+                        artifact_id,
+                        artifact_id,
+                        artifact_id,
+                        '["AAA.XSHG"]',
+                        recorded_at,
+                        '{"timestamp":"timestamp"}',
+                        recorded_at,
+                        recorded_at,
+                        "d" * 64,
+                        recorded_at,
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO data_snapshots(
+                    snapshot_id, project_id, source_artifact_id,
+                    normalized_artifact_id, market_input_artifact_id, market,
+                    symbol, symbols_json, timezone, price_basis, cutoff,
+                    schema_version, mapping_json, sample_start, sample_end,
+                    row_count, session_count, sha256, execution_profile, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'a_share_daily', 'AAA.XSHG', ?,
+                          'UTC', 'raw', ?, 3, ?, ?, ?, 1, 1, ?, 'a-share-v3', ?)
+                """,
+                (
+                    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                    project_id,
+                    artifact_id,
+                    artifact_id,
+                    artifact_id,
+                    '["AAA.XSHG"]',
+                    recorded_at,
+                    '{"timestamp":"timestamp"}',
+                    recorded_at,
+                    recorded_at,
+                    "e" * 64,
+                    recorded_at,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO data_snapshots(
+                    snapshot_id, project_id, source_artifact_id,
+                    normalized_artifact_id, market_input_artifact_id, market,
+                    symbol, symbols_json, timezone, price_basis, cutoff,
+                    schema_version, mapping_json, sample_start, sample_end,
+                    row_count, session_count, sha256, execution_profile, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'a_share_daily', NULL, ?,
+                          'UTC', 'raw', ?, 3, ?, ?, ?, 2, 1, ?, 'a-share-v3', ?)
+                """,
+                (
+                    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                    project_id,
+                    artifact_id,
+                    artifact_id,
+                    artifact_id,
+                    '["AAA.XSHG","BBB.XSHG"]',
+                    recorded_at,
+                    '{"timestamp":"timestamp"}',
+                    recorded_at,
+                    recorded_at,
+                    "f" * 64,
+                    recorded_at,
+                ),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO data_snapshots(
+                        snapshot_id, project_id, source_artifact_id,
+                        normalized_artifact_id, market_input_artifact_id, market,
+                        symbol, symbols_json, timezone, price_basis, cutoff,
+                        schema_version, mapping_json, sample_start, sample_end,
+                        row_count, session_count, sha256, execution_profile, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 'a_share_daily', 'AAA.XSHG', ?,
+                              'UTC', 'raw', ?, 3, ?, ?, ?, 2, 1, ?, 'a-share-v3', ?)
+                    """,
+                    (
+                        "abababab-abab-4aba-8bab-abababababab",
+                        project_id,
+                        artifact_id,
+                        artifact_id,
+                        artifact_id,
+                        '["AAA.XSHG","BBB.XSHG"]',
+                        recorded_at,
+                        '{"timestamp":"timestamp"}',
+                        recorded_at,
+                        recorded_at,
+                        "b" * 64,
+                        recorded_at,
+                    ),
+                )
+            run_spec_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(run_specs)")
+            }
+            snapshot_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(data_snapshots)")
+            }
+            foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+            foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
+        self.assertEqual(tuple(snapshot), (1, "legacy", "AAA.XSHG"))
+        self.assertIn("execution_profile", run_spec_columns)
+        self.assertIn("execution_profile", snapshot_columns)
+        self.assertEqual(foreign_keys, 1)
+        self.assertEqual(foreign_key_errors, [])
 
         command = context_capture_command()
         self.domain.submit_command(command)

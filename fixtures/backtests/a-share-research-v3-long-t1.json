@@ -1,0 +1,133 @@
+{
+  "contract_version": "oqs-a-share-research-v3",
+  "input": {
+    "schema_version": 3,
+    "market_rules_version": "cn-a-share-research/2026-08-14",
+    "account": {
+      "model": "a_share_portfolio_research",
+      "symbols": ["AAA.XSHG"],
+      "price_scale": 100,
+      "cash_scale": 100,
+      "rate_scale": 1000000,
+      "starting_cash_atoms": "1000000",
+      "lot_size": 100,
+      "max_participation_rate_atoms": "100000",
+      "commission_rate_atoms": "0",
+      "minimum_commission_atoms": "0",
+      "stamp_duty_rate_atoms": "0",
+      "market_slippage_atoms": "0",
+      "research_short_margin_rate_atoms": "1000000"
+    },
+    "sessions": [
+      {
+        "session_seq": 1,
+        "timestamp": "2026-01-05T07:00:00Z",
+        "bars": [
+          {
+            "symbol": "AAA.XSHG",
+            "trading_status": "tradable",
+            "price_limit_state": "none",
+            "raw": {
+              "open_atoms": "1000",
+              "high_atoms": "1000",
+              "low_atoms": "1000",
+              "close_atoms": "1000",
+              "volume_quantity": "10000"
+            },
+            "research": {
+              "open_atoms": "1000",
+              "high_atoms": "1000",
+              "low_atoms": "1000",
+              "close_atoms": "1000"
+            }
+          }
+        ]
+      },
+      {
+        "session_seq": 2,
+        "timestamp": "2026-01-06T07:00:00Z",
+        "bars": [
+          {
+            "symbol": "AAA.XSHG",
+            "trading_status": "tradable",
+            "price_limit_state": "none",
+            "raw": {
+              "open_atoms": "1000",
+              "high_atoms": "1000",
+              "low_atoms": "1000",
+              "close_atoms": "1000",
+              "volume_quantity": "10000"
+            },
+            "research": {
+              "open_atoms": "1000",
+              "high_atoms": "1000",
+              "low_atoms": "1000",
+              "close_atoms": "1000"
+            }
+          }
+        ]
+      }
+    ],
+    "corporate_actions": [],
+    "intents": [
+      {
+        "intent_kind": "order",
+        "intent_id": "long-open",
+        "intent_seq": 1,
+        "symbol": "AAA.XSHG",
+        "book": "cash_long",
+        "side": "buy",
+        "position_effect": "open",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": {"session_seq": 0, "phase": "close", "stable_seq": 1},
+        "effective_at": {"session_seq": 1, "phase": "open", "stable_seq": 1},
+        "limit_price_atoms": null,
+        "time_in_force": "day"
+      },
+      {
+        "intent_kind": "order",
+        "intent_id": "long-close-same-day",
+        "intent_seq": 2,
+        "symbol": "AAA.XSHG",
+        "book": "cash_long",
+        "side": "sell",
+        "position_effect": "close",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": {"session_seq": 0, "phase": "close", "stable_seq": 2},
+        "effective_at": {"session_seq": 1, "phase": "open", "stable_seq": 2},
+        "limit_price_atoms": null,
+        "time_in_force": "day"
+      },
+      {
+        "intent_kind": "order",
+        "intent_id": "long-close-next-day",
+        "intent_seq": 3,
+        "symbol": "AAA.XSHG",
+        "book": "cash_long",
+        "side": "sell",
+        "position_effect": "close",
+        "quantity": "100",
+        "order_type": "market",
+        "known_at": {"session_seq": 1, "phase": "close", "stable_seq": 3},
+        "effective_at": {"session_seq": 2, "phase": "open", "stable_seq": 3},
+        "limit_price_atoms": null,
+        "time_in_force": "day"
+      }
+    ]
+  },
+  "expected": {
+    "order_statuses": {
+      "long-open": "filled",
+      "long-close-same-day": "rejected",
+      "long-close-next-day": "filled"
+    },
+    "same_day_reject_reason": "t_plus_one",
+    "fill_intent_ids": ["long-open", "long-close-next-day"],
+    "ending_available_cash_atoms": "1000000",
+    "ending_equity_atoms": "1000000",
+    "closed_trade_count": 1,
+    "open_position_count": 0
+  }
+}

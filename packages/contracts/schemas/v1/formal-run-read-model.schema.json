@@ -8,6 +8,7 @@
     { "$ref": "#/$defs/failedDetail" },
     { "$ref": "#/$defs/m5SucceededDetail" },
     { "$ref": "#/$defs/m8SucceededDetail" },
+    { "$ref": "#/$defs/aShareV3SucceededDetail" },
     { "$ref": "#/$defs/m5FailedDetail" },
     { "$ref": "#/$defs/activeDetail" },
     { "$ref": "#/$defs/cancelledDetail" }
@@ -43,7 +44,9 @@
         "checkpoint_integrity_mismatch",
         "worker_interrupted_by_m5_upgrade",
         "smoke_run_failed",
-        "engine_result_contract_failed"
+        "engine_result_contract_failed",
+        "review_attestation_required",
+        "review_attestation_mismatch"
       ]
     },
     "gateOutcomes": {
@@ -341,18 +344,22 @@
         "parameters_sha256": { "$ref": "#/$defs/sha256" },
         "cost_model_sha256": { "$ref": "#/$defs/sha256" },
         "environment_lock_sha256": { "$ref": "#/$defs/sha256" },
-        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0"] },
+        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0", "oqs-quant-engine/0.3.0"] },
         "price_basis": { "enum": ["raw", "qfq", "hfq"] },
         "cutoff": { "$ref": "#/$defs/dateTime" },
         "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
         "sample_start": { "$ref": "#/$defs/dateTime" },
         "sample_end": { "$ref": "#/$defs/dateTime" },
         "random_seed": { "type": "integer", "minimum": 0 },
-        "output_schema_version": { "enum": [1, 2] },
-        "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
-        "strategy_protocol_version": { "enum": ["oqs-strategy-host/m5-stream-v2", "oqs-strategy-host/m8-portfolio-v1"] },
+        "output_schema_version": { "enum": [1, 2, 3] },
+        "gate_policy_version": { "enum": ["m5-v1", "m8-v1", "a-share-v3"] },
+        "strategy_protocol_version": { "enum": ["oqs-strategy-host/m5-stream-v2", "oqs-strategy-host/m8-portfolio-v1", "oqs-strategy-host/a-share-v3"] },
         "checkpoint_batch_size": { "type": "integer", "minimum": 1, "maximum": 250000 },
-        "engine_checkpoint_abi": { "enum": ["oqs-quant-engine/checkpoint-v1", "oqs-quant-engine/checkpoint-v2"] },
+        "engine_checkpoint_abi": { "enum": ["oqs-quant-engine/checkpoint-v1", "oqs-quant-engine/checkpoint-v2", "oqs-quant-engine/checkpoint-v3"] },
+        "execution_profile": { "const": "a-share-v3" },
+        "review_attestation": { "$ref": "#/$defs/reviewAttestation" },
+        "review_attestation_id": { "$ref": "#/$defs/uuid" },
+        "review_attestation_sha256": { "$ref": "#/$defs/sha256" },
         "spec_hash": { "$ref": "#/$defs/sha256" },
         "created_at": { "$ref": "#/$defs/dateTime" }
       },
@@ -376,10 +383,61 @@
                 "strategy_protocol_version": { "const": "oqs-strategy-host/m8-portfolio-v1" },
                 "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v2" }
               }
+            },
+            {
+              "required": ["execution_profile"],
+              "properties": {
+                "engine_version": { "const": "oqs-quant-engine/0.3.0" },
+                "output_schema_version": { "const": 3 },
+                "gate_policy_version": { "const": "a-share-v3" },
+                "strategy_protocol_version": { "const": "oqs-strategy-host/a-share-v3" },
+                "engine_checkpoint_abi": { "const": "oqs-quant-engine/checkpoint-v3" },
+                "execution_profile": { "const": "a-share-v3" }
+              }
             }
           ]
+        },
+        {
+          "if": {
+            "required": ["gate_policy_version"],
+            "properties": { "gate_policy_version": { "const": "a-share-v3" } }
+          },
+          "then": {
+            "required": ["execution_profile", "review_attestation", "review_attestation_id", "review_attestation_sha256"],
+            "properties": {
+              "review_attestation": { "$ref": "#/$defs/reviewAttestation" },
+              "review_attestation_id": { "$ref": "#/$defs/uuid" },
+              "review_attestation_sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
         }
       ]
+    },
+    "reviewAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attestation_id",
+        "status",
+        "candidate_revision_id",
+        "strategy_tree_oid",
+        "data_snapshot_sha256",
+        "parameters_sha256",
+        "cost_model_sha256",
+        "reviewer_id",
+        "reviewed_at"
+      ],
+      "properties": {
+        "attestation_id": { "$ref": "#/$defs/uuid" },
+        "status": { "const": "approved" },
+        "candidate_revision_id": { "$ref": "#/$defs/uuid" },
+        "strategy_tree_oid": { "$ref": "#/$defs/gitOid" },
+        "data_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "parameters_sha256": { "$ref": "#/$defs/sha256" },
+        "cost_model_sha256": { "$ref": "#/$defs/sha256" },
+        "reviewer_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reviewed_at": { "$ref": "#/$defs/dateTime" }
+      }
     },
     "validation": {
       "type": "object",
@@ -411,8 +469,8 @@
       "required": ["validation_id", "gate_policy_version", "engine_version", "gates", "outcome", "manifest_artifact_id", "created_at"],
       "properties": {
         "validation_id": { "$ref": "#/$defs/uuid" },
-        "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
-        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0"] },
+        "gate_policy_version": { "enum": ["m5-v1", "m8-v1", "a-share-v3"] },
+        "engine_version": { "enum": ["oqs-quant-engine/0.1.0", "oqs-quant-engine/0.2.0", "oqs-quant-engine/0.3.0"] },
         "gates": {
           "oneOf": [
             { "$ref": "#/$defs/gateOutcomes" },
@@ -438,6 +496,12 @@
               "properties": {
                 "gate_policy_version": { "const": "m8-v1" },
                 "engine_version": { "const": "oqs-quant-engine/0.2.0" }
+              }
+            },
+            {
+              "properties": {
+                "gate_policy_version": { "const": "a-share-v3" },
+                "engine_version": { "const": "oqs-quant-engine/0.3.0" }
               }
             }
           ]
@@ -804,6 +868,50 @@
         }
       ]
     },
+    "aShareV3SucceededDetail": {
+      "allOf": [
+        { "$ref": "#/$defs/m5TerminalDetailCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "run": { "$ref": "#/$defs/runSucceeded" },
+            "validation": {
+              "type": "object",
+              "properties": {
+                "gate_policy_version": { "const": "a-share-v3" },
+                "outcome": { "const": "passed" },
+                "manifest_artifact_id": { "$ref": "#/$defs/uuid" },
+                "gates": { "$ref": "#/$defs/passedGates" }
+              }
+            },
+            "artifacts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["intent_tape", "engine_result", "manifest"],
+              "properties": {
+                "intent_tape": { "$ref": "#/$defs/artifact" },
+                "engine_result": { "$ref": "#/$defs/artifact" },
+                "manifest": { "$ref": "#/$defs/artifact" },
+                "report_json": { "$ref": "#/$defs/artifact" },
+                "report_html": { "$ref": "#/$defs/artifact" }
+              }
+            },
+            "manifest": {
+              "allOf": [
+                { "$ref": "https://open-quant-studio.local/schemas/v1/formal-run-manifest.schema.json" },
+                { "type": "object", "properties": { "manifest_version": { "const": "a-share-v3" } } }
+              ]
+            },
+            "engine_result": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-result-v3.schema.json"
+            },
+            "intent_tape": {
+              "$ref": "https://open-quant-studio.local/schemas/v1/formal-engine-input-v3.schema.json#/$defs/intents"
+            }
+          }
+        }
+      ]
+    },
     "m5FailedDetail": {
       "allOf": [
         { "$ref": "#/$defs/m5TerminalDetailCommon" },
@@ -814,7 +922,7 @@
             "validation": {
               "type": "object",
               "properties": {
-                "gate_policy_version": { "enum": ["m5-v1", "m8-v1"] },
+                "gate_policy_version": { "enum": ["m5-v1", "m8-v1", "a-share-v3"] },
                 "outcome": { "const": "failed" },
                 "manifest_artifact_id": { "type": "null" }
               }

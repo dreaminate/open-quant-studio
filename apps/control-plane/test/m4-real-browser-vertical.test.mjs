@@ -193,6 +193,32 @@ test("real browser facade completes Project to immutable Run Detail and Promote"
   assert.deepEqual(projects.projects.map((item) => item.project_id), [PROJECT_ID]);
   assert.deepEqual(activities.activities.map((item) => item.activity_id), [ACTIVITY_ID]);
 
+  const marketCsv = await readFile(resolve(REPO_ROOT, "fixtures/market/m7-a-share-daily.csv"));
+  const preview = await json(await fetch(
+    `${browserBaseUrl}/data-imports/preview?file_name=m7-a-share-daily.csv&source_format=csv`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: marketCsv,
+    },
+  ));
+  const snapshotReceipt = await json(await fetch(`${browserBaseUrl}/data-snapshots`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: preview.source,
+      source_format: preview.source_format,
+      file_name: preview.file_name,
+      mapping: preview.suggested_mapping,
+      market: "a_share_daily",
+      timezone: "Asia/Shanghai",
+      price_basis: "raw",
+      cutoff: "2026-01-14T00:00:00Z",
+    }),
+  }));
+  const dataSnapshotId = snapshotReceipt.event.payload.snapshot_id;
+  const dataSnapshot = await json(await fetch(`${browserBaseUrl}/data-snapshots/${dataSnapshotId}`));
+
   const variantReceipt = await json(await fetch(`${browserBaseUrl}/variants`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -234,7 +260,7 @@ test("real browser facade completes Project to immutable Run Detail and Promote"
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ data_snapshot_id: dataSnapshotId }),
     },
   ));
   const runId = formalReceipt.event.payload.run_id;
@@ -256,11 +282,8 @@ test("real browser facade completes Project to immutable Run Detail and Promote"
     run.run_spec.market_input_artifact_id,
   );
   assert.equal(marketInputArtifact.project_id, PROJECT_ID);
-  assert.equal(marketInputArtifact.origin_kind, "fixture");
-  assert.equal(
-    marketInputArtifact.source_ref,
-    "76767676-7676-4676-8676-767676767676",
-  );
+  assert.equal(marketInputArtifact.origin_kind, "service_generated");
+  assert.equal(marketInputArtifact.source_ref, dataSnapshot.snapshot_id);
 
   const tamperingClient = new FetchQuantDomainRevisionClient({
     sessionClient,

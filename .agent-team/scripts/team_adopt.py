@@ -32,7 +32,7 @@ from typing import Any
 # module import works identically under -I and normal invocation.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import team_common as tc  # noqa: E402
+import team_common as tc  # noqa: E402  # type: ignore[import-not-found]
 
 V5_RULE_IDS = tuple(f"V5-R{i}" for i in range(1, 25))
 
@@ -92,7 +92,9 @@ def build_meta(
     return meta
 
 
-def build_preview(project: Path, asset_path: Path, migration_map_path: Path) -> dict[str, Any]:
+def build_preview(
+    project: Path, asset_path: Path, migration_map_path: Path, fresh_install: bool = False
+) -> dict[str, Any]:
     project_identity = tc.directory_identity(project)
     asset_identity = tc.file_identity(asset_path)
     asset_bytes = asset_path.read_bytes()
@@ -106,6 +108,11 @@ def build_preview(project: Path, asset_path: Path, migration_map_path: Path) -> 
         charter_current = charter["sha256"] == asset_sha
     elif charter_path.is_symlink():
         raise tc.TeamToolError(f"{charter_path} is a symlink and cannot be adopted safely")
+    if charter is None and not fresh_install:
+        raise tc.TeamToolError(
+            "charter_missing_requires_fresh_install: no existing charter to adopt; pass "
+            "--fresh-install to create the canonical charter and pointer files from scratch"
+        )
 
     charter_old_bytes = charter_path.read_bytes() if charter is not None else b""
     charter_diff = (
@@ -119,9 +126,15 @@ def build_preview(project: Path, asset_path: Path, migration_map_path: Path) -> 
         path = project / name
         entry: dict[str, Any] = {"name": name, "path": str(path)}
         if not path.exists():
-            entry["status"] = "missing"
-            entry["willChange"] = False
-            entry["reason"] = "pointer file missing; adopt does not create instruction files"
+            if fresh_install:
+                entry["status"] = "create_pointer"
+                entry["willChange"] = True
+                entry["reason"] = "pointer file missing; fresh install creates it with the canonical pointer"
+                entry["plannedSha256"] = tc.bytes_sha256(tc.POINTER_BLOCK)
+            else:
+                entry["status"] = "missing"
+                entry["willChange"] = False
+                entry["reason"] = "pointer file missing; adopt does not create instruction files"
         elif path.is_symlink():
             entry["status"] = "symlink"
             entry["willChange"] = False
@@ -159,7 +172,7 @@ def build_preview(project: Path, asset_path: Path, migration_map_path: Path) -> 
             {"name": "TEAM.md", "path": str(charter_path), "sha256": charter["sha256"]}
         )
     for entry in pointer_targets:
-        if entry.get("willChange"):
+        if entry.get("willChange") and entry.get("status") != "create_pointer":
             backup_plan.append(
                 {
                     "name": entry["name"],
@@ -169,7 +182,7 @@ def build_preview(project: Path, asset_path: Path, migration_map_path: Path) -> 
             )
 
     if charter is None:
-        preview_code = "preview_missing_charter"
+        preview_code = "preview_fresh_install"
     elif not charter_current or backup_plan:
         preview_code = "preview_ready"
     else:
@@ -222,8 +235,9 @@ def apply_adoption(
     migration_map_path: Path,
     confirm_digest: str,
     meta_path: Path,
+    fresh_install: bool = False,
 ) -> dict[str, Any]:
-    preview = build_preview(project, asset_path, migration_map_path)
+    preview = build_preview(project, asset_path, migration_map_path, fresh_install)
     if preview["confirmDigest"] != confirm_digest:
         return {
             "ok": False,
@@ -241,24 +255,41 @@ def apply_adoption(
 
     charter_path = project / ".agent-team" / "TEAM.md"
     if not preview["charter"]["installed"]:
-        return {
-            "ok": False,
-            "code": "charter_missing_apply_conflict",
-            "message": (
-                "No existing charter to adopt. Creating a charter from scratch is a project-local "
-                "decision outside adopt-team-charter; install the canonical asset through "
-                "init-project-agent-team for a fresh project instead."
-            ),
-            "changesApplied": False,
-        }
-    if preview["charter"]["installed"] and not preview["charter"]["current"]:
+        if not fresh_install:
+            return {
+                "ok": False,
+                "code": "charter_missing_apply_conflict",
+                "message": (
+                    "No existing charter to adopt. Creating a charter from scratch is a project-local "
+                    "decision outside adopt-team-charter; install the canonical asset through "
+                    "init-project-agent-team for a fresh project instead."
+                ),
+                "changesApplied": False,
+            }
+        agent_team_dir = project / ".agent-team"
+        agent_team_dir.mkdir(parents=True, exist_ok=True)
+        if agent_team_dir.is_symlink() or not agent_team_dir.is_dir():
+            return {
+                "ok": False,
+                "code": "postcondition_failed",
+                "message": ".agent-team is not a real directory",
+                "changesApplied": False,
+            }
+        tc.write_new_file(charter_path, asset_bytes, 0o644)
+        changes.append({"path": str(charter_path), "kind": "charter_created"})
+    elif preview["charter"]["installed"] and not preview["charter"]["current"]:
         backups.append(tc.write_backup(charter_path, backups_dir, "v5"))
         tc.atomic_replace_file(charter_path, asset_bytes)
         changes.append({"path": str(charter_path), "kind": "charter_replaced"})
 
     for entry in preview["pointerTargets"]:
-        if entry.get("willChange"):
-            path = project / entry["name"]
+        if not entry.get("willChange"):
+            continue
+        path = project / entry["name"]
+        if entry.get("status") == "create_pointer":
+            tc.write_new_file(path, tc.POINTER_BLOCK, 0o644)
+            changes.append({"path": str(path), "kind": "pointer_created"})
+        else:
             backups.append(tc.write_backup(path, backups_dir, "pointer"))
             existing = path.read_bytes()
             replaced, _ = tc.replace_pointer_block(existing, entry["name"])
@@ -445,6 +476,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--confirm-digest", help="preview confirmDigest the user approved (apply only)")
     parser.add_argument("--migration-map", default=".agent-team/migration-map.md")
     parser.add_argument("--meta-path", default=".agent-team/charter-meta.json")
+    parser.add_argument(
+        "--fresh-install",
+        action="store_true",
+        help="project has no existing charter: create the canonical charter and pointer files",
+    )
     return parser.parse_args()
 
 
@@ -459,7 +495,9 @@ def main() -> None:
 
     try:
         if args.subcommand == "preview":
-            tc.emit(build_preview(project, asset_path, migration_map_path), 0)
+            tc.emit(
+                build_preview(project, asset_path, migration_map_path, args.fresh_install), 0
+            )
         elif args.subcommand == "apply":
             if not args.confirm_digest:
                 tc.emit(
@@ -471,7 +509,14 @@ def main() -> None:
                     },
                     2,
                 )
-            result = apply_adoption(project, asset_path, migration_map_path, args.confirm_digest, meta_path)
+            result = apply_adoption(
+                project,
+                asset_path,
+                migration_map_path,
+                args.confirm_digest,
+                meta_path,
+                fresh_install=args.fresh_install,
+            )
             tc.emit(result, 0 if result["ok"] else 9)
         elif args.subcommand == "check":
             result = check_current(project, asset_path, meta_path)

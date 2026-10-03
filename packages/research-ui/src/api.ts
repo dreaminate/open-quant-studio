@@ -6,6 +6,7 @@ import type {
   Context,
   DataImportPreview,
   DataSnapshot,
+  DataSnapshotCorporateAction,
   DataSnapshotMapping,
   DataSnapshotMarket,
   DataSnapshotPriceBasis,
@@ -23,6 +24,7 @@ import type {
   RunDetail,
   RunReportReadModel,
   RunSummary,
+  ReviewAttestation,
   Variant,
 } from "./types.js";
 
@@ -115,6 +117,8 @@ export interface CreateDataSnapshotRequest {
   timezone: string;
   price_basis: DataSnapshotPriceBasis;
   cutoff: string;
+  execution_profile?: "legacy" | "a-share-v3";
+  corporate_actions?: DataSnapshotCorporateAction[];
 }
 
 export interface ResearchApi {
@@ -142,7 +146,7 @@ export interface ResearchApi {
   listDataSnapshots(): Promise<DataSnapshot[]>;
   getDataSnapshot(snapshotId: string): Promise<DataSnapshot>;
   createDataSnapshot(request: CreateDataSnapshotRequest): Promise<unknown>;
-  requestFormalRun(candidateRevisionId: string, dataSnapshotId?: string): Promise<unknown>;
+  requestFormalRun(candidateRevisionId: string, dataSnapshotId?: string, reviewAttestation?: ReviewAttestation): Promise<unknown>;
   requestForwardTest(runId: string): Promise<{ forward_test_id: string }>;
   getForwardTest(forwardTestId: string): Promise<ForwardTest>;
   downloadProjectArchive(projectId: string, selectedLogs: ArchiveLogSelection): Promise<Blob>;
@@ -301,8 +305,12 @@ export function createResearchApi(basePath = "/api/v1"): ResearchApi {
       });
     },
     async createStrategyVariant(requestBody) {
-      void requestBody;
-      return request<unknown>("/variants", { method: "POST", body: "{}" });
+      return request<unknown>("/variants", {
+        method: "POST",
+        body: JSON.stringify({
+          base_revision_id: requestBody.baseRevisionId,
+        }),
+      });
     },
     async createChildRevision(requestBody) {
       return request<unknown>(`/variants/${encode(requestBody.variantId)}/revisions`, {
@@ -356,11 +364,14 @@ export function createResearchApi(basePath = "/api/v1"): ResearchApi {
         body: JSON.stringify(requestBody),
       });
     },
-    async requestFormalRun(candidateRevisionId, dataSnapshotId) {
+    async requestFormalRun(candidateRevisionId, dataSnapshotId, reviewAttestation) {
       return request<unknown>(`/revisions/${encode(candidateRevisionId)}/runs`, {
         method: "POST",
         body: JSON.stringify(
-          dataSnapshotId === undefined ? {} : { data_snapshot_id: dataSnapshotId },
+          {
+            ...(dataSnapshotId === undefined ? {} : { data_snapshot_id: dataSnapshotId }),
+            ...(reviewAttestation === undefined ? {} : { review_attestation: reviewAttestation }),
+          },
         ),
       });
     },

@@ -73,6 +73,21 @@ dead end.
 | `claude_settings_unreadable` | 7 | Claude settings file unreadable | Repair the settings file, re-run |
 | `orca_runtime_unavailable` | 7 | Orca runtime not ready | Open the local Orca app, re-run |
 | `invalid_project` | 9 | Boundary or identity check failed | Read the reported reason |
+| `mock_contract_requires_mock_cli` | 9 | `--mock-orca-contract` passed with a non-mock CLI | Remove the flag or target the mock CLI |
+
+High-privilege launch gate: `high_privilege_launch_requires_authorization`
+(7) — a seat whose charter permission parameter disables approvals/sandbox
+(`dangerously-bypass-approvals-and-sandbox`,
+`dangerously-skip-permissions`) requires a per-occurrence, run-scoped
+authorization: `--authorize-high-privilege <seat>=<exact-parameter>`. The
+token is never persisted and never inherited across runs.
+
+Session-lifecycle codes (mock/E2E path, matching the verified real CLI contract —
+`terminal create`): `quickstart_generation_published` (0),
+`team_cleanup_scope_ambiguous`, `team_cleanup_incomplete`,
+`terminal_inventory_unavailable`, `terminal_inventory_invalid`,
+`terminal_close_failed`, `terminal_close_rejected`, `terminal_create_failed`,
+`terminal_create_invalid_receipt`, `terminal_create_duplicate_identity` (7).
 
 ## message (identity inject / verify / keys / roster-update)
 
@@ -122,6 +137,6 @@ the current public CLI before it may be replaced:
 | Placeholder | Blocking code | Resolution criteria |
 |---|---|---|
 | `<GIT_ATTACH_EXISTING_MAIN_BRANCH_TO_WORKTREE_AT_EXPECTED_OID_PENDING_ATOMIC_SUPPORT>` | `main_attach_pending` | A real Git ref transaction or repository-wide writer lease across expected-OID assertion and worktree attachment |
-| `<ORCA_CREATE_TEAM_ON_EXACT_EXISTING_LEADER_BRANCH_PENDING_CLI_SUPPORT>` | `team_create_cli_pending` | Confirmed from `orca worktree create --help` and a disposable-repo test: exact repo ID, exact `refs/heads/leader-claude-integration` checkout, no Orca parent, disclosed checkout side effects, full creation receipt, no silent branch prefix/suffix |
-| `<ORCA_CREATE_EMPLOYEE_PARENT_PENDING_CLI_VERIFICATION>` | `employee_parent_create_cli_pending` | Same evidence bar for employee parent creation with Leader-parent lineage binding |
-| `<ORCA_START_SEAT_SESSION_PENDING_CLI_VERIFICATION>` | `start_session_cli_pending` | Confirmed CLI surface that starts one seat session in a recorded target worktree and returns distinct tab IDs and terminal handles |
+| ~~`<ORCA_CREATE_TEAM_ON_EXACT_EXISTING_LEADER_BRANCH_PENDING_CLI_SUPPORT>`~~ | ~~`team_create_cli_pending`~~ | RESOLVED via Orca-first (2026-08-18, verified against 1.4.180): `worktree create --repo id:<id> --name leader-claude-integration --base-branch main --no-parent --json` creates the EXACT branch together with its worktree when the branch does not pre-exist. Precondition enforced: a pre-existing branch makes the CLI auto-suffix → `leader_branch_collision_cleanup_required` (delete branch via an authorized git command, re-run) |
+| ~~`<ORCA_CREATE_EMPLOYEE_PARENT_PENDING_CLI_VERIFICATION>`~~ | ~~`employee_parent_create_cli_pending`~~ | RESOLVED (2026-08-18): same create shape with `--base-branch leader-claude-integration`; parent lineage via `worktree set --worktree id:<id> --parent-worktree id:<team-id>` → verified `parentWorktreeId` in the receipt |
+| ~~`<ORCA_START_SEAT_SESSION_PENDING_CLI_VERIFICATION>`~~ | ~~`start_session_cli_pending`~~ | RESOLVED (2026-08-18): `orca terminal create --worktree <selector> --command "<cli>" --json` verified against the real 1.4.180 runtime; receipt `result.terminal.{handle,tabId,worktreeId}`, distinct ids; `terminal close --terminal <handle> --tab` and nested `result.{terminals,totalCount}` inventory shape also verified |
